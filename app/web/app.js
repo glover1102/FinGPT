@@ -1,0 +1,4093 @@
+﻿/* =============================================================
+   FinGPT Local Research Assistant — UI Controller
+   ============================================================= */
+
+const API = {
+  config: "/api/v1/config",
+  analyze: "/api/v1/research/analyze",
+  stream: "/api/v1/research/stream",
+  universal: "/api/v1/research/universal",
+  universalStream: "/api/v1/research/universal/stream",
+  compare: "/api/v1/research/compare",
+  watchlist: "/api/v1/watchlist",
+  latest: "/api/v1/outputs/latest",
+  reportMd: "/api/v1/outputs/report.md",
+  reportHtml: "/api/v1/outputs/report.html",
+  health: "/api/v1/health",
+  runs: "/api/v1/runs",
+  run: (id) => `/api/v1/runs/${encodeURIComponent(id)}`,
+  runSummary: (ticker) => `/api/v1/runs/summary/${encodeURIComponent(ticker)}`,
+  preflight: "/api/v1/preflight",
+  preflightForce: "/api/v1/preflight?force=true",
+  runbookFailureModes: "/api/v1/runbook/failure-modes",
+  qdrantInfo: "/api/v1/qdrant/collection",
+  qdrantPurge: "/api/v1/qdrant/purge",
+  evalDashboard: "/api/v1/eval/dashboard",
+  dashboardNews: "/api/v1/dashboard/news?limit=20",
+  dashboardMarket: "/api/v1/dashboard/market",
+  dashboardEquityHeatmap: "/api/v1/dashboard/equity-heatmap",
+};
+
+const STORAGE = {
+  history: "fingpt.history.v1",
+  form: "fingpt.form.v1",
+};
+
+const STAGES = ["collect", "ingest", "retrieve", "infer", "analyze", "report", "output"];
+
+const els = {
+  homeBtn: document.getElementById("homeBtn"),
+  form: document.getElementById("analysisForm"),
+  ticker: document.getElementById("ticker"),
+  researchModeInputs: () => document.querySelectorAll('input[name="researchMode"]'),
+  tickerChips: document.getElementById("tickerChips"),
+  question: document.getElementById("question"),
+  presetChips: document.getElementById("presetChips"),
+  sourceInputs: () => document.querySelectorAll('input[name="source"]'),
+  lookback: document.getElementById("lookback"),
+  lookbackValue: document.getElementById("lookbackValue"),
+  topk: document.getElementById("topk"),
+  topkValue: document.getElementById("topkValue"),
+  model: document.getElementById("model"),
+  runBtn: document.getElementById("runBtn"),
+  loadLatestBtn: document.getElementById("loadLatestBtn"),
+  clearHistoryBtn: document.getElementById("clearHistoryBtn"),
+  historyToggleBtn: document.getElementById("historyToggleBtn"),
+  historySummary: document.getElementById("historySummary"),
+  historyList: document.getElementById("historyList"),
+  healthPill: document.getElementById("healthPill"),
+
+  preflightPill: document.getElementById("preflightPill"),
+  preflightDot: document.getElementById("preflightDot"),
+  preflightLabel: document.getElementById("preflightLabel"),
+  preflightPanel: document.getElementById("preflightPanel"),
+  preflightSubtitle: document.getElementById("preflightSubtitle"),
+  preflightChecks: document.getElementById("preflightChecks"),
+  preflightRunbook: document.getElementById("preflightRunbook"),
+  preflightRefresh: document.getElementById("preflightRefresh"),
+  preflightClose: document.getElementById("preflightClose"),
+
+  qdrantAdminBtn: document.getElementById("qdrantAdminBtn"),
+  qdrantPanel: document.getElementById("qdrantPanel"),
+  qdrantSubtitle: document.getElementById("qdrantSubtitle"),
+  qdrantStats: document.getElementById("qdrantStats"),
+  qdrantBreakdownList: document.getElementById("qdrantBreakdownList"),
+  qdrantBreakdownNote: document.getElementById("qdrantBreakdownNote"),
+  qdrantRefresh: document.getElementById("qdrantRefresh"),
+  qdrantClose: document.getElementById("qdrantClose"),
+  qdrantPurgeDays: document.getElementById("qdrantPurgeDays"),
+  qdrantPurgeTicker: document.getElementById("qdrantPurgeTicker"),
+  qdrantPurgeDryRun: document.getElementById("qdrantPurgeDryRun"),
+  qdrantPurgeRun: document.getElementById("qdrantPurgeRun"),
+  qdrantPurgeResult: document.getElementById("qdrantPurgeResult"),
+
+  qualityDashBtn: document.getElementById("qualityDashBtn"),
+  qualityPanel: document.getElementById("qualityPanel"),
+  qualitySubtitle: document.getElementById("qualitySubtitle"),
+  qualitySummary: document.getElementById("qualitySummary"),
+  qualityCategories: document.getElementById("qualityCategories"),
+  qualityCases: document.getElementById("qualityCases"),
+  qualityCasesNote: document.getElementById("qualityCasesNote"),
+  qualityReport: document.getElementById("qualityReport"),
+  qualityRefresh: document.getElementById("qualityRefresh"),
+  qualityClose: document.getElementById("qualityClose"),
+
+  tickerSummary: document.getElementById("tickerSummary"),
+  sparkline: document.getElementById("sparkline"),
+  sparklineLabel: document.getElementById("sparklineLabel"),
+
+  emptyState: document.getElementById("emptyState"),
+  loadingState: document.getElementById("loadingState"),
+  loadingTicker: document.getElementById("loadingTicker"),
+  loadingSub: document.getElementById("loadingSub"),
+  loadingTimer: document.getElementById("loadingTimer"),
+  progressStages: document.getElementById("progressStages"),
+
+  resultView: document.getElementById("resultView"),
+  resTicker: document.getElementById("resTicker"),
+  resStatus: document.getElementById("resStatus"),
+  resCacheBadge: document.getElementById("resCacheBadge"),
+  compareMode: document.getElementById("compareMode"),
+  tickerHint: document.getElementById("tickerHint"),
+  compareView: document.getElementById("compareView"),
+  compareMeta: document.getElementById("compareMeta"),
+  compareTable: document.getElementById("compareTable"),
+  compareSummaries: document.getElementById("compareSummaries"),
+  watchlistList: document.getElementById("watchlistList"),
+  watchlistAddBtn: document.getElementById("watchlistAddBtn"),
+  watchlistSchedStatus: document.getElementById("watchlistSchedStatus"),
+  resQuestion: document.getElementById("resQuestion"),
+  errorBanner: document.getElementById("errorBanner"),
+  resSentiment: document.getElementById("resSentiment"),
+  resConfidence: document.getElementById("resConfidence"),
+  confidenceFill: document.getElementById("confidenceFill"),
+  resCitationCount: document.getElementById("resCitationCount"),
+  resChunkCount: document.getElementById("resChunkCount"),
+
+  tabs: document.querySelectorAll(".tab"),
+  tabPanels: document.querySelectorAll(".tab-panel"),
+
+  resSummary: document.getElementById("resSummary"),
+  resConclusion: document.getElementById("resConclusion"),
+  metricsTable: document.getElementById("metricsTable"),
+  quantSnapshot: document.getElementById("quantSnapshot"),
+  riskPanel: document.getElementById("riskPanel"),
+  scenarioPanel: document.getElementById("scenarioPanel"),
+  bullList: document.getElementById("bullList"),
+  bearList: document.getElementById("bearList"),
+  evidenceList: document.getElementById("evidenceList"),
+  evidenceSearch: document.getElementById("evidenceSearch"),
+  citationsList: document.getElementById("citationsList"),
+  diagRequest: document.getElementById("diagRequest"),
+  diagInference: document.getElementById("diagInference"),
+  stageTimeline: document.getElementById("stageTimeline"),
+  sourceResultsBody: document.getElementById("sourceResultsBody"),
+  providerResultsBody: document.getElementById("providerResultsBody"),
+  diagRetrieval: document.getElementById("diagRetrieval"),
+  reportMd: document.getElementById("reportMd"),
+  rawJson: document.getElementById("rawJson"),
+
+  downloadMdBtn: document.getElementById("downloadMdBtn"),
+  downloadJsonBtn: document.getElementById("downloadJsonBtn"),
+  openHtmlBtn: document.getElementById("openHtmlBtn"),
+  formNotice: document.getElementById("formNotice"),
+  homeNewsList: document.getElementById("homeNewsList"),
+  homeNewsCategories: document.getElementById("homeNewsCategories"),
+  homeNewsRefresh: document.getElementById("homeNewsRefresh"),
+  homeHeatmap: document.getElementById("homeHeatmap"),
+  homeHeatmapMeta: document.getElementById("homeHeatmapMeta"),
+  homeMarketList: document.getElementById("homeMarketList"),
+  tvOverviewWidget: document.getElementById("tvOverviewWidget"),
+  tvOverviewFallback: document.getElementById("tvOverviewFallback"),
+  tvHeatmapWidget: document.getElementById("tvHeatmapWidget"),
+  tvHeatmapFallback: document.getElementById("tvHeatmapFallback"),
+};
+
+// Shared state
+const state = {
+  config: null,
+  lastResponse: null,
+  lastCollection: null,
+  lastRequest: null,
+  activeRequest: null,
+  evidenceRaw: [],
+  preflight: null,
+  preflightTimer: null,
+  pendingTimer: null,
+  stageTimer: null,
+  stageIndex: 0,
+  startedAt: null,
+  streamStartedAt: null,
+  streamHasPartial: false,
+  historyExpanded: false,
+  dashboardLoaded: false,
+  marketLoaded: false,
+  dashboardHeatmapLoaded: false,
+  tradingViewInitialized: false,
+  dashboardNewsItems: [],
+  dashboardNewsCategory: "all",
+};
+
+// ---------- Utilities ----------
+const fmtDate = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleString();
+};
+
+const escapeHtml = (s) => String(s ?? "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;");
+
+const statusClass = (s) => ({ success: "success", partial: "partial", failed: "failed" }[s] || "muted");
+
+const sourceStatusClass = (s) => {
+  const key = (s || "").toLowerCase();
+  if (["ok", "success"].includes(key)) return "ok";
+  if (["failed", "error", "timeout"].includes(key)) return "fail";
+  if (["empty", "entitlement_required", "credentials_missing", "rate_limited", "no_data_in_window", "provider_unavailable", "partial"].includes(key)) return "warn";
+  return "muted";
+};
+
+const KNOWN_TICKERS = [
+  "GOOGL", "SOXX", "AAPL", "MSFT", "NVDA", "TSLA", "GOOG", "AMZN",
+  "META", "ASML", "AMAT", "KLAC", "INTC", "SPY", "QQQ", "XLK",
+  "SMH", "TLT", "USO", "GLD", "JPM", "AMD", "GS",
+  "IEF", "SHY", "AGG", "LQD", "HYG", "SLV", "DXY",
+];
+const TICKER_PREFIX_RE = new RegExp(`^(${KNOWN_TICKERS.join("|")})(?=$|[^A-Za-z0-9])`, "i");
+
+function normalizeTickerToken(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^\$/, "")
+    .toUpperCase();
+}
+
+function parseTickerInput(raw) {
+  const seen = new Set();
+  return String(raw || "")
+    .split(/[\s,]+/)
+    .map(normalizeTickerToken)
+    .filter((ticker) => {
+      if (!ticker || seen.has(ticker)) return false;
+      seen.add(ticker);
+      return true;
+    });
+}
+
+function inferTickerFromQuestion(question) {
+  const text = String(question || "").trimStart();
+  if (!text) return null;
+
+  // Marker-based extraction is intentionally permissive so users can type
+  // "$BRK.B" or "BRK.B: ..." even when the symbol is not in the chip list.
+  const marked = text.match(/^\$([A-Za-z][A-Za-z0-9]{0,9}(?:[.\-=][A-Za-z0-9]{1,8})?)(?=$|[^A-Za-z0-9])/);
+  if (marked) return { ticker: normalizeTickerToken(marked[1]), source: "question_marker" };
+
+  const colon = text.match(/^([A-Za-z][A-Za-z0-9]{0,9}(?:[.\-=][A-Za-z0-9]{1,8})?)\s*[:：]/);
+  if (colon) return { ticker: normalizeTickerToken(colon[1]), source: "question_prefix" };
+
+  // Plain leading words are restricted to known symbols to avoid treating
+  // "What" or "AI" as a ticker.
+  const known = text.match(TICKER_PREFIX_RE);
+  if (known) return { ticker: normalizeTickerToken(known[1]), source: "known_prefix" };
+  return null;
+}
+
+function normalizeResearchIntent({ tickerRaw, question, modeHint, compare }) {
+  const cleanQuestion = String(question || "").trim();
+  const mode = ["auto", "ticker", "topic"].includes(modeHint) ? modeHint : "auto";
+  const typedTickers = parseTickerInput(tickerRaw);
+  const inferred = (!typedTickers.length && !compare) ? inferTickerFromQuestion(cleanQuestion) : null;
+  const tickers = typedTickers.length ? typedTickers : (inferred ? [inferred.ticker] : []);
+  const ticker = tickers[0] || "";
+  const intentKind = compare
+    ? "compare"
+    : mode === "ticker"
+      ? "single_ticker_required"
+      : mode === "topic"
+        ? "topic"
+        : ticker
+          ? "auto_with_ticker_hint"
+          : "auto_topic";
+
+  return {
+    ticker,
+    tickers,
+    compare: !!compare,
+    mode_hint: mode,
+    question: cleanQuestion,
+    intent_kind: intentKind,
+    extracted_ticker: inferred?.ticker || "",
+    route_hint: compare ? "compare" : "universal",
+  };
+}
+
+// ---------- Health ----------
+async function checkHealth() {
+  try {
+    const res = await fetch(API.health);
+    if (!res.ok) throw new Error("bad status");
+    const data = await res.json();
+    els.healthPill.textContent = `api · v${data.version || ""}`;
+    els.healthPill.classList.add("ok");
+    els.healthPill.classList.remove("err");
+  } catch (e) {
+    els.healthPill.textContent = "api offline";
+    els.healthPill.classList.add("err");
+    els.healthPill.classList.remove("ok");
+  }
+}
+
+// ---------- Preflight ----------
+const PREFLIGHT_WARNING_ONLY = new Set([
+  "HF_TOKEN", "FMP_API_KEY", "FMP_STOCK_NEWS",
+  "SEC_FILINGS", "TRANSCRIPT_PROVIDER", "ALPHA_VANTAGE_NEWS",
+]);
+
+function classifyCheck(check) {
+  if (check.ok) return "ok";
+  return PREFLIGHT_WARNING_ONLY.has(check.name) ? "warn" : "err";
+}
+
+function summarizePreflight(report) {
+  const checks = (report && report.checks) || [];
+  let critical = 0;
+  let warning = 0;
+  for (const c of checks) {
+    const state = classifyCheck(c);
+    if (state === "err") critical += 1;
+    else if (state === "warn") warning += 1;
+  }
+  if (!checks.length) return { level: "muted", label: "preflight: unknown" };
+  if (critical > 0) return { level: "err", label: `preflight: ${critical} critical` };
+  if (warning > 0) return { level: "warn", label: `preflight: ${warning} warn` };
+  return { level: "ok", label: "preflight: ok" };
+}
+
+function renderPreflightPill(report) {
+  const s = summarizePreflight(report);
+  const pill = els.preflightPill;
+  pill.classList.remove("ok", "warn", "err");
+  if (s.level !== "muted") pill.classList.add(s.level);
+  els.preflightLabel.textContent = s.label;
+}
+
+function renderPreflightPanel(report) {
+  const checks = (report && report.checks) || [];
+  els.preflightChecks.innerHTML = "";
+  checks.forEach((c) => {
+    const level = classifyCheck(c);
+    const li = document.createElement("li");
+    li.className = level;
+    li.innerHTML = `
+      <span class="status-dot"></span>
+      <div>
+        <div class="check-name">${escapeHtml(c.name)}</div>
+        <div class="check-detail">${escapeHtml(c.detail || "")}</div>
+      </div>
+      <span class="check-state">${level}</span>
+    `;
+    els.preflightChecks.appendChild(li);
+  });
+  const ts = report.checked_at || "—";
+  const overall = report.passed ? "pass" : "fail";
+  els.preflightSubtitle.textContent = `마지막 점검: ${ts} · overall=${overall}`;
+}
+
+async function loadPreflight(force = false) {
+  try {
+    const res = await fetch(force ? API.preflightForce : API.preflight);
+    if (!res.ok) throw new Error(`bad status ${res.status}`);
+    const report = await res.json();
+    state.preflight = report;
+    renderPreflightPill(report);
+    if (!els.preflightPanel.classList.contains("hidden")) {
+      renderPreflightPanel(report);
+    }
+    return report;
+  } catch (e) {
+    els.preflightPill.classList.remove("ok", "warn");
+    els.preflightPill.classList.add("err");
+    els.preflightLabel.textContent = "preflight: offline";
+    return null;
+  }
+}
+
+async function loadRunbook() {
+  try {
+    const res = await fetch(API.runbookFailureModes);
+    if (!res.ok) return;
+    const data = await res.json();
+    els.preflightRunbook.innerHTML = "";
+    (data.modes || []).forEach((mode) => {
+      const li = document.createElement("li");
+      const rems = (mode.remediation || [])
+        .map((r) => `<li>${escapeHtml(r)}</li>`)
+        .join("");
+      li.innerHTML = `
+        <div class="rb-title">${escapeHtml(mode.code)} · ${escapeHtml(mode.label)}</div>
+        <div class="rb-symptom">${escapeHtml(mode.symptom || "")}</div>
+        <ul class="rb-remediation">${rems}</ul>
+      `;
+      els.preflightRunbook.appendChild(li);
+    });
+  } catch (e) {
+    // Non-fatal: runbook is static content.
+  }
+}
+
+function openPreflightPanel() {
+  els.preflightPanel.classList.remove("hidden");
+  if (state.preflight) renderPreflightPanel(state.preflight);
+  else loadPreflight(false).then((r) => r && renderPreflightPanel(r));
+}
+
+function closePreflightPanel() {
+  els.preflightPanel.classList.add("hidden");
+}
+
+// ---------- Qdrant admin panel ----------
+async function openQdrantPanel() {
+  if (!els.qdrantPanel) return;
+  els.qdrantPanel.classList.remove("hidden");
+  await loadQdrantInfo();
+}
+
+function closeQdrantPanel() {
+  if (!els.qdrantPanel) return;
+  els.qdrantPanel.classList.add("hidden");
+  if (els.qdrantPurgeResult) els.qdrantPurgeResult.textContent = "";
+}
+
+function _fmtNumber(n) {
+  if (n === undefined || n === null || Number.isNaN(n)) return "—";
+  return Number(n).toLocaleString();
+}
+
+async function loadQdrantInfo() {
+  if (!els.qdrantStats) return;
+  els.qdrantStats.innerHTML = "<span class='muted'>Loading…</span>";
+  els.qdrantSubtitle.textContent = "컬렉션 상태를 로드 중…";
+  try {
+    const res = await fetch(API.qdrantInfo);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const info = await res.json();
+    renderQdrantInfo(info);
+  } catch (err) {
+    els.qdrantStats.innerHTML = `<span class='error'>조회 실패: ${escapeHtml(String(err.message || err))}</span>`;
+    els.qdrantSubtitle.textContent = "조회 실패";
+  }
+}
+
+function renderQdrantInfo(info) {
+  if (!els.qdrantStats) return;
+  const name = info.collection || "—";
+  if (!info.exists) {
+    els.qdrantSubtitle.textContent = `컬렉션 "${name}" 가 아직 생성되지 않았습니다.`;
+    els.qdrantStats.innerHTML = "<span class='muted'>아직 ingest된 문서가 없습니다. 분석 한 번 실행 후 다시 확인하세요.</span>";
+    els.qdrantBreakdownList.innerHTML = "<li class='muted'>—</li>";
+    return;
+  }
+  els.qdrantSubtitle.textContent = `컬렉션: ${name} · status: ${info.status || "—"}`;
+  const rows = [
+    ["Points", _fmtNumber(info.points_count)],
+    ["Vectors", _fmtNumber(info.vectors_count)],
+    ["Indexed", _fmtNumber(info.indexed_vectors_count)],
+    ["Segments", _fmtNumber(info.segments_count)],
+    ["Payload fields", (info.payload_fields && info.payload_fields.length) ? info.payload_fields.join(", ") : "—"],
+  ];
+  els.qdrantStats.innerHTML = rows
+    .map(([k, v]) => `<div class='qdrant-stat'><span class='qdrant-stat-k'>${escapeHtml(k)}</span><span class='qdrant-stat-v'>${escapeHtml(String(v))}</span></div>`)
+    .join("");
+
+  const bd = info.ticker_breakdown || [];
+  if (bd.length === 0) {
+    els.qdrantBreakdownList.innerHTML = "<li class='muted'>티커 정보가 있는 문서가 없습니다.</li>";
+  } else {
+    els.qdrantBreakdownList.innerHTML = bd
+      .slice(0, 50)
+      .map(
+        (row) => `<li><span class='qdrant-bd-ticker'>${escapeHtml(row.ticker)}</span><span class='qdrant-bd-count'>${_fmtNumber(row.count)}</span></li>`,
+      )
+      .join("");
+  }
+  els.qdrantBreakdownNote.textContent = info.ticker_breakdown_truncated
+    ? "(첫 2000개까지 스캔, 상위 50개 표시)"
+    : (bd.length > 50 ? "(상위 50개 표시)" : "");
+}
+
+// ---------- Quality / Evaluation dashboard ----------
+async function openQualityPanel() {
+  if (!els.qualityPanel) return;
+  els.qualityPanel.classList.remove("hidden");
+  await loadQualityDashboard();
+}
+
+function closeQualityPanel() {
+  if (els.qualityPanel) els.qualityPanel.classList.add("hidden");
+}
+
+async function loadQualityDashboard() {
+  if (!els.qualitySummary) return;
+  els.qualitySummary.innerHTML = "<span class='muted'>Loading…</span>";
+  els.qualitySubtitle.textContent = "평가 결과를 로드 중…";
+  try {
+    const res = await fetch(API.evalDashboard);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    renderQualityDashboard(data);
+  } catch (err) {
+    els.qualitySummary.innerHTML = `<span class='error'>조회 실패: ${escapeHtml(String(err.message || err))}</span>`;
+    els.qualitySubtitle.textContent = "조회 실패";
+  }
+}
+
+function renderQualityDashboard(data) {
+  if (!data) return;
+  const summary = data.summary || {};
+  const hasAnything = data.has_report || data.has_results;
+  if (!hasAnything) {
+    els.qualitySubtitle.textContent = "평가 산출물이 없습니다. quality_review.py 실행 후 다시 확인하세요.";
+  } else {
+    const parts = [];
+    if (data.results_path) parts.push(`results: ${data.results_path}`);
+    if (data.report_path) parts.push(`report: ${data.report_path}`);
+    els.qualitySubtitle.textContent = parts.join(" · ") || "—";
+  }
+
+  const sc = summary.status_counts || {};
+  const total = summary.total || 0;
+  const kpis = [
+    ["Cases", total],
+    ["Pass", sc.success || 0],
+    ["Partial", sc.partial || 0],
+    ["Failed", sc.failed || 0],
+    ["Avg confidence", summary.avg_confidence ?? "—"],
+    ["Avg purity", summary.avg_purity ?? "—"],
+    ["Avg elapsed", summary.avg_elapsed_s != null ? `${summary.avg_elapsed_s}s` : "—"],
+  ];
+  els.qualitySummary.innerHTML = kpis
+    .map(([k, v]) => `<div class='quality-kpi'><span class='quality-kpi-k'>${escapeHtml(k)}</span><span class='quality-kpi-v'>${escapeHtml(String(v))}</span></div>`)
+    .join("");
+
+  const cats = summary.categories || [];
+  if (cats.length === 0) {
+    els.qualityCategories.innerHTML = "<li class='muted'>카테고리 데이터 없음.</li>";
+  } else {
+    els.qualityCategories.innerHTML = cats
+      .map((c) => {
+        const passRate = c.count ? Math.round((c.pass / c.count) * 100) : 0;
+        const conf = c.avg_confidence != null ? c.avg_confidence : "—";
+        return `<li class='quality-category'>
+          <div class='quality-category-top'>
+            <span class='quality-category-name'>${escapeHtml(c.category)}</span>
+            <span class='quality-category-count'>${c.count} cases · ${passRate}% pass</span>
+          </div>
+          <div class='quality-category-bar'>
+            <div class='quality-bar-pass' style='width:${(c.pass / Math.max(c.count, 1)) * 100}%'></div>
+            <div class='quality-bar-partial' style='width:${(c.partial / Math.max(c.count, 1)) * 100}%'></div>
+            <div class='quality-bar-failed' style='width:${(c.failed / Math.max(c.count, 1)) * 100}%'></div>
+          </div>
+          <div class='quality-category-meta'>avg confidence: ${escapeHtml(String(conf))}</div>
+        </li>`;
+      })
+      .join("");
+  }
+
+  const cases = data.cases || [];
+  els.qualityCasesNote.textContent = cases.length ? `(최근 ${cases.length}건)` : "";
+  if (cases.length === 0) {
+    els.qualityCases.innerHTML = "<li class='muted'>실행된 케이스가 없습니다.</li>";
+  } else {
+    els.qualityCases.innerHTML = cases
+      .slice()
+      .reverse()
+      .map((c) => {
+        const statusClass = c.status === "success" ? "ok" : (c.status === "partial" ? "warn" : "err");
+        return `<li class='quality-case'>
+          <div class='quality-case-top'>
+            <span class='quality-case-status ${statusClass}'>${escapeHtml(c.status || "—")}</span>
+            <span class='quality-case-ticker'>${escapeHtml(c.ticker || "")}</span>
+            <span class='quality-case-cat'>${escapeHtml(c.category || "")}</span>
+            <span class='quality-case-meta'>conf ${escapeHtml(String(c.confidence ?? "—"))} · chunks ${escapeHtml(String(c.context_chunks ?? 0))} · purity ${escapeHtml(String(c.purity_ratio ?? "—"))}</span>
+          </div>
+          <div class='quality-case-desc'>${escapeHtml(c.desc || c.question || "")}</div>
+          ${c.error ? `<div class='quality-case-error'>${escapeHtml(c.error)}</div>` : ""}
+        </li>`;
+      })
+      .join("");
+  }
+
+  if (els.qualityReport) {
+    els.qualityReport.textContent = data.report_markdown || "(latest_eval_report.md 를 찾을 수 없습니다)";
+  }
+}
+
+async function runQdrantPurge(dryRun) {
+  if (!els.qdrantPurgeResult) return;
+  const days = els.qdrantPurgeDays.value.trim();
+  const ticker = els.qdrantPurgeTicker.value.trim().toUpperCase();
+  if (!days && !ticker) {
+    els.qdrantPurgeResult.textContent = "나이(days) 또는 티커를 최소 하나 지정하세요.";
+    els.qdrantPurgeResult.className = "qdrant-purge-result error";
+    return;
+  }
+  if (!dryRun) {
+    const confirmMsg = `정말 삭제하시겠습니까?\n${days ? "older_than_days=" + days + "일" : ""} ${ticker ? "ticker=" + ticker : ""}`.trim();
+    if (!window.confirm(confirmMsg)) return;
+  }
+  const params = new URLSearchParams();
+  if (days) params.set("older_than_days", days);
+  if (ticker) params.set("ticker", ticker);
+  if (dryRun) params.set("dry_run", "true");
+  els.qdrantPurgeResult.className = "qdrant-purge-result muted";
+  els.qdrantPurgeResult.textContent = dryRun ? "Dry run 실행 중…" : "Purge 실행 중…";
+  try {
+    const res = await fetch(`${API.qdrantPurge}?${params.toString()}`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    els.qdrantPurgeResult.className = "qdrant-purge-result ok";
+    els.qdrantPurgeResult.textContent = dryRun
+      ? `[dry run] scanned=${data.scanned} matched=${data.matched}. 실제 삭제 시 이만큼 제거됩니다.`
+      : `✓ 삭제 완료 — scanned=${data.scanned}, matched=${data.matched}, deleted=${data.deleted}.`;
+    if (!dryRun) {
+      // Refresh stats after a real purge so the UI reflects the new state.
+      await loadQdrantInfo();
+    }
+  } catch (err) {
+    els.qdrantPurgeResult.className = "qdrant-purge-result error";
+    els.qdrantPurgeResult.textContent = `실패: ${err.message || err}`;
+  }
+}
+
+// ---------- Config / presets ----------
+async function loadConfig() {
+  try {
+    const res = await fetch(API.config);
+    if (!res.ok) return;
+    state.config = await res.json();
+    renderModelOptions(state.config.models || []);
+    renderPresets(state.config.presets || []);
+    applyLimits(state.config.limits || {});
+  } catch (e) {
+    console.warn("config fetch failed", e);
+    renderModelOptions([]);
+    renderPresets([]);
+  }
+}
+
+const CLEAN_PRESETS = [
+  { id: "risk", label: "단기 리스크", question: "현재 드러나는 주요 단기 리스크와 시장이 과소평가하는 하방 시나리오는 무엇인가요?" },
+  { id: "catalyst", label: "성장 촉매", question: "향후 6~12개월 동안 가격을 움직일 핵심 상승 촉매와 검증 지표는 무엇인가요?" },
+  { id: "thesis", label: "12개월 투자 가설", question: "최신 공개 정보와 정량 지표를 기준으로 12개월 투자 가설을 정리해주세요." },
+  { id: "earnings", label: "실적 신호", question: "최근 실적과 가이던스에서 확인되는 매출, 마진, 비용 구조의 핵심 신호를 요약해주세요." },
+  { id: "competitive", label: "경쟁 구도", question: "경쟁 구도가 어떻게 변하고 있고, 가격 결정력과 시장점유율에는 어떤 영향을 주나요?" },
+];
+
+function isReadablePreset(p) {
+  const text = `${p?.label || ""} ${p?.question || ""}`;
+  return /[가-힣A-Za-z]/.test(text) && !/[�]/.test(text);
+}
+
+function renderModelOptions(models) {
+  if (!els.model) return;
+  const current = els.model.value || "qwen";
+  const rawOptions = Array.isArray(models) && models.length
+    ? models.map((m) => (typeof m === "string" ? { id: m, label: m } : m))
+    : [{ id: "qwen", label: "qwen2.5:7b (Ollama · 기본)" }];
+  const options = rawOptions.filter((m) => m && m.id && (m.id === "qwen" || m.role === "fallback"));
+  if (!options.length) options.push({ id: "qwen", label: "qwen2.5:7b (Ollama · 기본)" });
+  els.model.innerHTML = "";
+  options.forEach((m) => {
+      const opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = m.label || m.id;
+      els.model.appendChild(opt);
+    });
+  els.model.value = Array.from(els.model.options).some((opt) => opt.value === current) ? current : "qwen";
+}
+
+function renderPresets(presets) {
+  els.presetChips.innerHTML = "";
+  const usable = Array.isArray(presets) && presets.length && presets.every(isReadablePreset)
+    ? presets
+    : CLEAN_PRESETS;
+  usable.forEach((p) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = p.label;
+    btn.title = p.question;
+    btn.addEventListener("click", () => {
+      els.question.value = p.question;
+      els.question.focus();
+      persistForm();
+    });
+    els.presetChips.appendChild(btn);
+  });
+}
+
+function applyLimits(limits) {
+  if (limits.lookback_days) {
+    const { min, max, default: dflt } = limits.lookback_days;
+    els.lookback.min = min;
+    els.lookback.max = max;
+    if (!els.lookback.dataset.dirty) els.lookback.value = dflt;
+  }
+  if (limits.top_k) {
+    const { min, max, default: dflt } = limits.top_k;
+    els.topk.min = min;
+    els.topk.max = max;
+    if (!els.topk.dataset.dirty) els.topk.value = dflt;
+  }
+  updateRangeLabels();
+}
+
+// ---------- Form ----------
+function readForm() {
+  const sources = Array.from(els.sourceInputs())
+    .filter((i) => i.checked && !i.disabled)
+    .map((i) => i.value);
+  const raw = els.ticker.value.trim();
+  const question = els.question.value.trim();
+  const isCompare = !!(els.compareMode && els.compareMode.checked);
+  const selectedMode = Array.from(els.researchModeInputs())
+    .find((i) => i.checked)?.value || "auto";
+  const intent = normalizeResearchIntent({
+    tickerRaw: raw,
+    question,
+    modeHint: selectedMode,
+    compare: isCompare,
+  });
+  return {
+    ...intent,
+    sources,
+    lookback_days: parseInt(els.lookback.value, 10),
+    top_k: parseInt(els.topk.value, 10),
+    model: els.model.value,
+  };
+}
+
+function persistForm() {
+  try {
+    localStorage.setItem(STORAGE.form, JSON.stringify(readForm()));
+  } catch (e) { /* ignore */ }
+}
+
+function restoreForm() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE.form) || "null");
+    if (!saved) return;
+    if (saved.ticker) els.ticker.value = saved.ticker;
+    if (saved.question) els.question.value = saved.question;
+    if (Number.isFinite(saved.lookback_days)) els.lookback.value = saved.lookback_days;
+    if (Number.isFinite(saved.top_k)) els.topk.value = saved.top_k;
+    if (saved.model && Array.from(els.model.options).some((opt) => opt.value === saved.model)) {
+      els.model.value = saved.model;
+    }
+    if (Array.isArray(saved.sources)) {
+      els.sourceInputs().forEach((i) => {
+        if (i.disabled) return;
+        i.checked = saved.sources.includes(i.value);
+      });
+    }
+    if (saved.compare && els.compareMode) {
+      els.compareMode.checked = true;
+    }
+    if (saved.mode_hint) {
+      els.researchModeInputs().forEach((i) => {
+        i.checked = i.value === saved.mode_hint;
+      });
+    }
+  } catch (e) { /* ignore */ }
+  updateRangeLabels();
+  if (typeof updateCompareModeUI === "function") updateCompareModeUI();
+}
+
+function updateRangeLabels() {
+  els.lookbackValue.textContent = `${els.lookback.value}d`;
+  els.topkValue.textContent = els.topk.value;
+}
+
+function setFormNotice(message, level = "info") {
+  if (!els.formNotice) return;
+  if (!message) {
+    els.formNotice.classList.add("hidden");
+    els.formNotice.textContent = "";
+    els.formNotice.classList.remove("warning", "error", "info");
+    return;
+  }
+  els.formNotice.textContent = message;
+  els.formNotice.classList.remove("hidden", "warning", "error", "info");
+  els.formNotice.classList.add(level);
+}
+
+function normalizeStaticLabels() {
+  document.title = "FinGPT Local Research Assistant";
+  if (els.tickerHint) els.tickerHint.textContent = "ticker 없이 질의 가능, ticker는 참고 힌트";
+  if (els.ticker) els.ticker.placeholder = "선택: TLT, GLD, BTC-USD";
+  if (els.question) els.question.placeholder = "예: 현재 시장이 무시하는 리스크는 무엇인가요?";
+  const modeLabels = {
+    auto: "자동",
+    ticker: "종목",
+    topic: "주제",
+  };
+  els.researchModeInputs().forEach((input) => {
+    const span = input.parentElement?.querySelector("span");
+    if (span && modeLabels[input.value]) span.textContent = modeLabels[input.value];
+  });
+  const qHint = document.querySelector('label[for="question"] .hint');
+  if (qHint) qHint.textContent = "자유 질문 또는 프리셋 선택";
+  const evidenceSearch = document.getElementById("evidenceSearch");
+  if (evidenceSearch) evidenceSearch.placeholder = "검색: 제목, 내용, source, doc_id";
+  const homeTitle = document.querySelector(".home-hero h2");
+  if (homeTitle) homeTitle.textContent = "시장 대시보드";
+  const homeCopy = document.querySelector(".home-hero p:not(.eyebrow)");
+  if (homeCopy) homeCopy.textContent = "티커를 입력하면 종목 분석으로, 비워두고 질문만 입력하면 금리·신용·FX·원자재·테마 topic 분석으로 라우팅합니다.";
+  const homeStatus = document.querySelectorAll(".home-status span");
+  if (homeStatus[0]) homeStatus[0].textContent = "OpenBB/Yahoo/FRED/SEC 중심";
+  if (homeStatus[1]) homeStatus[1].textContent = "qwen2.5:7b 로컬 추론";
+  const tvTitles = document.querySelectorAll(".home-card-head h3");
+  if (tvTitles[0]) tvTitles[0].textContent = "TradingView 단일 차트";
+  if (tvTitles[1]) tvTitles[1].textContent = "미국 주식 5분봉 히트맵";
+  if (tvTitles[2]) tvTitles[2].textContent = "내부 시장 스냅샷";
+  if (tvTitles[3]) tvTitles[3].textContent = "주요 뉴스";
+  const runMeta = document.querySelector(".meta-row");
+  if (runMeta) runMeta.innerHTML = '<span class="kbd">Ctrl</span> + <span class="kbd">Enter</span> 실행';
+}
+
+function showHome() {
+  state.lastResponse = null;
+  state.lastCollection = null;
+  state.lastRequest = null;
+  setExportAvailability(false);
+  setFormNotice("");
+  if (els.compareView) els.compareView.classList.add("hidden");
+  els.loadingState.classList.add("hidden");
+  els.resultView.classList.add("hidden");
+  els.emptyState.classList.remove("hidden");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  initializeTradingViewDashboard(false);
+  loadDashboardEquityHeatmap(false);
+  loadDashboardMarket(false);
+  loadDashboardNews(false);
+}
+
+function showTvFallback(el, message) {
+  if (!el) return;
+  if (el.dataset?.preserveContent === "true") {
+    const messageEl = el.querySelector(".tv-fallback-message");
+    if (messageEl) messageEl.textContent = message;
+  } else {
+    el.textContent = message;
+  }
+  el.classList.remove("hidden");
+}
+
+function hideTvFallback(el) {
+  if (el) el.classList.add("hidden");
+}
+
+function tradingViewEmbedUrl(scriptSrc, config) {
+  let widget = "";
+  if (scriptSrc.includes("stock-heatmap")) widget = "stock-heatmap";
+  else if (scriptSrc.includes("advanced-chart")) widget = "advanced-chart";
+  if (!widget) return "";
+  const locale = config.locale || "kr";
+  const payload = encodeURIComponent(JSON.stringify(config));
+  return `https://s.tradingview.com/embed-widget/${widget}/?locale=${encodeURIComponent(locale)}#${payload}`;
+}
+
+function mountTradingViewIframe(container, scriptSrc, config, label) {
+  const url = tradingViewEmbedUrl(scriptSrc, config);
+  if (!url) return false;
+  container.innerHTML = "";
+  const iframe = document.createElement("iframe");
+  iframe.title = label;
+  iframe.src = url;
+  iframe.loading = "eager";
+  iframe.referrerPolicy = "origin";
+  iframe.allow = "clipboard-write; encrypted-media; fullscreen";
+  iframe.setAttribute("allowfullscreen", "true");
+  iframe.style.width = "100%";
+  iframe.style.height = "100%";
+  iframe.style.border = "0";
+  container.appendChild(iframe);
+  return true;
+}
+
+function mountTradingViewWidget(container, fallback, scriptSrc, config, label) {
+  if (!container) return;
+  container.innerHTML = '<div class="tradingview-widget-container__widget"></div>';
+  container.dataset.tvStatus = "loading";
+  hideTvFallback(fallback);
+  const script = document.createElement("script");
+  script.type = "text/javascript";
+  script.async = true;
+  script.src = scriptSrc;
+  script.textContent = JSON.stringify(config);
+  script.onerror = () => {
+    const iframeMounted = mountTradingViewIframe(container, scriptSrc, config, label);
+    container.dataset.tvStatus = iframeMounted ? "iframe-fallback" : "failed";
+    showTvFallback(fallback, iframeMounted
+      ? `${label} 스크립트가 차단되어 직접 iframe 경로로 전환했습니다.`
+      : `${label} 로드에 실패했습니다. 아래 내부 시장 스냅샷을 기준으로 확인하세요.`);
+  };
+  container.appendChild(script);
+
+  let checks = 0;
+  const verify = () => {
+    const frame = container.querySelector("iframe");
+    const frameSrc = frame?.getAttribute("src") || "";
+    if (frame && frameSrc && frameSrc !== "about:blank") {
+      hideTvFallback(fallback);
+      container.dataset.tvStatus = "ready";
+      return;
+    }
+    checks += 1;
+    if (checks === 4) {
+      const iframeMounted = mountTradingViewIframe(container, scriptSrc, config, label);
+      if (iframeMounted) {
+        container.dataset.tvStatus = "iframe-fallback";
+        showTvFallback(fallback, `${label} 로딩이 지연되어 직접 iframe 경로로 재시도했습니다.`);
+      }
+    }
+    if (checks >= 8) {
+      container.dataset.tvStatus = "degraded";
+      showTvFallback(fallback, `${label} 위젯이 아직 응답하지 않습니다. 네트워크 또는 외부 스크립트 차단 시 내부 시장 스냅샷을 사용하세요.`);
+      return;
+    }
+    window.setTimeout(verify, 1000);
+  };
+  window.setTimeout(verify, 1200);
+}
+
+function initializeTradingViewDashboard(force = false) {
+  if (state.tradingViewInitialized && !force) return;
+  state.tradingViewInitialized = true;
+  mountTradingViewWidget(
+    els.tvOverviewWidget,
+    els.tvOverviewFallback,
+    "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js",
+    {
+      autosize: true,
+      symbol: "AMEX:SPY",
+      interval: "D",
+      timezone: "Etc/UTC",
+      theme: "dark",
+      style: "1",
+      locale: "kr",
+      backgroundColor: "rgba(15, 23, 42, 1)",
+      gridColor: "rgba(51, 65, 85, 0.35)",
+      hide_top_toolbar: false,
+      allow_symbol_change: true,
+      save_image: false,
+      calendar: false,
+      height: "420",
+      width: "100%",
+      support_host: "https://www.tradingview.com",
+    },
+    "TradingView 단일 차트"
+  );
+  mountTradingViewWidget(
+    els.tvHeatmapWidget,
+    els.tvHeatmapFallback,
+    "https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js",
+    {
+      exchanges: [],
+      dataSource: "SPX500",
+      grouping: "sector",
+      blockSize: "market_cap_basic",
+      blockColor: "change",
+      locale: "kr",
+      symbolUrl: "",
+      colorTheme: "dark",
+      hasTopBar: false,
+      isDataSetEnabled: false,
+      isZoomEnabled: true,
+      hasSymbolTooltip: true,
+      isMonoSize: false,
+      width: "100%",
+      height: "100%",
+      support_host: "https://www.tradingview.com",
+    },
+    "TradingView 주식 히트맵"
+  );
+}
+
+function fmtPct(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
+  const n = Number(value);
+  const sign = n > 0 ? "+" : "";
+  return `${sign}${n.toFixed(2)}%`;
+}
+
+function heatColor(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "rgba(63, 63, 70, 0.9)";
+  const intensity = Math.min(Math.abs(n) / 3.0, 1);
+  if (n >= 0) return `linear-gradient(135deg, rgba(8, 145, 104, ${0.56 + intensity * 0.34}), rgba(6, 95, 70, ${0.74 + intensity * 0.18}))`;
+  return `linear-gradient(135deg, rgba(185, 28, 28, ${0.55 + intensity * 0.34}), rgba(88, 28, 28, ${0.76 + intensity * 0.18}))`;
+}
+
+function weightedSectorChange(items) {
+  let totalWeight = 0;
+  let weighted = 0;
+  items.forEach((item) => {
+    const change = Number(item.change_pct);
+    const weight = Math.max(0.2, Number(item.weight) || 1);
+    if (!Number.isFinite(change)) return;
+    totalWeight += weight;
+    weighted += change * weight;
+  });
+  return totalWeight ? weighted / totalWeight : null;
+}
+
+function sectorBreadth(items) {
+  const usable = Array.isArray(items) ? items : [];
+  const up = usable.filter((item) => Number(item.change_pct) >= 0).length;
+  const down = usable.filter((item) => Number(item.change_pct) < 0).length;
+  return { up, down, total: usable.length };
+}
+
+function fmtHeatmapAsOf(value) {
+  if (!value) return "기준시각 미확인";
+  try {
+    return new Intl.DateTimeFormat("ko-KR", {
+      timeZone: "America/New_York",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(value));
+  } catch (_) {
+    return String(value);
+  }
+}
+
+const FRESHNESS_LABELS = {
+  fresh: "정상",
+  delayed: "지연",
+  stale: "지연 초과",
+  stale_prior_close: "전일 기준",
+  closed: "장마감",
+  unknown: "미확인",
+};
+
+function isDecisionUsableMarketItem(item) {
+  if (!item) return false;
+  if (item.is_decision_usable === false) return false;
+  const status = item.freshness_status || "unknown";
+  return item.status === "ok" && ["fresh", "delayed", "closed"].includes(status);
+}
+
+function renderHomeHeatmap(items, meta = {}) {
+  if (!els.homeHeatmap) return;
+  const usable = Array.isArray(items) ? items.filter(isDecisionUsableMarketItem) : [];
+  if (!usable.length) {
+    els.homeHeatmap.innerHTML = `
+      <div class="home-news-empty">
+        장중 최신/지연 intraday 데이터가 없어 히트맵을 숨겼습니다.<br>
+        전일 기준 데이터는 의사결정용으로 표시하지 않습니다.
+      </div>
+    `;
+    if (els.homeHeatmapMeta) {
+      const stale = Number(meta.stale_or_unavailable_count || 0);
+      els.homeHeatmapMeta.textContent = stale
+        ? `${stale}개 종목이 stale 또는 unavailable 상태입니다. 새로고침으로 5분봉 데이터를 다시 확인하세요.`
+        : "intraday 가격 데이터를 확인하지 못했습니다.";
+    }
+    return;
+  }
+  const counts = meta.freshness_counts || {};
+  const staleTotal = (counts.stale_prior_close || 0) + (counts.stale || 0) + (counts.unknown || 0);
+  const latest = meta.latest_as_of ? fmtHeatmapAsOf(meta.latest_as_of) : "미확인";
+  if (els.homeHeatmapMeta) {
+    els.homeHeatmapMeta.innerHTML = `
+      <span>최신 기준시각: ${escapeHtml(latest)} ET</span>
+      <span>${escapeHtml(meta.interval || "5m")} intraday</span>
+      <span>${escapeHtml(meta.provider || "yfinance")}</span>
+      ${staleTotal ? `<strong class="stale">제외: ${staleTotal}개 stale</strong>` : '<strong>신선도 정상</strong>'}
+    `;
+  }
+  const bySector = new Map();
+  usable.forEach((item) => {
+    const key = item.sector || "기타";
+    if (!bySector.has(key)) bySector.set(key, []);
+    bySector.get(key).push(item);
+  });
+  const sectors = Array.from(bySector.entries())
+    .map(([sector, sectorItems]) => [sector, sectorItems.sort((a, b) => (Number(b.weight) || 0) - (Number(a.weight) || 0))])
+    .sort((a, b) => b[1].reduce((sum, row) => sum + (Number(row.weight) || 1), 0) - a[1].reduce((sum, row) => sum + (Number(row.weight) || 1), 0));
+  els.homeHeatmap.innerHTML = sectors.map(([sector, sectorItems]) => {
+    const sectorChange = weightedSectorChange(sectorItems);
+    const sectorCls = Number.isFinite(Number(sectorChange)) ? (Number(sectorChange) >= 0 ? "up" : "down") : "muted";
+    const sectorChangeText = Number.isFinite(Number(sectorChange)) ? fmtPct(sectorChange) : "-";
+    const breadth = sectorBreadth(sectorItems);
+    const movers = sectorItems.slice(0, 4);
+    const hiddenCount = Math.max(0, sectorItems.length - movers.length);
+    return `
+    <section class="stock-heatmap-sector ${sectorCls}">
+      <div class="stock-sector-title">
+        <div>
+          <strong>${escapeHtml(sector)}</strong>
+          <small>${breadth.up} 상승 · ${breadth.down} 하락</small>
+        </div>
+        <span class="${sectorCls}">${escapeHtml(sectorChangeText)}</span>
+      </div>
+      <div class="stock-sector-movers">
+        ${movers.map((item) => {
+          const change = item.change_pct;
+          const cls = Number(change) >= 0 ? "up" : "down";
+          const freshness = item.freshness_status || "unknown";
+          const title = `${item.symbol} ${item.label || ""} ${fmtPct(change)} · ${fmtHeatmapAsOf(item.as_of)} ET · ${FRESHNESS_LABELS[freshness] || freshness}`;
+          return `
+            <article class="stock-heatmap-tile ${cls} ${freshness}" style="--heat-bg:${heatColor(change)}" title="${escapeHtml(title)}">
+              <div class="stock-heatmap-main">
+                <span class="stock-heatmap-symbol">${escapeHtml(item.symbol || "")}</span>
+                <span class="stock-heatmap-change">${escapeHtml(fmtPct(change))}</span>
+              </div>
+              <div class="stock-heatmap-name">${escapeHtml(item.label || "")}</div>
+            </article>
+          `;
+        }).join("")}
+        ${hiddenCount ? `<div class="stock-heatmap-more">+${hiddenCount}</div>` : ""}
+      </div>
+    </section>
+  `;
+  }).join("");
+}
+
+async function loadDashboardEquityHeatmap(force = false) {
+  if (!els.homeHeatmap || (state.dashboardHeatmapLoaded && !force)) return;
+  els.homeHeatmap.innerHTML = '<div class="home-news-empty">intraday 히트맵 데이터를 불러오는 중입니다.</div>';
+  if (els.homeHeatmapMeta) els.homeHeatmapMeta.textContent = "Yahoo/yfinance 5분봉 최신 가격을 확인하는 중입니다.";
+  try {
+    const url = force ? `${API.dashboardEquityHeatmap}?force=true` : API.dashboardEquityHeatmap;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const items = Array.isArray(data.items) ? data.items : [];
+    renderHomeHeatmap(items, data);
+    state.dashboardHeatmapLoaded = true;
+  } catch (err) {
+    els.homeHeatmap.innerHTML = `<div class="home-news-empty">intraday 히트맵 로드 실패: ${escapeHtml(err.message || err)}</div>`;
+    if (els.homeHeatmapMeta) els.homeHeatmapMeta.textContent = "히트맵 데이터 로드 실패";
+  }
+}
+
+async function loadDashboardMarket(force = false) {
+  if (!els.homeMarketList || (state.marketLoaded && !force)) return;
+  els.homeMarketList.innerHTML = '<div class="home-news-empty">시장 데이터를 불러오는 중입니다.</div>';
+  try {
+    const res = await fetch(API.dashboardMarket);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length) {
+      els.homeMarketList.innerHTML = '<div class="home-news-empty">표시할 시장 데이터가 없습니다.</div>';
+      state.marketLoaded = true;
+      return;
+    }
+    els.homeMarketList.innerHTML = items.map((item) => {
+      const r = item.returns || {};
+      const dayCls = Number(r["1d"]) >= 0 ? "up" : "down";
+      const freshness = item.freshness_status || "unknown";
+      const usable = isDecisionUsableMarketItem(item);
+      const ageText = Number.isFinite(Number(item.age_minutes)) ? `${Math.round(Number(item.age_minutes))}분` : "";
+      const source = item.source || "";
+      return `
+        <article class="home-market-card ${usable ? "" : "stale"} ${escapeHtml(freshness)}">
+          <div class="home-market-head">
+            <span class="home-market-symbol">${escapeHtml(item.symbol || "")}</span>
+            <span class="home-market-class">${escapeHtml(item.asset_class || "")}</span>
+          </div>
+          <div class="home-market-label">${escapeHtml(item.label || "")}</div>
+          <div class="home-market-price">${item.price === null || item.price === undefined ? "-" : escapeHtml(String(item.price))}</div>
+          <div class="home-market-returns">
+            <span class="${dayCls}">1D ${escapeHtml(fmtPct(r["1d"]))}</span>
+            <span>1M ${escapeHtml(fmtPct(r["1m"]))}</span>
+          </div>
+          <div class="home-market-meta">
+            <span>${escapeHtml(item.as_of || "기준일 미확인")}</span>
+            <span>${escapeHtml(source)}</span>
+          </div>
+          <div class="home-market-freshness ${usable ? "ok" : "warn"}">
+            <span>${escapeHtml(FRESHNESS_LABELS[freshness] || freshness)}</span>
+            ${ageText ? `<span>${escapeHtml(ageText)}</span>` : ""}
+            ${usable ? "" : "<strong>의사결정 제외</strong>"}
+          </div>
+        </article>
+      `;
+    }).join("");
+    state.marketLoaded = true;
+  } catch (err) {
+    els.homeMarketList.innerHTML = `<div class="home-news-empty">시장 데이터 로드 실패: ${escapeHtml(err.message || err)}</div>`;
+  }
+}
+
+const NEWS_CATEGORY_LABELS = {
+  all: "전체",
+  equity_index: "주식/지수",
+  rates_credit: "금리/신용",
+  macro_policy: "매크로",
+  ai_semis: "AI/반도체",
+  earnings: "실적",
+  commodity: "원자재",
+  crypto: "크립토",
+  market: "기타",
+};
+
+function renderNewsCategories(items) {
+  if (!els.homeNewsCategories) return;
+  const counts = items.reduce((acc, item) => {
+    const key = item.category || "market";
+    acc[key] = (acc[key] || 0) + 1;
+    acc.all = (acc.all || 0) + 1;
+    return acc;
+  }, {});
+  const order = ["all", "equity_index", "macro_policy", "rates_credit", "ai_semis", "earnings", "commodity", "crypto", "market"];
+  if (!counts[state.dashboardNewsCategory]) state.dashboardNewsCategory = "all";
+  els.homeNewsCategories.innerHTML = order
+    .filter((key) => counts[key])
+    .map((key) => `
+      <button type="button" class="news-category-chip ${state.dashboardNewsCategory === key ? "active" : ""}" data-category="${escapeHtml(key)}">
+        ${escapeHtml(NEWS_CATEGORY_LABELS[key] || key)} <span>${counts[key]}</span>
+      </button>
+    `).join("");
+  els.homeNewsCategories.querySelectorAll(".news-category-chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.dashboardNewsCategory = btn.dataset.category || "all";
+      renderDashboardNews();
+    });
+  });
+}
+
+function renderDashboardNews() {
+  if (!els.homeNewsList) return;
+  const category = state.dashboardNewsCategory || "all";
+  const items = category === "all"
+    ? state.dashboardNewsItems
+    : state.dashboardNewsItems.filter((item) => (item.category || "market") === category);
+  renderNewsCategories(state.dashboardNewsItems);
+  if (!items.length) {
+    els.homeNewsList.innerHTML = '<div class="home-news-empty">선택한 카테고리에 표시할 뉴스가 없습니다.</div>';
+    return;
+  }
+  els.homeNewsList.innerHTML = items.slice(0, 20).map((item) => {
+    const date = item.published_at ? fmtDate(item.published_at) : (item.collected_at ? fmtDate(item.collected_at) : "");
+    const href = item.url ? `href="${escapeHtml(item.url)}" target="_blank" rel="noopener"` : "";
+    const categoryLabel = NEWS_CATEGORY_LABELS[item.category || "market"] || item.category || "기타";
+    const sourceTier = Number(item.source_tier);
+    const sourceClass = sourceTier === 0 ? "major" : (sourceTier >= 3 ? "low" : "");
+    return `
+      <article class="home-news-card">
+        <div class="home-news-meta">
+          <span>${escapeHtml(categoryLabel)}</span>
+          <span>${escapeHtml(item.symbol || "MARKET")}</span>
+          <span class="news-source ${sourceClass}">${escapeHtml(item.source || "")}</span>
+          <span>${escapeHtml(date)}</span>
+        </div>
+        <a ${href} class="home-news-title">${escapeHtml(item.title || "Untitled")}</a>
+      </article>
+    `;
+  }).join("");
+}
+
+async function loadDashboardNews(force = false) {
+  if (!els.homeNewsList || (state.dashboardLoaded && !force)) return;
+  els.homeNewsList.innerHTML = '<div class="home-news-empty">뉴스를 불러오는 중입니다.</div>';
+  try {
+    const res = await fetch(API.dashboardNews);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length) {
+      els.homeNewsList.innerHTML = '<div class="home-news-empty">표시할 최신 뉴스가 없습니다.</div>';
+      state.dashboardNewsItems = [];
+      renderNewsCategories([]);
+      state.dashboardLoaded = true;
+      return;
+    }
+    state.dashboardNewsItems = items;
+    renderDashboardNews();
+    state.dashboardLoaded = true;
+  } catch (err) {
+    els.homeNewsList.innerHTML = `<div class="home-news-empty">뉴스 로드 실패: ${escapeHtml(err.message || err)}</div>`;
+  }
+}
+
+// ---------- History (server-persisted via /api/v1/runs) ----------
+async function fetchHistory(ticker) {
+  try {
+    const qs = new URLSearchParams({ limit: "40" });
+    if (ticker) qs.set("ticker", ticker);
+    const res = await fetch(`${API.runs}?${qs.toString()}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.items) ? data.items : [];
+  } catch {
+    return [];
+  }
+}
+
+async function renderHistory(filterTicker = null) {
+  const items = await fetchHistory(filterTicker);
+  els.historyList.innerHTML = "";
+  if (els.historySummary) {
+    els.historySummary.textContent = items.length ? `${items.length} runs` : "";
+  }
+  if (els.historyToggleBtn) {
+    els.historyToggleBtn.classList.toggle("hidden", items.length <= 5);
+    els.historyToggleBtn.textContent = state.historyExpanded ? "접기" : "펼치기";
+  }
+  if (!items.length) {
+    els.historyList.innerHTML = '<li class="history-empty">아직 실행된 분석이 없습니다.</li>';
+    return;
+  }
+  const visibleItems = state.historyExpanded ? items.slice(0, 40) : items.slice(0, 5);
+  visibleItems.forEach((item) => {
+    const li = document.createElement("li");
+    li.className = "history-item";
+    const statusCls = statusClass(item.status);
+    const whenLocal = item.created_at ? new Date(item.created_at).toLocaleString() : "";
+    li.innerHTML = `
+      <span class="hi-ticker">${escapeHtml(item.ticker)}</span>
+      <span class="hi-time">${escapeHtml(whenLocal)}</span>
+      <span class="hi-status ${statusCls}">${escapeHtml(item.status || "")}</span>
+    `;
+    li.title = item.question || "";
+    li.dataset.runId = item.id;
+    li.addEventListener("click", () => loadRun(item.id));
+    els.historyList.appendChild(li);
+  });
+  if (!state.historyExpanded && items.length > visibleItems.length) {
+    const li = document.createElement("li");
+    li.className = "history-more";
+    li.textContent = `최근 5개만 표시 중 · ${items.length - visibleItems.length}개 더 있음`;
+    els.historyList.appendChild(li);
+  }
+}
+
+async function loadRun(runId) {
+  try {
+    const res = await fetch(API.run(runId));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const art = data.artifacts || {};
+    if (art.response) {
+      renderResponse(art.response, art.collection || null, art.request || null);
+      if (art.request) {
+        els.ticker.value = art.request.ticker || "";
+        els.question.value = art.request.question || "";
+      }
+      if (art.report_md) {
+        els.reportMd.textContent = art.report_md;
+      }
+      await renderTickerSummary(data.ticker);
+    }
+  } catch (e) {
+    alert("과거 실행 불러오기 실패: " + e.message);
+  }
+}
+
+// ---------- Watchlist ----------
+async function renderWatchlist() {
+  if (!els.watchlistList) return;
+  try {
+    const res = await fetch(API.watchlist);
+    if (!res.ok) return;
+    const data = await res.json();
+    const items = data.items || [];
+
+    if (els.watchlistSchedStatus) {
+      const sched = data.scheduler || {};
+      const running = sched.running ? "on" : "off";
+      els.watchlistSchedStatus.textContent = `sched · ${running} · ${sched.runs_triggered ?? 0} runs`;
+      els.watchlistSchedStatus.classList.toggle("on", !!sched.running);
+    }
+
+    if (items.length === 0) {
+      els.watchlistList.innerHTML = `<li class="watchlist-empty">저장된 Watchlist 항목이 없습니다.</li>`;
+      return;
+    }
+
+    els.watchlistList.innerHTML = items
+      .map((it) => {
+        const last = it.last_run_at ? timeAgo(it.last_run_at) : "—";
+        const status = it.last_run_status
+          ? `<span class="status-badge ${statusClass(it.last_run_status)}">${it.last_run_status.toUpperCase()}</span>`
+          : `<span class="status-badge neutral">NEW</span>`;
+        const interval = it.interval_hours
+          ? `<span class="wl-interval">every ${it.interval_hours}h</span>`
+          : `<span class="wl-interval muted">manual</span>`;
+        const enabled = it.enabled ? "" : `<span class="wl-paused">paused</span>`;
+        const err = it.last_run_error
+          ? `<div class="wl-error" title="${escapeHtml(it.last_run_error)}">${escapeHtml(it.last_run_error.slice(0, 80))}</div>`
+          : "";
+        return `
+          <li class="watchlist-item" data-id="${escapeHtml(it.id)}">
+            <div class="wl-top">
+              <div class="wl-ticker">${escapeHtml(it.ticker)}</div>
+              ${status}
+              ${enabled}
+            </div>
+            <div class="wl-question" title="${escapeHtml(it.question)}">${escapeHtml(it.question.length > 80 ? it.question.slice(0, 80) + "…" : it.question)}</div>
+            <div class="wl-meta">
+              ${interval}
+              <span class="wl-last">last: ${last}</span>
+              <span class="wl-count">· ${it.run_count || 0} runs</span>
+            </div>
+            ${err}
+            <div class="wl-actions">
+              <button type="button" class="linkish wl-run" data-id="${escapeHtml(it.id)}" title="지금 실행">run</button>
+              <button type="button" class="linkish wl-load" data-id="${escapeHtml(it.id)}" title="폼에 불러오기">load</button>
+              <button type="button" class="linkish wl-toggle" data-id="${escapeHtml(it.id)}" data-enabled="${it.enabled}" title="일시정지/재개">${it.enabled ? "pause" : "resume"}</button>
+              <button type="button" class="linkish danger wl-delete" data-id="${escapeHtml(it.id)}" title="삭제">del</button>
+            </div>
+          </li>`;
+      })
+      .join("");
+
+    state.watchlistItems = items;
+    wireWatchlistActions();
+  } catch (err) {
+    console.warn("watchlist load failed", err);
+  }
+}
+
+function wireWatchlistActions() {
+  els.watchlistList.querySelectorAll(".wl-run").forEach((btn) => {
+    btn.addEventListener("click", () => watchlistRunNow(btn.dataset.id));
+  });
+  els.watchlistList.querySelectorAll(".wl-load").forEach((btn) => {
+    btn.addEventListener("click", () => watchlistLoadToForm(btn.dataset.id));
+  });
+  els.watchlistList.querySelectorAll(".wl-toggle").forEach((btn) => {
+    btn.addEventListener("click", () => watchlistToggle(btn.dataset.id, btn.dataset.enabled !== "true"));
+  });
+  els.watchlistList.querySelectorAll(".wl-delete").forEach((btn) => {
+    btn.addEventListener("click", () => watchlistDelete(btn.dataset.id));
+  });
+}
+
+async function watchlistAddFromForm() {
+  const payload = readForm();
+  if (!payload.ticker || !payload.question) {
+    alert("Ticker / Question 을 먼저 채워주세요.");
+    return;
+  }
+  const intervalStr = prompt(
+    "자동 실행 주기 (시간 단위, 비워두면 수동 실행만):",
+    ""
+  );
+  let interval_hours = null;
+  if (intervalStr && intervalStr.trim()) {
+    const parsed = parseFloat(intervalStr);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      alert("잘못된 주기입니다. 양수 시간 값을 입력하세요.");
+      return;
+    }
+    interval_hours = parsed;
+  }
+  try {
+    const res = await fetch(API.watchlist, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ticker: payload.ticker,
+        question: payload.question,
+        sources: payload.sources,
+        lookback_days: payload.lookback_days,
+        top_k: payload.top_k,
+        model: payload.model,
+        interval_hours,
+        enabled: true,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    await renderWatchlist();
+  } catch (err) {
+    alert(`Watchlist 저장 실패: ${err.message || err}`);
+  }
+}
+
+async function watchlistRunNow(id) {
+  const btn = els.watchlistList.querySelector(`.wl-run[data-id="${id}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = "running…"; }
+  try {
+    const res = await fetch(`${API.watchlist}/${encodeURIComponent(id)}/run`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    await renderWatchlist();
+    await renderHistory();
+    if (data.response) {
+      renderResponse(data.response, null, {
+        ticker: data.response.ticker,
+        question: data.response.question,
+      });
+    }
+  } catch (err) {
+    alert(`실행 실패: ${err.message || err}`);
+    if (btn) { btn.disabled = false; btn.textContent = "run"; }
+  }
+}
+
+function watchlistLoadToForm(id) {
+  const item = (state.watchlistItems || []).find((x) => x.id === id);
+  if (!item) return;
+  els.ticker.value = item.ticker;
+  els.question.value = item.question;
+  els.lookback.value = String(item.lookback_days);
+  els.topk.value = String(item.top_k);
+  els.model.value = item.model;
+  els.sourceInputs().forEach((i) => {
+    if (i.disabled) return;
+    i.checked = (item.sources || []).includes(i.value);
+  });
+  updateRangeLabels();
+  persistForm();
+  els.ticker.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+async function watchlistToggle(id, enable) {
+  try {
+    const res = await fetch(`${API.watchlist}/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: !!enable,
+        // Required fields must be echoed back for the request schema; store-side
+        // merge preserves everything else.
+        ticker: (state.watchlistItems.find(x => x.id === id) || {}).ticker,
+        question: (state.watchlistItems.find(x => x.id === id) || {}).question,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    await renderWatchlist();
+  } catch (err) {
+    alert(`토글 실패: ${err.message || err}`);
+  }
+}
+
+async function watchlistDelete(id) {
+  const item = (state.watchlistItems || []).find((x) => x.id === id);
+  if (!item) return;
+  if (!confirm(`'${item.ticker}' Watchlist 항목을 삭제하시겠습니까?`)) return;
+  try {
+    const res = await fetch(`${API.watchlist}/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await renderWatchlist();
+  } catch (err) {
+    alert(`삭제 실패: ${err.message || err}`);
+  }
+}
+
+function timeAgo(iso) {
+  try {
+    const ts = new Date(iso).getTime();
+    if (!ts) return "—";
+    const diff = (Date.now() - ts) / 1000;
+    if (diff < 60) return `${Math.round(diff)}s ago`;
+    if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
+    return `${Math.round(diff / 86400)}d ago`;
+  } catch { return "—"; }
+}
+
+async function renderTickerSummary(ticker) {
+  if (!ticker) { els.tickerSummary?.classList.add("hidden"); return; }
+  if (!els.tickerSummary) return;
+  try {
+    const res = await fetch(API.runSummary(ticker));
+    if (!res.ok) { els.tickerSummary.classList.add("hidden"); return; }
+    const data = await res.json();
+    const points = data.points || [];
+    if (!points.length) { els.tickerSummary.classList.add("hidden"); return; }
+    els.tickerSummary.classList.remove("hidden");
+    renderSparkline(points);
+  } catch {
+    els.tickerSummary?.classList.add("hidden");
+  }
+}
+
+function renderSparkline(points) {
+  if (!els.sparkline) return;
+  const w = 240, h = 60, pad = 6;
+  const vals = points.map(p => Number(p.confidence || 0));
+  const n = vals.length;
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", h);
+
+  if (n >= 2) {
+    const maxV = Math.max(1, ...vals), minV = 0;
+    const step = (w - pad * 2) / (n - 1);
+    const path = vals.map((v, i) => {
+      const x = pad + i * step;
+      const y = h - pad - ((v - minV) / (maxV - minV || 1)) * (h - pad * 2);
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+    const p = document.createElementNS(svgNS, "path");
+    p.setAttribute("d", path);
+    p.setAttribute("fill", "none");
+    p.setAttribute("stroke", "#5ec2a4");
+    p.setAttribute("stroke-width", "1.8");
+    p.setAttribute("stroke-linecap", "round");
+    p.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(p);
+  }
+
+  points.forEach((pt, i) => {
+    const x = pad + (n > 1 ? i * ((w - pad * 2) / (n - 1)) : (w / 2));
+    const y = h - pad - (Number(pt.confidence || 0)) * (h - pad * 2);
+    const c = document.createElementNS(svgNS, "circle");
+    c.setAttribute("cx", x);
+    c.setAttribute("cy", y.toFixed(1));
+    c.setAttribute("r", "2.5");
+    const tone = (pt.sentiment || "").toLowerCase();
+    c.setAttribute("fill", tone.includes("pos") ? "#4ade80" : tone.includes("neg") ? "#f87171" : "#9aa3b2");
+    svg.appendChild(c);
+  });
+
+  els.sparkline.innerHTML = "";
+  els.sparkline.appendChild(svg);
+
+  if (els.sparklineLabel) {
+    const last = points[points.length - 1];
+    els.sparklineLabel.textContent = `최근 ${points.length}회 · 최종 ${last.status}/${last.sentiment}`;
+  }
+}
+
+// ---------- Stage animation ----------
+function progressNode(stage) {
+  if (!stage || !els.progressStages) return null;
+  return els.progressStages.querySelector(`[data-stage="${stage}"]`);
+}
+
+function startStageAnimation() {
+  state.stageIndex = 0;
+  if (!els.progressStages) return;
+  STAGES.forEach((s) => {
+    const node = progressNode(s);
+    if (!node) return;
+    node.classList.remove("active", "done");
+  });
+  const advance = () => {
+    if (state.stageIndex < STAGES.length) {
+      STAGES.forEach((s, i) => {
+        const node = progressNode(s);
+        if (!node) return;
+        if (i < state.stageIndex) { node.classList.add("done"); node.classList.remove("active"); }
+        else if (i === state.stageIndex) { node.classList.add("active"); node.classList.remove("done"); }
+      });
+      state.stageIndex++;
+    }
+  };
+  advance();
+  // simulated stage progression: Collect=3s, Ingest=2s, Retrieve=2s, Infer=20s+, Analyze=2s, Report=1s
+  const delays = [3500, 2200, 2000, 20000, 2500, 1500];
+  const tick = () => {
+    if (state.stageIndex >= STAGES.length) return;
+    state.stageTimer = setTimeout(() => {
+      advance();
+      tick();
+    }, delays[state.stageIndex - 1] || 2000);
+  };
+  tick();
+}
+
+function finishStageAnimation() {
+  clearTimeout(state.stageTimer);
+  if (!els.progressStages) return;
+  STAGES.forEach((s) => {
+    const node = progressNode(s);
+    if (!node) return;
+    node.classList.remove("active");
+    node.classList.add("done");
+  });
+}
+
+function startTimer() {
+  state.startedAt = Date.now();
+  const tick = () => {
+    const elapsed = Math.floor((Date.now() - state.startedAt) / 1000);
+    const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+    const ss = String(elapsed % 60).padStart(2, "0");
+    els.loadingTimer.textContent = `${mm}:${ss}`;
+  };
+  tick();
+  state.pendingTimer = setInterval(tick, 1000);
+}
+function stopTimer() {
+  clearInterval(state.pendingTimer);
+}
+
+function setExportAvailability(enabled) {
+  const controls = [
+    els.downloadMdBtn,
+    els.downloadJsonBtn,
+    els.openHtmlBtn,
+    document.getElementById("exportToggleBtn"),
+  ].filter(Boolean);
+  controls.forEach((node) => {
+    node.disabled = !enabled;
+    node.classList.toggle("disabled", !enabled);
+  });
+}
+
+async function fetchLatestCollectionArtifact() {
+  try {
+    const latest = await fetch(API.latest);
+    if (!latest.ok) return null;
+    const blob = await latest.json();
+    return blob.collection || null;
+  } catch {
+    return null;
+  }
+}
+
+async function runStreamAnalysis(url, payload, renderRequest) {
+  let finalData = null;
+  let streamError = null;
+  state.activeRequest = renderRequest;
+  state.streamHasPartial = false;
+  setExportAvailability(false);
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok || !res.body) {
+    let detail = `HTTP ${res.status}`;
+    try { detail = (await res.json())?.detail || detail; } catch { /* ignore */ }
+    throw new Error(detail);
+  }
+
+  for await (const frame of iterSseFrames(res.body)) {
+    if (!frame.event) continue;
+    handleStreamEvent(frame.event, frame.data);
+    if (frame.event === "result") {
+      finalData = frame.data;
+    } else if (frame.event === "pipeline_failed") {
+      streamError = frame.data?.reason || "Pipeline failed";
+    }
+  }
+
+  if (streamError && !finalData) {
+    throw new Error(streamError);
+  }
+  if (!finalData) {
+    throw new Error("스트림이 결과 이벤트 없이 종료되었습니다.");
+  }
+
+  if (finalData.mode === "multi_ticker") {
+    renderCompareResponse(finalData);
+  } else {
+    renderResponse(finalData, null, renderRequest);
+    fetchLatestCollectionArtifact().then((collection) => {
+      if (!collection || state.lastResponse !== finalData) return;
+      state.lastCollection = collection;
+      renderDiagnostics(renderRequest, collection);
+    }).catch(() => {});
+  }
+}
+
+// ---------- Run analysis ----------
+async function runAnalysis(e) {
+  e.preventDefault();
+  const payload = readForm();
+  setFormNotice("");
+
+  const requiresTicker = payload.compare || payload.mode_hint === "ticker";
+  if (requiresTicker && !payload.ticker) {
+    els.ticker.focus();
+    setFormNotice("종목 모드는 ticker가 필요합니다. ticker 없이 질문하려면 자동 또는 주제 모드를 선택하세요.", "warning");
+    return;
+  }
+  if (!payload.question) {
+    els.question.focus();
+    setFormNotice("질문을 입력해야 분석을 실행할 수 있습니다.", "warning");
+    return;
+  }
+  if (payload.sources.length === 0) {
+    setFormNotice("최소 한 개의 소스를 선택해야 합니다.", "warning");
+    return;
+  }
+
+  if (payload.compare) {
+    if (payload.tickers.length < 2) {
+      setFormNotice("Compare mode는 2개 이상의 ticker가 필요합니다. 쉼표 또는 공백으로 구분하세요.", "warning");
+      els.ticker.focus();
+      return;
+    }
+    persistForm();
+    await runCompare(payload);
+    return;
+  }
+
+  persistForm();
+  setLoading(true, payload.ticker || "TOPIC");
+  if (payload.extracted_ticker) {
+    els.loadingSub.textContent = `질문에서 ${payload.extracted_ticker} 티커를 감지했습니다. Universal 라우터로 경로를 판별합니다.`;
+  }
+  try {
+    await runStreamAnalysis(API.universalStream, payload, payload);
+    renderHistory();
+    if (payload.ticker && !payload.compare) renderTickerSummary(payload.ticker);
+  } catch (err) {
+    console.error(err);
+    renderFailure(payload, err.message || String(err));
+  } finally {
+    state.activeRequest = null;
+    setLoading(false);
+  }
+}
+
+// ---------- Compare mode ----------
+async function runCompare(payload) {
+  // Compare mode owns the full-page state; wipe any prior single-run so the
+  // post-compare setLoading(false) call doesn't flash the old result back in.
+  state.lastResponse = null;
+  state.lastCollection = null;
+  state.lastRequest = null;
+  setLoading(true, payload.tickers.join(", "));
+  els.loadingSub.textContent = `${payload.tickers.length}개 티커 동시 분석 중…`;
+  resetProgressStages();
+
+  try {
+    const body = {
+      tickers: payload.tickers,
+      question: payload.question,
+      sources: payload.sources,
+      lookback_days: payload.lookback_days,
+      top_k: payload.top_k,
+      model: payload.model,
+      concurrency: 2,
+    };
+    const res = await fetch(API.compare, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.detail || `HTTP ${res.status}`);
+    }
+    // Hide loading/empty, then reveal the compare view without touching
+    // resultView visibility.
+    els.loadingState.classList.add("hidden");
+    els.emptyState.classList.add("hidden");
+    els.runBtn.disabled = false;
+    els.runBtn.classList.remove("loading");
+    stopTimer();
+    finishStageAnimation();
+    renderCompareResponse(data);
+    renderHistory();
+  } catch (err) {
+    console.error(err);
+    renderFailure({ ticker: payload.tickers.join(","), question: payload.question }, err.message || String(err));
+    setLoading(false);
+  }
+}
+
+function renderCompareResponse(data) {
+  state.lastResponse = null;
+  state.lastCollection = null;
+  state.lastRequest = null;
+  setExportAvailability(false);
+
+  els.emptyState.classList.add("hidden");
+  els.loadingState.classList.add("hidden");
+  els.resultView.classList.add("hidden");
+  els.compareView.classList.remove("hidden");
+
+  const results = data.results || {};
+  const tickers = data.tickers || Object.keys(results);
+
+  els.compareMeta.textContent = `${tickers.length} tickers · ${data.elapsed_s ?? "?"}s · concurrency=${data.concurrency ?? 1}`;
+
+  // Side-by-side metric table
+  const rows = [
+    { label: "Status", cell: (r) => `<span class="status-badge ${statusClass(r.status)}">${(r.status || "").toUpperCase()}</span>` },
+    { label: "Sentiment", cell: (r) => r.sentiment || "—" },
+    { label: "Confidence", cell: (r) => (r.confidence != null ? `${Math.round(r.confidence * 100)}%` : "—") },
+    { label: "Bull / Bear", cell: (r) => `${(r.bull_points || []).length} / ${(r.bear_points || []).length}` },
+    { label: "Citations", cell: (r) => (r.citations || []).length },
+    { label: "Latency", cell: (r) => (r.execution_meta?.pipeline_latency_s != null ? `${r.execution_meta.pipeline_latency_s}s` : "—") },
+    { label: "Producing model", cell: (r) => r.execution_meta?.producing_model || "—" },
+  ];
+  const header = `<thead><tr><th></th>${tickers.map((t) => `<th>${escapeHtml(t)}</th>`).join("")}</tr></thead>`;
+  const bodyHtml = rows
+    .map((row) => {
+      const cells = tickers
+        .map((t) => {
+          const r = results[t] || {};
+          return `<td>${row.cell(r)}</td>`;
+        })
+        .join("");
+      return `<tr><th>${row.label}</th>${cells}</tr>`;
+    })
+    .join("");
+  els.compareTable.innerHTML = `<table class="compare-grid">${header}<tbody>${bodyHtml}</tbody></table>`;
+
+  // Summaries — one card per ticker
+  const cards = tickers.map((t) => {
+    const r = results[t] || {};
+    const err = r.error_metadata ? `<div class="compare-error">${escapeHtml(r.error_metadata)}</div>` : "";
+    const bull = (r.bull_points || []).slice(0, 3).map((b) => `<li>${escapeHtml(b)}</li>`).join("");
+    const bear = (r.bear_points || []).slice(0, 3).map((b) => `<li>${escapeHtml(b)}</li>`).join("");
+    return `
+      <div class="compare-card ${statusClass(r.status)}">
+        <div class="compare-card-head"><h4>${escapeHtml(t)}</h4><span class="status-badge ${statusClass(r.status)}">${(r.status || "").toUpperCase()}</span></div>
+        ${err}
+        <p class="compare-summary">${escapeHtml(r.summary || "—")}</p>
+        <div class="compare-sides">
+          <div class="compare-side bull"><h5>Bull</h5><ul>${bull || "<li class='muted'>—</li>"}</ul></div>
+          <div class="compare-side bear"><h5>Bear</h5><ul>${bear || "<li class='muted'>—</li>"}</ul></div>
+        </div>
+        <p class="compare-conclusion">${escapeHtml(r.conclusion || "")}</p>
+      </div>`;
+  });
+  els.compareSummaries.innerHTML = cards.join("");
+}
+
+function updateCompareModeUI() {
+  const on = !!(els.compareMode && els.compareMode.checked);
+  const mode = Array.from(els.researchModeInputs()).find((i) => i.checked)?.value || "auto";
+  if (!els.ticker) return;
+  const placeholder = on
+    ? "AAPL, MSFT, NVDA"
+    : mode === "topic"
+      ? "선택: TLT, GLD, BTC-USD"
+      : mode === "ticker"
+        ? "필수: AAPL"
+        : "선택: TLT, GLD, BTC-USD 또는 AAPL";
+  els.ticker.placeholder = placeholder;
+  if (els.tickerHint) {
+    els.tickerHint.textContent = on
+      ? "쉼표/공백으로 2-5개 티커 구분"
+      : mode === "topic"
+        ? "ticker 없이 질의 가능, ticker는 참고 힌트"
+        : mode === "ticker"
+          ? "종목 분석은 ticker 필수"
+          : "ticker 선택 입력, 비워두면 주제/거시 질의";
+  }
+  // Swap chip behavior: in compare mode chips append with a comma rather than replace.
+  els.ticker.dataset.mode = on ? "compare" : "single";
+}
+
+// ---------- SSE helpers ----------
+async function* iterSseFrames(body) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const raw = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        const frame = parseSseFrame(raw);
+        if (frame) yield frame;
+      }
+    }
+  } finally {
+    try { reader.releaseLock(); } catch { /* ignore */ }
+  }
+}
+
+function parseSseFrame(raw) {
+  if (!raw || raw.startsWith(":")) return null;
+  let event = "message";
+  const dataLines = [];
+  for (const line of raw.split("\n")) {
+    if (line.startsWith("event:")) {
+      event = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart());
+    }
+  }
+  if (dataLines.length === 0) return null;
+  const payload = dataLines.join("\n");
+  try {
+    return { event, data: JSON.parse(payload) };
+  } catch {
+    return { event, data: payload };
+  }
+}
+
+function handleStreamEvent(event, data) {
+  if (event === "stream_open") {
+    state.streamStartedAt = Date.now();
+    state.streamHasPartial = false;
+    resetProgressStages();
+    setExportAvailability(false);
+    return;
+  }
+  if (event === "stage_started") {
+    markStageActive(data?.stage);
+    const substatus = describeStageStart(data);
+    if (substatus) els.loadingSub.textContent = substatus;
+    return;
+  }
+  if (event === "stage_completed") {
+    markStageDone(data?.stage, data);
+    const substatus = describeStageDone(data);
+    if (substatus) els.loadingSub.textContent = substatus;
+    return;
+  }
+  if (event === "pipeline_completed") {
+    finishStageAnimation();
+    els.loadingSub.textContent = `최종 정리 완료 · ${data?.elapsed_s ?? "?"}s`;
+    return;
+  }
+  if (event === "partial_result") {
+    state.streamHasPartial = true;
+    const payload = data?.payload || data;
+    if (payload && typeof payload === "object") {
+      renderResponse(payload, state.lastCollection, state.activeRequest || state.lastRequest);
+    }
+    els.loadingSub.textContent = "초기 판단 생성 완료 · 심화 보강 중";
+    return;
+  }
+  if (event === "pipeline_failed") {
+    els.loadingSub.textContent = `실패: ${data?.reason || "unknown"}`;
+    return;
+  }
+}
+
+function resetProgressStages() {
+  if (!els.progressStages) return;
+  STAGES.forEach((s) => {
+    const node = progressNode(s);
+    if (node) node.classList.remove("active", "done");
+  });
+}
+
+function markStageActive(stage) {
+  const node = progressNode(stage);
+  if (!node) return;
+  els.progressStages.querySelectorAll("[data-stage].active").forEach((n) => n.classList.remove("active"));
+  node.classList.add("active");
+  node.classList.remove("done");
+}
+
+function markStageDone(stage, data) {
+  const node = progressNode(stage);
+  if (!node) return;
+  node.classList.remove("active");
+  node.classList.add("done");
+  if (data?.status && data.status !== "ok") {
+    node.classList.add("warn");
+  }
+}
+
+function describeStageStart(data) {
+  const s = data?.stage;
+  if (!s) return "";
+  const map = {
+    collect: "관련 문서 수집 중",
+    ingest: `벡터 DB 적재 중 (${data.documents ?? 0} docs)`,
+    retrieve: `컨텍스트 검색 중 (top_k=${data.top_k ?? "?"})`,
+    infer: `LLM 추론 중 (${data.chunks ?? 0} chunks)`,
+    analyze: "분석 결과 정리 중",
+    report: "리포트 생성 중",
+    output: "산출물 저장 중",
+  };
+  return map[s] || `${s} 진행 중`;
+}
+
+function describeStageDone(data) {
+  const s = data?.stage;
+  if (!s) return "";
+  const dur = data.duration_s != null ? `${data.duration_s}s` : "";
+  const extras = [];
+  if (s === "collect") {
+    if (data.cache_hit) extras.push(`cache ${formatAge(data.cache_age_s)}`);
+    if (data.documents != null) extras.push(`${data.documents} docs`);
+    if ((data.degraded_sources || []).length) extras.push(`degraded: ${data.degraded_sources.join(", ")}`);
+  } else if (s === "retrieve" && data.chunks != null) {
+    extras.push(`${data.chunks} chunks`);
+  } else if (s === "analyze" && data.sentiment) {
+    extras.push(`${data.sentiment}${data.confidence != null ? ` ${Math.round(data.confidence * 100)}%` : ""}`);
+  }
+  const extraStr = extras.length ? ` · ${extras.join(" · ")}` : "";
+  return `${s} 완료${dur ? ` · ${dur}` : ""}${extraStr}`;
+}
+
+function setLoading(isLoading, ticker) {
+  els.emptyState.classList.toggle("hidden", true);
+  els.loadingState.classList.toggle("hidden", !isLoading);
+  els.resultView.classList.toggle("hidden", isLoading || !state.lastResponse);
+  if (els.compareView) els.compareView.classList.toggle("hidden", isLoading || state.lastResponse !== null);
+  els.runBtn.disabled = isLoading;
+  els.runBtn.classList.toggle("loading", isLoading);
+  if (isLoading) {
+    setExportAvailability(false);
+    els.loadingTicker.textContent = ticker || "분석 중";
+    els.loadingSub.textContent = "스트림 연결 중";
+    startTimer();
+    resetProgressStages();
+  } else {
+    stopTimer();
+    finishStageAnimation();
+  }
+}
+
+// ---------- Render ----------
+function cleanLine(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeProseLines(value) {
+  return String(value || "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim());
+}
+
+function isProseHeading(line) {
+  return /^(핵심 분석|핵심 지표|Synthesis|Decision Edge|결론|요약|상방 동인|하방 리스크|관련 종목|관련 자산|불확실성|투자 판단|시장 가격|시나리오 분석|실행 전략)$/i.test(line)
+    || /^\(\d+\)\s+/.test(line)
+    || /^#{1,6}\s+/.test(line);
+}
+
+function compactProseLines(lines) {
+  const out = [];
+  (Array.isArray(lines) ? lines : []).forEach((line) => {
+    const text = String(line ?? "");
+    if (!text.trim()) {
+      if (out.length && out[out.length - 1] !== "") out.push("");
+      return;
+    }
+    out.push(text.trim());
+  });
+  while (out.length && out[0] === "") out.shift();
+  while (out.length && out[out.length - 1] === "") out.pop();
+  return out;
+}
+
+function joinProseLines(lines) {
+  return compactProseLines(lines).join("\n");
+}
+
+function renderProse(container, value, fallback = "—") {
+  if (!container) return;
+  const lines = compactProseLines(normalizeProseLines(value));
+  container.innerHTML = "";
+  if (!lines.length) {
+    const p = document.createElement("p");
+    p.className = "prose-paragraph muted";
+    p.textContent = fallback;
+    container.appendChild(p);
+    return;
+  }
+
+  let paragraph = [];
+  let list = null;
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    const p = document.createElement("p");
+    p.className = "prose-paragraph";
+    p.textContent = paragraph.join(" ");
+    container.appendChild(p);
+    paragraph = [];
+  };
+
+  const closeList = () => {
+    list = null;
+  };
+
+  lines.forEach((line) => {
+    if (!line) {
+      flushParagraph();
+      closeList();
+      return;
+    }
+    const bullet = line.match(/^[-*•]\s+(.+)$/);
+    if (bullet) {
+      flushParagraph();
+      if (!list) {
+        list = document.createElement("ul");
+        list.className = "prose-list";
+        container.appendChild(list);
+      }
+      const li = document.createElement("li");
+      li.textContent = bullet[1].trim();
+      list.appendChild(li);
+      return;
+    }
+    closeList();
+    if (isProseHeading(line)) {
+      flushParagraph();
+      const heading = document.createElement("h4");
+      heading.className = "prose-heading";
+      heading.textContent = line.replace(/^#{1,6}\s+/, "");
+      container.appendChild(heading);
+      return;
+    }
+    paragraph.push(line);
+  });
+  flushParagraph();
+}
+
+function dedupeKey(value) {
+  return cleanLine(value).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function uniqueTextItems(items) {
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const text = cleanLine(item);
+    if (!text) return;
+    const key = dedupeKey(text);
+    if (key && seen.has(key)) return;
+    if (key) seen.add(key);
+    out.push(text);
+  });
+  return out;
+}
+
+function dedupeReportLines(lines) {
+  const keepRepeat = /^(핵심 분석|Synthesis|Decision Edge|결론|상방 동인|하방 리스크|관련 종목|관련 자산|불확실성|\(\d+\)|요약|상승 촉매|하락 촉매|투자 판단)/i;
+  const seen = new Set();
+  return (Array.isArray(lines) ? lines : []).filter((line) => {
+    const text = cleanLine(line);
+    if (!text) return true;
+    if (keepRepeat.test(text) || text === "") return true;
+    const key = dedupeKey(text.replace(/^-+\s*/, "").replace(/^결론:\s*/, ""));
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function listLines(items, emptyText = "식별된 항목 없음") {
+  const values = uniqueTextItems((Array.isArray(items) ? items : [])
+    .map((item) => cleanLine(typeof item === "string" ? item : item?.text || item))
+    .filter(Boolean));
+  return values.length ? values.map((item) => `- ${item}`) : [`- ${emptyText}`];
+}
+
+function formatMetricLine(metric) {
+  if (!metric) return "";
+  const name = cleanLine(metric.name);
+  const value = cleanLine(metric.value);
+  if (!name || !value) return "";
+  const context = cleanLine(metric.context);
+  const asOf = cleanLine(metric.as_of || metric.asOf);
+  const unit = cleanLine(metric.unit);
+  const source = cleanLine(metric.source);
+  const asOfText = asOf || "기준일 미확인";
+  const sourceText = source ? ` · 출처: ${source}` : "";
+  return `${name}: ${value}${unit ? ` ${unit}` : ""} [기준일: ${asOfText}${sourceText}]${context ? ` (${context})` : ""}`;
+}
+
+function metricLines(metrics) {
+  return listLines(
+    (Array.isArray(metrics) ? metrics : []).map(formatMetricLine).filter(Boolean),
+    "정량 지표가 추출되지 않았습니다."
+  );
+}
+
+function compactMetricLine(metric) {
+  const name = cleanLine(metric?.name);
+  const value = cleanLine(metric?.value);
+  if (!name || !value) return "";
+  const unit = cleanLine(metric?.unit);
+  const asOf = cleanLine(metric?.as_of || metric?.asOf) || "기준일 미확인";
+  const source = cleanLine(metric?.source);
+  return `${name} ${value}${unit ? ` ${unit}` : ""} · ${asOf}${source ? ` · ${source}` : ""}`;
+}
+
+function buildTopicHeadlineSummary(data) {
+  const risks = (data.key_risks || []).map((x) => cleanLine(x.text || x)).filter(Boolean).slice(0, 3);
+  const drivers = (data.key_drivers || []).map((x) => cleanLine(x.text || x)).filter(Boolean).slice(0, 2);
+  const scenarioCount = Array.isArray(data.scenario_analysis) ? data.scenario_analysis.length : 0;
+  const lines = [];
+  if (data.executive_summary || data.summary) lines.push(cleanLine(data.executive_summary || data.summary));
+  if (risks.length) lines.push(`핵심 리스크: ${risks.join(" / ")}`);
+  if (drivers.length) lines.push(`확인할 상방 동인: ${drivers.join(" / ")}`);
+  if (scenarioCount) lines.push(`시나리오 ${scenarioCount}개와 실행 전략 ${(data.execution_strategy || []).length}개를 기준으로 의사결정을 분해했습니다.`);
+  return uniqueTextItems(lines).join("\n");
+}
+
+function buildTopicDecisionMemo(data, ...sections) {
+  const lines = [];
+  sections.filter(Boolean).forEach((section, index) => {
+    if (index > 0) lines.push("");
+    lines.push(section);
+  });
+  return joinProseLines(dedupeReportLines(lines));
+}
+
+function renderMetricTable(metrics) {
+  if (!els.metricsTable) return;
+  const rows = Array.isArray(metrics) ? metrics.filter((m) => m && cleanLine(m.name) && cleanLine(m.value)) : [];
+  els.metricsTable.innerHTML = "";
+  if (!rows.length) {
+    els.metricsTable.innerHTML = `<div class="metric-empty">정량 지표가 추출되지 않았습니다.</div>`;
+    return;
+  }
+  const evidenceIndex = buildEvidenceIndex(state.evidenceRaw);
+  const table = document.createElement("table");
+  table.className = "metric-table";
+  table.innerHTML = `
+    <thead><tr><th>지표</th><th>값</th><th>단위</th><th>기준일</th><th>출처</th><th>상태</th><th>맥락</th><th>근거</th></tr></thead>
+    <tbody></tbody>
+  `;
+  const tbody = table.querySelector("tbody");
+  rows.forEach((metric) => {
+    const tr = document.createElement("tr");
+    const docIds = Array.isArray(metric.evidence_doc_ids) ? metric.evidence_doc_ids : [];
+    const evidenceTd = document.createElement("td");
+    evidenceTd.className = "metric-evidence";
+    if (docIds.length) {
+      docIds.forEach((docId) => {
+        const item = evidenceIndex.get(String(docId));
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "evidence-chip metric-chip";
+        chip.textContent = item
+          ? `${truncateLabel(docId, 10)} · ${item.date || "unknown"}`
+          : `doc ${truncateLabel(docId, 10)}`;
+        chip.title = item ? `${item.source || "doc"} · ${item.date || "unknown"}\n${item.title || docId}` : `doc_id: ${docId}`;
+        chip.addEventListener("click", () => jumpToEvidence(docId));
+        evidenceTd.appendChild(chip);
+      });
+    } else {
+      evidenceTd.textContent = "근거 링크 없음";
+      evidenceTd.className = "metric-evidence muted";
+    }
+    [
+      metric.name,
+      metric.value,
+      metric.unit || "",
+      metric.as_of || "unknown",
+      metric.source || "",
+      [metric.freshness_status || "unknown", metric.grounding_status || ""].filter(Boolean).join(" / "),
+      metric.context || "",
+    ].forEach((value) => {
+      const td = document.createElement("td");
+      td.textContent = cleanLine(value) || "—";
+      tr.appendChild(td);
+    });
+    tr.appendChild(evidenceTd);
+    tbody.appendChild(tr);
+  });
+  els.metricsTable.appendChild(table);
+}
+
+function normalizeTextItem(item, fallback = "") {
+  if (typeof item === "string") return cleanLine(item);
+  if (!item || typeof item !== "object") return fallback;
+  return cleanLine(item.text || item.title || item.scenario || item.strategy || item.conclusion || item.expected_outcome || fallback);
+}
+
+function renderDocBadges(container, docIds) {
+  const ids = Array.isArray(docIds) ? docIds.filter(Boolean) : [];
+  if (!ids.length) {
+    const note = document.createElement("span");
+    note.className = "evidence-note";
+    note.textContent = "근거 링크 없음";
+    container.appendChild(note);
+    return;
+  }
+  const evidenceIndex = buildEvidenceIndex(state.evidenceRaw);
+  ids.forEach((docId) => {
+    const item = evidenceIndex.get(String(docId));
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "evidence-chip metric-chip";
+    chip.textContent = item
+      ? `${truncateLabel(docId, 10)} · ${item.date || "unknown"}`
+      : `doc ${truncateLabel(docId, 10)}`;
+    chip.title = item ? `${item.source || "doc"} · ${item.date || "unknown"}\n${item.title || docId}` : `doc_id: ${docId}`;
+    chip.addEventListener("click", () => jumpToEvidence(docId));
+    container.appendChild(chip);
+  });
+}
+
+function getQuantMetrics(data, snapshot = null) {
+  const snap = snapshot || data?.execution_meta?.extras?.quant_snapshot || {};
+  const snapMetrics = Array.isArray(snap.metrics) ? snap.metrics : [];
+  const keyMetrics = Array.isArray(data?.key_metrics) ? data.key_metrics : [];
+  return snapMetrics.length ? snapMetrics : keyMetrics;
+}
+
+function metricSearchText(metric) {
+  return [
+    metric?.name,
+    metric?.context,
+    metric?.source,
+    metric?.unit,
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function findMetric(metrics, needles) {
+  const terms = Array.isArray(needles) ? needles : [needles];
+  const lowered = terms.map((term) => String(term || "").toLowerCase()).filter(Boolean);
+  return (metrics || []).find((metric) => lowered.some((term) => metricSearchText(metric).includes(term))) || null;
+}
+
+function parseMetricNumber(metric) {
+  const value = metric?.value;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const match = String(value ?? "").replace(/,/g, "").match(/[+-]?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : null;
+}
+
+function formatMetricValue(metric) {
+  if (!metric) return "—";
+  const raw = cleanLine(metric.value);
+  const unit = cleanLine(metric.unit || "");
+  if (!raw) return "—";
+  if (unit === "%" && !String(raw).includes("%")) return `${raw}%`;
+  if (unit && unit !== "price" && unit !== "index" && !String(raw).includes(unit)) return `${raw} ${unit}`;
+  return raw;
+}
+
+function metricDocIds(metric) {
+  return Array.isArray(metric?.evidence_doc_ids) ? metric.evidence_doc_ids.filter(Boolean) : [];
+}
+
+function cleanTextArray(value) {
+  if (Array.isArray(value)) return value.map((item) => cleanLine(item)).filter(Boolean);
+  const single = cleanLine(value);
+  return single ? [single] : [];
+}
+
+function collectMetricDocIds(metrics, patterns, fallback = []) {
+  const ids = [];
+  (patterns || []).forEach((pattern) => {
+    ids.push(...metricDocIds(findMetric(metrics, pattern)));
+  });
+  if (!ids.length && Array.isArray(fallback)) ids.push(...fallback.filter(Boolean));
+  return Array.from(new Set(ids.map(String))).slice(0, 4);
+}
+
+function buildQuantRegime(metrics, data) {
+  const extras = data?.execution_meta?.extras || {};
+  const snapshot = extras.quant_snapshot || {};
+  const snapshotRegime = snapshot.regime || {};
+  const latest = findMetric(metrics, ["최신 종가", "latest close"]);
+  const momentum1m = findMetric(metrics, ["1개월 가격 모멘텀", "1m momentum"]);
+  const momentum3m = findMetric(metrics, ["3개월 가격 모멘텀", "3m momentum"]);
+  const sma20 = findMetric(metrics, ["sma20"]);
+  const sma50 = findMetric(metrics, ["sma50"]);
+  const sma200 = findMetric(metrics, ["sma200"]);
+  const rsi = findMetric(metrics, ["rsi"]);
+  const macd = findMetric(metrics, ["macd"]);
+  const volatility = findMetric(metrics, ["실현 변동성", "realized volatility"]);
+  const volume = findMetric(metrics, ["평균 대비 거래량", "volume"]);
+
+  const m1 = parseMetricNumber(momentum1m);
+  const m3 = parseMetricNumber(momentum3m);
+  const d20 = parseMetricNumber(sma20);
+  const d50 = parseMetricNumber(sma50);
+  const d200 = parseMetricNumber(sma200);
+  const rsiValue = parseMetricNumber(rsi);
+  const macdValue = parseMetricNumber(macd);
+  const volValue = parseMetricNumber(volatility);
+  const volRatio = parseMetricNumber(volume);
+
+  let trendTitle = "가격 레짐 판단 보류";
+  if (m1 !== null || d20 !== null || d50 !== null || d200 !== null) {
+    const shortPositive = (m1 ?? 0) > 0 && (d20 ?? 0) > 0 && (d50 ?? 0) > 0;
+    const longConfirmed = (d200 ?? 0) > 0;
+    const mediumWeak = (m3 ?? 0) < 0 || (d200 ?? 0) < 0;
+    if (shortPositive && longConfirmed) trendTitle = "상승 추세 우위";
+    else if (shortPositive && mediumWeak) trendTitle = "단기 반등 우위, 장기 추세 검증 필요";
+    else if ((m1 ?? 0) < 0 && (d20 ?? 0) < 0) trendTitle = "하락 모멘텀 우위";
+    else trendTitle = "혼조 레짐";
+  }
+
+  let momentumTitle = "모멘텀 신호 제한";
+  if (rsiValue !== null || macdValue !== null) {
+    if ((rsiValue ?? 50) >= 70 && (macdValue ?? 0) > 0) momentumTitle = "상승 모멘텀은 강하지만 과열 리스크 존재";
+    else if ((rsiValue ?? 50) <= 30) momentumTitle = "침체권 반등 후보";
+    else if ((macdValue ?? 0) > 0) momentumTitle = "모멘텀 개선 구간";
+    else if ((macdValue ?? 0) < 0) momentumTitle = "모멘텀 둔화 구간";
+  }
+
+  let riskTitle = "리스크 신호 추가 확인 필요";
+  if ((rsiValue ?? 0) >= 70 || (volValue ?? 0) >= 35 || (d200 ?? 0) < 0) {
+    riskTitle = "추격 매수보다 확인 매수가 유리한 리스크 구조";
+  } else if ((m1 ?? 0) > 0 && (macdValue ?? 0) > 0) {
+    riskTitle = "상방 추세 유지 가능성이 있으나 이벤트 확인 필요";
+  }
+
+  const evidenceFallback = Array.isArray(data?.cited_doc_ids) ? data.cited_doc_ids : [];
+  const importantMetrics = [latest, momentum1m, momentum3m, sma20, sma50, sma200, rsi, macd, volatility, volume].filter(Boolean);
+  const signalLine = importantMetrics.slice(0, 4).map((metric) => `${cleanLine(metric.name)} ${formatMetricValue(metric)}`).join(" · ");
+  const confirmingLine = cleanTextArray(snapshotRegime.confirming_signals).slice(0, 4).join(" · ");
+  const invalidationLine = cleanTextArray(snapshotRegime.invalidation_signals).slice(0, 4).join(" · ");
+  const snapshotFreshness = snapshot.freshness_status || snapshot.data_freshness || "";
+  const biasBody = [
+    signalLine ? `핵심 지표: ${signalLine}` : "",
+    confirmingLine ? `확인 신호: ${confirmingLine}` : "",
+    invalidationLine ? `무효화/주의 신호: ${invalidationLine}` : "",
+    snapshotFreshness ? `신선도: ${snapshotFreshness}` : "",
+  ].filter(Boolean).join(" ");
+
+  return {
+    cards: [
+      {
+        label: "Bias",
+        title: cleanLine(snapshotRegime.decision_bias) || trendTitle,
+        body: biasBody || "가격, 추세, 변동성 지표가 충분하지 않아 레짐을 보수적으로 해석해야 합니다.",
+        docIds: collectMetricDocIds(metrics, [["1개월 가격 모멘텀"], ["sma20"], ["sma50"], ["sma200"]], evidenceFallback),
+      },
+      {
+        label: "Momentum",
+        title: momentumTitle,
+        body: [
+          rsi ? `RSI(14) ${formatMetricValue(rsi)}는 단기 과열/침체 여부를 판단하는 핵심 신호입니다.` : "",
+          macd ? `MACD 히스토그램 ${formatMetricValue(macd)}는 추세 가속 또는 둔화를 확인하는 보조 신호입니다.` : "",
+        ].filter(Boolean).join(" "),
+        docIds: collectMetricDocIds(metrics, [["rsi"], ["macd"]], evidenceFallback),
+      },
+      {
+        label: "Risk",
+        title: riskTitle,
+        body: [
+          volatility ? `20일 실현 변동성 ${formatMetricValue(volatility)}를 기준으로 포지션 크기와 손절 폭을 조정해야 합니다.` : "",
+          volume ? `거래량 신호 ${formatMetricValue(volume)}는 가격 움직임의 신뢰도를 검증하는 데 사용합니다.` : "",
+          (d200 ?? 0) < 0 ? "SMA200 아래에 머무르면 장기 추세가 완전히 복원됐다고 보기 어렵습니다." : "",
+        ].filter(Boolean).join(" ") || "현재 지표만으로는 리스크 강도를 단정하기 어렵습니다.",
+        docIds: collectMetricDocIds(metrics, [["실현 변동성"], ["volume"], ["sma200"]], evidenceFallback),
+      },
+      {
+        label: "Decision Read",
+        title: data?.sentiment ? `${data.sentiment} · confidence ${data.confidence ?? "—"}` : "정량 판단",
+        body: "정량 판단은 방향성보다 조건부 의사결정에 초점을 둡니다. 추세 지속은 모멘텀 유지와 거래량 확인이 필요하고, 과열 신호가 있으면 분할 진입과 손절 기준을 먼저 정해야 합니다.",
+        docIds: collectMetricDocIds(metrics, [["최신 종가"], ["1개월 가격 모멘텀"], ["rsi"]], evidenceFallback),
+      },
+    ],
+  };
+}
+
+function renderQuantRegime(data, metrics) {
+  if (!metrics.length) return null;
+  const regime = buildQuantRegime(metrics, data);
+  const section = document.createElement("section");
+  section.className = "quant-section quant-regime-section";
+  section.innerHTML = `<h4>Quant Regime & Decision Read</h4>`;
+  const grid = document.createElement("div");
+  grid.className = "quant-regime-grid";
+  regime.cards.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "quant-regime-card";
+    card.innerHTML = `
+      <span>${escapeHtml(item.label)}</span>
+      <strong>${escapeHtml(item.title)}</strong>
+      <p>${escapeHtml(item.body || "판단 근거가 제한적입니다.")}</p>
+    `;
+    const badges = document.createElement("div");
+    badges.className = "evidence-chips";
+    renderDocBadges(badges, item.docIds || []);
+    card.appendChild(badges);
+    grid.appendChild(card);
+  });
+  section.appendChild(grid);
+  return section;
+}
+
+function deriveScenarioPackage(data) {
+  const extras = data?.execution_meta?.extras || {};
+  const snapshot = extras.quant_snapshot || {};
+  const metrics = getQuantMetrics(data, snapshot);
+  const ticker = data?.ticker || snapshot.target || "대상 자산";
+  const evidenceFallback = Array.isArray(data?.cited_doc_ids) ? data.cited_doc_ids : [];
+  const bull = Array.isArray(data?.bull_points) ? data.bull_points.map((x) => normalizeTextItem(x)).filter(Boolean) : [];
+  const bear = Array.isArray(data?.bear_points) ? data.bear_points.map((x) => normalizeTextItem(x)).filter(Boolean) : [];
+  const timeline = data?.catalyst_timeline || {};
+  const catalysts = [
+    ...cleanTextArray(timeline.near_term),
+    ...cleanTextArray(timeline.mid_term),
+    ...cleanTextArray(timeline.long_term),
+  ];
+
+  const momentum1m = findMetric(metrics, ["1개월 가격 모멘텀", "1m momentum"]);
+  const momentum3m = findMetric(metrics, ["3개월 가격 모멘텀", "3m momentum"]);
+  const sma20 = findMetric(metrics, ["sma20"]);
+  const sma50 = findMetric(metrics, ["sma50"]);
+  const sma200 = findMetric(metrics, ["sma200"]);
+  const rsi = findMetric(metrics, ["rsi"]);
+  const macd = findMetric(metrics, ["macd"]);
+  const volatility = findMetric(metrics, ["실현 변동성", "realized volatility"]);
+  const m1 = parseMetricNumber(momentum1m);
+  const m3 = parseMetricNumber(momentum3m);
+  const d20 = parseMetricNumber(sma20);
+  const d50 = parseMetricNumber(sma50);
+  const d200 = parseMetricNumber(sma200);
+  const rsiValue = parseMetricNumber(rsi);
+  const macdValue = parseMetricNumber(macd);
+
+  const baseDocs = collectMetricDocIds(metrics, [["1개월 가격 모멘텀"], ["sma20"], ["sma50"], ["rsi"]], evidenceFallback);
+  const bullDocs = collectMetricDocIds(metrics, [["macd"], ["sma200"], ["3개월 가격 모멘텀"]], evidenceFallback);
+  const bearDocs = collectMetricDocIds(metrics, [["rsi"], ["실현 변동성"], ["sma20"], ["sma200"]], evidenceFallback);
+
+  const trendRead = [
+    momentum1m ? `1개월 모멘텀 ${formatMetricValue(momentum1m)}` : "",
+    momentum3m ? `3개월 모멘텀 ${formatMetricValue(momentum3m)}` : "",
+    sma20 ? `SMA20 괴리 ${formatMetricValue(sma20)}` : "",
+    sma200 ? `SMA200 괴리 ${formatMetricValue(sma200)}` : "",
+  ].filter(Boolean).join(", ");
+  const momentumRead = [
+    rsi ? `RSI ${formatMetricValue(rsi)}` : "",
+    macd ? `MACD 히스토그램 ${formatMetricValue(macd)}` : "",
+  ].filter(Boolean).join(", ");
+
+  const scenarios = [
+    {
+      scenario: "Base: 상승 후 검증 구간",
+      probability: "조건부 기본 시나리오",
+      expected_outcome: trendRead
+        ? `${ticker}는 ${trendRead} 기준으로 단기 가격 탄력은 확인되지만, 중기 추세와 장기 평균선 복원 여부가 다음 판단 변수입니다.`
+        : `${ticker}는 가격/추세 데이터가 제한적이므로 수집 근거와 다음 실적 이벤트 확인이 필요합니다.`,
+      asset_implication: "추세가 유지되면 완만한 상방은 열려 있지만, 과열 신호가 있으면 신규 진입 기대값은 낮아집니다.",
+      decision_read: "분할 접근과 확인 매수 중심. 한 번에 추격하기보다 SMA20/50 지지와 거래량 동반 여부를 확인합니다.",
+      evidence_doc_ids: baseDocs,
+    },
+    {
+      scenario: "Bull: 모멘텀 재가속과 기대치 상향",
+      probability: "상방 시나리오",
+      expected_outcome: [
+        momentumRead || "모멘텀 지표 개선",
+        bull[0] || catalysts[0] || "실적/가이던스 또는 핵심 사업 지표 개선",
+      ].filter(Boolean).join(" + "),
+      asset_implication: (d200 ?? 0) < 0
+        ? "SMA200 회복과 함께 중장기 추세 복원이 확인되면 멀티플 리레이팅 여지가 커집니다."
+        : "이미 장기 추세가 우호적이면 실적 확인 시 상방 탄력이 커질 수 있습니다.",
+      decision_read: "상승 추세가 거래량과 함께 재확인될 때 포지션을 증액하고, 과열권에서는 돌파 후 눌림을 우선합니다.",
+      evidence_doc_ids: bullDocs,
+    },
+    {
+      scenario: "Bear: 과열 해소 또는 기대치 미달",
+      probability: "하방 리스크 시나리오",
+      expected_outcome: [
+        (rsiValue ?? 0) >= 70 ? `RSI ${formatMetricValue(rsi)} 과열권` : "모멘텀 둔화",
+        volatility ? `변동성 ${formatMetricValue(volatility)}` : "",
+        bear[0] || "실적/가이던스가 현재 기대를 충족하지 못하는 경우",
+      ].filter(Boolean).join(" + "),
+      asset_implication: "단기 평균선 이탈 또는 MACD 둔화가 동반되면 최근 상승분의 되돌림과 밸류에이션 압축 위험이 커집니다.",
+      decision_read: "손절/감액 기준을 SMA20/50 이탈, MACD 음전환, 이벤트 후 가이던스 하향으로 명확히 둡니다.",
+      evidence_doc_ids: bearDocs,
+    },
+  ];
+
+  const strategies = [
+    {
+      strategy: "확인 매수 / 분할 진입",
+      trigger: (d20 ?? 0) > 0 && (d50 ?? 0) > 0
+        ? "가격이 SMA20/50 위에서 유지되고 MACD가 양수권을 유지할 때"
+        : "가격이 단기 평균선을 회복하고 거래량이 평균 이상으로 동반될 때",
+      rationale: "모멘텀은 방향성을 보여주지만 진입 가격의 기대값은 지지선 확인과 변동성 조절에서 결정됩니다.",
+      risk_control: "RSI가 70 이상이면 추격 매수 비중을 줄이고, 눌림 또는 실적 확인 후 증액합니다.",
+      evidence_doc_ids: baseDocs,
+    },
+    {
+      strategy: "리스크 감액 / 무효화 기준",
+      trigger: "SMA20/50 이탈, MACD 히스토그램 음전환, 또는 실적/가이던스가 현재 투자 가설을 훼손할 때",
+      rationale: "기술적 추세가 약화되는 구간에서는 좋은 기업이어도 6~12개월 기대수익 대비 변동성 부담이 커집니다.",
+      risk_control: "포지션 크기를 줄이고 다음 지지선 또는 새 펀더멘털 근거가 나올 때까지 재진입을 유보합니다.",
+      evidence_doc_ids: bearDocs,
+    },
+  ];
+
+  if ((m1 ?? 0) > 0 && (m3 ?? 0) < 0) {
+    strategies.push({
+      strategy: "중기 추세 복원 확인",
+      trigger: "1개월 모멘텀은 유지되지만 3개월 모멘텀 또는 SMA200이 아직 약할 때",
+      rationale: "단기 반등과 중기 추세 전환은 다른 신호입니다. SMA200 회복 또는 3개월 모멘텀 개선이 확인되어야 더 공격적인 비중 확대가 정당화됩니다.",
+      risk_control: "장기 평균선 회복 전에는 목표 비중을 제한합니다.",
+      evidence_doc_ids: collectMetricDocIds(metrics, [["3개월 가격 모멘텀"], ["sma200"]], evidenceFallback),
+    });
+  }
+
+  return { scenarios, strategies };
+}
+
+function fallbackScenarioPackage(data) {
+  const ticker = data?.ticker || data?.theme || "대상 자산";
+  const docs = Array.isArray(data?.cited_doc_ids) ? data.cited_doc_ids.slice(0, 4) : [];
+  const summary = cleanLine(data?.summary || data?.conclusion || "");
+  return {
+    scenarios: [
+      {
+        scenario: "Base: 확인된 근거 유지",
+        probability: "기본 경로",
+        expected_outcome: summary || `${ticker}의 현재 투자 가설은 확인된 근거가 유지되는지에 달려 있습니다.`,
+        asset_implication: "가격은 기존 추세를 크게 벗어나기보다 핵심 지표와 이벤트 확인에 민감하게 반응할 가능성이 큽니다.",
+        decision_read: "신규 진입은 분할로 제한하고, 핵심 지표가 같은 방향으로 정렬되는지 확인합니다.",
+        evidence_doc_ids: docs,
+      },
+      {
+        scenario: "Bull: 기대치 상향",
+        probability: "상방 경로",
+        expected_outcome: "실적, 수급, 정책 또는 기술적 모멘텀이 동시에 개선되면 시장 기대가 상향될 수 있습니다.",
+        asset_implication: "상방 리레이팅은 단순 뉴스보다 가격 모멘텀, 거래량, 가이던스 개선이 함께 확인될 때 신뢰도가 높습니다.",
+        decision_read: "상승 확인 후 눌림 또는 돌파 재확인 구간에서 비중 확대를 검토합니다.",
+        evidence_doc_ids: docs,
+      },
+      {
+        scenario: "Bear: 기대치 훼손",
+        probability: "하방 경로",
+        expected_outcome: "핵심 지표 둔화, 이벤트 실망, 유동성 악화가 겹치면 최근 가격 기대가 훼손될 수 있습니다.",
+        asset_implication: "평균선 이탈, 모멘텀 둔화, 변동성 확대가 동반되면 손실 확대 가능성이 커집니다.",
+        decision_read: "무효화 기준을 먼저 정하고, 손절 또는 감액 트리거를 지표 기반으로 집행합니다.",
+        evidence_doc_ids: docs,
+      },
+    ],
+    strategies: [
+      {
+        strategy: "조건부 분할 진입",
+        trigger: "가격/모멘텀/거래량이 같은 방향으로 확인될 때",
+        rationale: "근거가 완전히 정렬되지 않은 구간에서는 진입 단가와 변동성 관리가 기대수익을 좌우합니다.",
+        risk_control: "초기 비중을 제한하고 핵심 지표가 훼손되면 추가 매수를 중단합니다.",
+        evidence_doc_ids: docs,
+      },
+      {
+        strategy: "무효화 기준 선집행",
+        trigger: "주요 평균선 이탈, 모멘텀 음전환, 실적/정책 이벤트 실망",
+        rationale: "방향성 판단보다 손실 제한 조건을 먼저 고정해야 포지션 관리가 일관됩니다.",
+        risk_control: "사전에 정한 감액/손절 기준을 지표 기준일과 함께 기록합니다.",
+        evidence_doc_ids: docs,
+      },
+    ],
+  };
+}
+
+function renderQuantSnapshot(data) {
+  if (!els.quantSnapshot) return;
+  const extras = data?.execution_meta?.extras || {};
+  const snapshot = extras.quant_snapshot || {};
+  const metrics = getQuantMetrics(data, snapshot);
+  const shockRows = snapshot.rate_shock_scenarios || snapshot.stress_scenarios || [];
+  const exposures = snapshot.factor_exposures || {};
+  els.quantSnapshot.innerHTML = "";
+
+  if (!metrics.length && !Object.keys(snapshot).length) {
+    els.quantSnapshot.innerHTML = `<div class="metric-empty">정량 snapshot이 없습니다. 수집 가능한 데이터가 부족하거나 종목/자산군에 맞는 deterministic engine이 아직 적용되지 않았습니다.</div>`;
+    return;
+  }
+
+  const meta = document.createElement("div");
+  meta.className = "quant-meta-grid";
+  const metaRows = [
+    ["asset_class", snapshot.asset_class || data?.mode || "—"],
+    ["target", snapshot.target || data?.ticker || data?.theme || "—"],
+    ["as_of", snapshot.as_of || "—"],
+    ["freshness", snapshot.freshness_status || extras.data_freshness?.overall_status || "unknown"],
+    ["source", snapshot.source || "deterministic_quant"],
+  ];
+  meta.innerHTML = metaRows
+    .map(([k, v]) => `<div class="quant-meta"><span>${escapeHtml(k)}</span><strong>${escapeHtml(String(v || "—"))}</strong></div>`)
+    .join("");
+  els.quantSnapshot.appendChild(meta);
+
+  const regimePanel = renderQuantRegime(data, metrics);
+  if (regimePanel) els.quantSnapshot.appendChild(regimePanel);
+
+  const tableWrap = document.createElement("div");
+  tableWrap.className = "metric-table-wrap top-gap";
+  const table = document.createElement("table");
+  table.className = "metric-table";
+  table.innerHTML = `<thead><tr><th>지표</th><th>값</th><th>단위</th><th>기준일</th><th>출처</th><th>상태</th><th>맥락</th></tr></thead><tbody></tbody>`;
+  const tbody = table.querySelector("tbody");
+  metrics.forEach((metric) => {
+    const tr = document.createElement("tr");
+    [
+      metric.name,
+      metric.value,
+      metric.unit || "",
+      metric.as_of || "unknown",
+      metric.source || snapshot.source || "",
+      metric.freshness_status || snapshot.freshness_status || "unknown",
+      metric.context || "",
+    ].forEach((value) => {
+      const td = document.createElement("td");
+      td.textContent = cleanLine(value) || "—";
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  tableWrap.appendChild(table);
+  els.quantSnapshot.appendChild(tableWrap);
+
+  if (Array.isArray(shockRows) && shockRows.length) {
+    const section = document.createElement("section");
+    section.className = "quant-section";
+    section.innerHTML = `<h4>Stress / Shock Table</h4>`;
+    const shockTable = document.createElement("table");
+    shockTable.className = "metric-table";
+    const columns = Array.from(new Set(shockRows.flatMap((row) => Object.keys(row || {})))).slice(0, 8);
+    shockTable.innerHTML = `<thead><tr>${columns.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead><tbody></tbody>`;
+    const shockBody = shockTable.querySelector("tbody");
+    shockRows.forEach((row) => {
+      const tr = document.createElement("tr");
+      columns.forEach((col) => {
+        const td = document.createElement("td");
+        td.textContent = cleanLine(row?.[col]) || "—";
+        tr.appendChild(td);
+      });
+      shockBody.appendChild(tr);
+    });
+    section.appendChild(shockTable);
+    els.quantSnapshot.appendChild(section);
+  }
+
+  if (exposures && typeof exposures === "object" && Object.keys(exposures).length) {
+    const exposureBox = document.createElement("div");
+    exposureBox.className = "quant-section";
+    exposureBox.innerHTML = `<h4>Factor / Proxy Exposure</h4><pre class="mini-code">${escapeHtml(JSON.stringify(exposures, null, 2))}</pre>`;
+    els.quantSnapshot.appendChild(exposureBox);
+  }
+}
+
+function normalizeRiskItem(item, fallbackLabel = "리스크") {
+  if (typeof item === "string") {
+    return { label: fallbackLabel, title: cleanLine(item), body: "", evidence_doc_ids: [] };
+  }
+  const source = item && typeof item === "object" ? item : {};
+  return {
+    label: cleanLine(source.label || source.category || source.type || fallbackLabel),
+    title: cleanLine(source.title || source.name || source.risk || source.text || source.scenario || source.strategy || fallbackLabel),
+    body: cleanLine(source.body || source.description || source.context || source.impact || source.expected_outcome || source.rationale || ""),
+    evidence_doc_ids: Array.isArray(source.evidence_doc_ids) ? source.evidence_doc_ids.filter(Boolean) : [],
+  };
+}
+
+function collectRiskCards(data) {
+  const extras = data?.execution_meta?.extras || {};
+  const snapshot = extras.quant_snapshot || {};
+  const cards = [];
+  const metrics = getQuantMetrics(data, snapshot);
+  const fallbackDocs = Array.isArray(data?.cited_doc_ids) ? data.cited_doc_ids.slice(0, 4) : [];
+  const exposures = snapshot.factor_exposures || {};
+
+  if (exposures && typeof exposures === "object" && (exposures.primary || Array.isArray(exposures.secondary))) {
+    const primary = cleanLine(exposures.primary || "market_beta");
+    const secondary = Array.isArray(exposures.secondary) ? exposures.secondary.map(cleanLine).filter(Boolean).join(", ") : cleanLine(exposures.secondary);
+    cards.push({
+      label: "Factor Exposure",
+      title: `주요 노출: ${primary}`,
+      body: secondary ? `보조 노출 축은 ${secondary}입니다. 같은 방향으로 악화되면 손실 분포가 비선형으로 커질 수 있습니다.` : "보조 노출 축이 제한적으로 확인됩니다.",
+      evidence_doc_ids: fallbackDocs,
+    });
+  }
+
+  const shockRows = firstNonEmptyArray(snapshot.stress_table, snapshot.rate_shock_scenarios).slice(0, 4);
+  if (shockRows.length) {
+    const shockText = shockRows.map((row) => {
+      const shock = cleanLine(row.shock_bp !== undefined ? `${row.shock_bp}bp` : row.scenario || row.name || row.shock || "");
+      const impact = cleanLine(row.estimated_price_impact_pct || row.impact || row.pnl || row.expected_move || "");
+      return [shock, impact].filter(Boolean).join(" ");
+    }).filter(Boolean).join(" / ");
+    cards.push({
+      label: "Stress / Shock",
+      title: "민감도 기반 손실 구간",
+      body: shockText || "스트레스 테이블은 존재하지만 표시 가능한 영향값이 제한적입니다.",
+      evidence_doc_ids: fallbackDocs,
+    });
+  }
+
+  const invalidation = firstNonEmptyArray(snapshot.regime?.invalidation_signals, extras.invalidation_signals).map(normalizeTextItem).filter(Boolean);
+  if (invalidation.length) {
+    cards.push({
+      label: "Invalidation",
+      title: "투자 가설 무효화 신호",
+      body: invalidation.slice(0, 3).join(" / "),
+      evidence_doc_ids: fallbackDocs,
+    });
+  }
+
+  const volatility = findMetric(metrics, ["실현 변동성", "realized volatility"]);
+  const rsi = findMetric(metrics, ["rsi"]);
+  const sma20 = findMetric(metrics, ["sma20"]);
+  const volValue = parseMetricNumber(volatility);
+  const rsiValue = parseMetricNumber(rsi);
+  if (volatility || rsi || sma20) {
+    const pieces = [
+      volatility ? `변동성 ${formatMetricValue(volatility)}` : "",
+      rsi ? `RSI ${formatMetricValue(rsi)}` : "",
+      sma20 ? `SMA20 괴리 ${formatMetricValue(sma20)}` : "",
+    ].filter(Boolean);
+    const body = [
+      pieces.join(", "),
+      (rsiValue ?? 0) >= 70 ? "과열권에서는 호재 반영 후 되돌림 리스크가 커집니다." : "",
+      (volValue ?? 0) >= 30 ? "변동성 수준이 높아 포지션 크기와 손절 기준을 보수적으로 둬야 합니다." : "",
+    ].filter(Boolean).join(" ");
+    cards.push({
+      label: "Technical Risk",
+      title: "가격·변동성 리스크",
+      body: body || "기술적 리스크 지표가 제한적으로 확인됩니다.",
+      evidence_doc_ids: collectMetricDocIds(metrics, [["실현 변동성"], ["rsi"], ["sma20"]], fallbackDocs),
+    });
+  }
+
+  firstNonEmptyArray(data?.key_risks, data?.bear_points, extras.key_risks)
+    .map((item) => normalizeRiskItem(item, "Evidence-backed Risk"))
+    .filter((item) => item.title)
+    .slice(0, 4)
+    .forEach((item) => cards.push(item));
+
+  if (Array.isArray(snapshot.missing_axes) && snapshot.missing_axes.length) {
+    cards.push({
+      label: "Data Gap",
+      title: "추가 확인이 필요한 데이터 축",
+      body: snapshot.missing_axes.slice(0, 6).join(", "),
+      evidence_doc_ids: [],
+    });
+  }
+
+  return cards;
+}
+
+function renderRiskPanel(data) {
+  if (!els.riskPanel) return;
+  const extras = data?.execution_meta?.extras || {};
+  const blocks = collectRiskCards(data);
+  if (extras.error_type) blocks.unshift({ label: "오류/부분응답 분류", title: String(extras.error_type), body: "", evidence_doc_ids: [] });
+  if (data?.uncertainty) blocks.unshift({ label: "불확실성", title: cleanLine(data.uncertainty), body: "", evidence_doc_ids: [] });
+  if (Array.isArray(extras.blocking_missing_buckets) && extras.blocking_missing_buckets.length) {
+    blocks.push({ label: "차단된 근거 버킷", title: extras.blocking_missing_buckets.join(", "), body: "", evidence_doc_ids: [] });
+  }
+  if (Array.isArray(extras.warning_missing_buckets) && extras.warning_missing_buckets.length) {
+    blocks.push({ label: "경고 근거 버킷", title: extras.warning_missing_buckets.join(", "), body: "", evidence_doc_ids: [] });
+  }
+  if (data?.risk_management) {
+    const risk = data.risk_management;
+    if (Array.isArray(risk.main_risks) && risk.main_risks.length) {
+      blocks.push({
+        label: `Risk Management · ${risk.risk_level || "unknown"}`,
+        title: risk.main_risks.slice(0, 3).map(cleanLine).filter(Boolean).join(" · "),
+        body: cleanLine(risk.position_sizing_comment || ""),
+        evidence_doc_ids: [],
+      });
+    }
+    if (Array.isArray(risk.invalidating_conditions) && risk.invalidating_conditions.length) {
+      blocks.push({
+        label: "View Invalidation",
+        title: risk.invalidating_conditions.slice(0, 3).map(cleanLine).filter(Boolean).join(" · "),
+        body: "이 조건이 발생하면 기존 투자 판단을 재검토해야 합니다.",
+        evidence_doc_ids: [],
+      });
+    }
+  }
+  if (data?.confidence_rationale) {
+    const cr = data.confidence_rationale;
+    const caps = Array.isArray(cr.caps_applied) ? cr.caps_applied : [];
+    const fixed = (value) => Number(value || 0).toFixed(2);
+    blocks.push({
+      label: "Confidence Rationale",
+      title: `final ${fixed(cr.final_confidence ?? data.confidence)} · evidence ${fixed(cr.evidence_coverage)} · numeric ${fixed(cr.numeric_grounding_rate)}`,
+      body: caps.length ? caps.slice(0, 2).map(cleanLine).join(" · ") : "신뢰도 캡이 적용되지 않았거나 제한적입니다.",
+      evidence_doc_ids: [],
+    });
+  }
+  if (extras.data_freshness?.overall_status) blocks.push({ label: "데이터 신선도", title: extras.data_freshness.overall_status, body: "", evidence_doc_ids: [] });
+  if (extras.validation_summary) blocks.push({ label: "검증 요약", title: JSON.stringify(extras.validation_summary), body: "", evidence_doc_ids: [] });
+
+  els.riskPanel.innerHTML = "";
+  if (!blocks.length) {
+    els.riskPanel.innerHTML = `<div class="metric-empty">추가 리스크 진단 정보가 없습니다.</div>`;
+    return;
+  }
+  blocks.slice(0, 12).forEach((block) => {
+    const card = document.createElement("article");
+    card.className = "risk-card";
+    card.innerHTML = `
+      <span>${escapeHtml(block.label || "Risk")}</span>
+      <strong>${escapeHtml(block.title || "명시 없음")}</strong>
+      ${block.body ? `<p>${escapeHtml(block.body)}</p>` : ""}
+    `;
+    const badges = document.createElement("div");
+    badges.className = "evidence-chips";
+    renderDocBadges(badges, block.evidence_doc_ids || []);
+    card.appendChild(badges);
+    els.riskPanel.appendChild(card);
+  });
+}
+
+function firstNonEmptyArray(...values) {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      const cleaned = value.filter((item) => {
+        if (item === null || item === undefined) return false;
+        if (typeof item === "string" || typeof item === "number") return Boolean(cleanLine(item));
+        if (typeof item === "object") {
+          return Object.values(item).some((inner) => {
+            if (Array.isArray(inner)) return inner.length > 0;
+            return Boolean(cleanLine(inner));
+          });
+        }
+        return false;
+      });
+      if (cleaned.length) return cleaned;
+    }
+  }
+  return [];
+}
+
+function normalizeScenarioItem(item) {
+  if (typeof item === "string") {
+    return {
+      scenario: cleanLine(item),
+      probability: "조건부",
+      expected_outcome: cleanLine(item),
+      asset_implication: "가격과 리스크 판단은 핵심 지표가 같은 방향으로 확인되는지에 따라 달라집니다.",
+      evidence_doc_ids: [],
+    };
+  }
+  const source = item && typeof item === "object" ? item : {};
+  return {
+    ...source,
+    scenario: cleanLine(source.scenario || source.title || source.name || source.case || source.label) || "Scenario",
+    probability: cleanLine(source.probability || source.trigger || source.condition || source.assumption) || "명시 없음",
+    expected_outcome: cleanLine(source.expected_outcome || source.outcome || source.summary || source.thesis || source.view) || "명시 없음",
+    asset_implication: cleanLine(source.asset_implication || source.market_impact || source.impact || source.implication || source.decision_read) || "명시 없음",
+    decision_read: cleanLine(source.decision_read || source.action || source.strategy || source.decision),
+    evidence_doc_ids: Array.isArray(source.evidence_doc_ids) ? source.evidence_doc_ids.filter(Boolean) : [],
+  };
+}
+
+function normalizeStrategyItem(item) {
+  if (typeof item === "string") {
+    return {
+      strategy: cleanLine(item),
+      trigger: "핵심 지표 확인",
+      rationale: cleanLine(item),
+      risk_control: "포지션 크기와 손절 기준을 사전에 고정합니다.",
+      evidence_doc_ids: [],
+    };
+  }
+  const source = item && typeof item === "object" ? item : {};
+  return {
+    ...source,
+    strategy: cleanLine(source.strategy || source.title || source.name || source.action || source.decision) || "Strategy",
+    trigger: cleanLine(source.trigger || source.entry || source.condition || source.when) || "명시 없음",
+    rationale: cleanLine(source.rationale || source.reason || source.thesis || source.why) || "명시 없음",
+    risk_control: cleanLine(source.risk_control || source.risk_management || source.stop || source.invalidation) || "명시 없음",
+    evidence_doc_ids: Array.isArray(source.evidence_doc_ids) ? source.evidence_doc_ids.filter(Boolean) : [],
+  };
+}
+
+function scenarioBundleToArray(bundle) {
+  if (!bundle || typeof bundle !== "object" || Array.isArray(bundle)) return [];
+  const specs = [
+    ["base_case", "Base Case"],
+    ["bull_case", "Bull Case"],
+    ["bear_case", "Bear Case"],
+  ];
+  return specs
+    .map(([key, label]) => {
+      const item = bundle[key];
+      if (!item || typeof item !== "object") return null;
+      return {
+        scenario: label,
+        probability: item.probability !== undefined && item.probability !== null ? String(item.probability) : "명시 없음",
+        expected_outcome: cleanLine(item.thesis || item.expected_outcome || item.summary) || "명시 없음",
+        asset_implication: [
+          Array.isArray(item.drivers) && item.drivers.length ? `Drivers: ${item.drivers.map(cleanLine).filter(Boolean).join(" · ")}` : "",
+          Array.isArray(item.risks) && item.risks.length ? `Risks: ${item.risks.map(cleanLine).filter(Boolean).join(" · ")}` : "",
+        ].filter(Boolean).join(" / ") || "명시 없음",
+        decision_read: cleanLine(item.thesis || ""),
+        evidence_doc_ids: Array.isArray(item.evidence_doc_ids) ? item.evidence_doc_ids.filter(Boolean) : [],
+      };
+    })
+    .filter(Boolean);
+}
+
+function scenarioSources(data) {
+  const extras = data?.execution_meta?.extras || {};
+  const bundled = scenarioBundleToArray(data?.scenario_analysis);
+  if (bundled.length) return bundled.map(normalizeScenarioItem);
+  return firstNonEmptyArray(
+    data?.scenario_analysis,
+    data?.fallback_scenario_analysis,
+    extras.scenario_analysis,
+    extras.fallback_scenario_analysis,
+    extras.scenarios,
+    extras.scenario_table,
+    extras.quant_snapshot?.scenario_analysis
+  ).map(normalizeScenarioItem);
+}
+
+function strategySources(data) {
+  const extras = data?.execution_meta?.extras || {};
+  return firstNonEmptyArray(
+    data?.execution_strategy,
+    data?.fallback_execution_strategy,
+    extras.execution_strategy,
+    extras.fallback_execution_strategy,
+    extras.strategies,
+    extras.execution_plan,
+    extras.quant_snapshot?.execution_strategy
+  ).map(normalizeStrategyItem);
+}
+
+function renderScenarioPanel(data) {
+  if (!els.scenarioPanel) return;
+  const existingScenarios = scenarioSources(data);
+  const existingStrategies = strategySources(data);
+  let derived = { scenarios: [], strategies: [] };
+  if (!existingScenarios.length || !existingStrategies.length) {
+    try {
+      derived = deriveScenarioPackage(data);
+    } catch (err) {
+      console.warn("scenario derivation failed", err);
+    }
+  }
+  if (!derived.scenarios.length || !derived.strategies.length) {
+    const fallback = fallbackScenarioPackage(data);
+    if (!derived.scenarios.length) derived.scenarios = fallback.scenarios;
+    if (!derived.strategies.length) derived.strategies = fallback.strategies;
+  }
+  const scenarios = existingScenarios.length ? existingScenarios : derived.scenarios.map(normalizeScenarioItem);
+  const strategies = existingStrategies.length ? existingStrategies : derived.strategies.map(normalizeStrategyItem);
+  els.scenarioPanel.innerHTML = "";
+
+  if (!scenarios.length && !strategies.length) {
+    els.scenarioPanel.innerHTML = `<div class="metric-empty">시나리오/실행 전략이 생성되지 않았습니다.</div>`;
+    return;
+  }
+
+  if (scenarios.length) {
+    const grid = document.createElement("div");
+    grid.className = "scenario-grid";
+    scenarios.forEach((scenario) => {
+      const card = document.createElement("article");
+      card.className = "scenario-card";
+      card.innerHTML = `
+        <h4>${escapeHtml(scenario.scenario || scenario.title || "Scenario")}</h4>
+        <p><strong>확률/조건:</strong> ${escapeHtml(scenario.probability || scenario.trigger || "명시 없음")}</p>
+        <p><strong>예상 전개:</strong> ${escapeHtml(scenario.expected_outcome || "명시 없음")}</p>
+        <p><strong>자산 영향:</strong> ${escapeHtml(scenario.asset_implication || scenario.decision_read || "명시 없음")}</p>
+      `;
+      const badges = document.createElement("div");
+      badges.className = "evidence-chips";
+      renderDocBadges(badges, scenario.evidence_doc_ids || []);
+      card.appendChild(badges);
+      grid.appendChild(card);
+    });
+    els.scenarioPanel.appendChild(grid);
+  }
+
+  if (strategies.length) {
+    const section = document.createElement("section");
+    section.className = "strategy-list top-gap";
+    section.innerHTML = `<h4>Execution Strategy</h4>`;
+    strategies.forEach((strategy) => {
+      const item = document.createElement("article");
+      item.className = "scenario-card";
+      item.innerHTML = `
+        <h4>${escapeHtml(strategy.strategy || strategy.title || "Strategy")}</h4>
+        <p><strong>진입/트리거:</strong> ${escapeHtml(strategy.trigger || "명시 없음")}</p>
+        <p><strong>근거:</strong> ${escapeHtml(strategy.rationale || "명시 없음")}</p>
+        <p><strong>리스크 관리:</strong> ${escapeHtml(strategy.risk_control || "명시 없음")}</p>
+      `;
+      const badges = document.createElement("div");
+      badges.className = "evidence-chips";
+      renderDocBadges(badges, strategy.evidence_doc_ids || []);
+      item.appendChild(badges);
+      section.appendChild(item);
+    });
+    els.scenarioPanel.appendChild(section);
+  }
+}
+
+function sectionLines(label, sections) {
+  const lines = [label];
+  if (!Array.isArray(sections) || !sections.length) {
+    lines.push("- 식별된 항목 없음");
+    return lines;
+  }
+  sections.forEach((section) => {
+    if (section.title) lines.push(`- ${section.title}`);
+    (section.bullets || []).forEach((bullet) => lines.push(`  - ${bullet}`));
+    if (section.conclusion) lines.push(`  결론: ${section.conclusion}`);
+  });
+  return lines;
+}
+
+function formatTopicDecisionSections(data) {
+  if (!data) return "";
+  const lines = [];
+  lines.push("핵심 분석");
+  lines.push(...sectionLines("(1) 대상/주제 개요", data.asset_overview));
+  lines.push(...sectionLines("(2) 거시/정책 환경", data.macro_regime));
+  lines.push(...sectionLines("(3) 가격/시장 구조", data.rate_structure));
+
+  if (Array.isArray(data.scenario_analysis) && data.scenario_analysis.length) {
+    lines.push("(4) 시나리오 분석");
+    data.scenario_analysis.forEach((scenario) => {
+      lines.push(`- ${scenario.scenario || "Scenario"}${scenario.probability ? ` (${scenario.probability})` : ""}`);
+      if (scenario.expected_outcome) lines.push(`  예상 전개: ${scenario.expected_outcome}`);
+      if (scenario.asset_implication) lines.push(`  자산 영향: ${scenario.asset_implication}`);
+      if (scenario.decision_read) lines.push(`  판단: ${scenario.decision_read}`);
+    });
+  } else {
+    lines.push("(4) 시나리오 분석");
+    lines.push("- 식별된 항목 없음");
+  }
+
+  lines.push("(5) 리스크 요인");
+  lines.push(...listLines(data.key_risks));
+
+  lines.push("(6) 촉매 및 실행 전략");
+  if (Array.isArray(data.execution_strategy) && data.execution_strategy.length) {
+    data.execution_strategy.forEach((strategy) => {
+      lines.push(`- ${strategy.strategy || "Strategy"}`);
+      if (strategy.trigger) lines.push(`  조건: ${strategy.trigger}`);
+      if (strategy.rationale) lines.push(`  근거: ${strategy.rationale}`);
+      if (strategy.risk_control) lines.push(`  리스크 관리: ${strategy.risk_control}`);
+    });
+  } else {
+    lines.push("- 식별된 항목 없음");
+  }
+
+  lines.push("(7) 시장 가격 vs 현실");
+  const pricingLines = [];
+  (data.rate_structure || []).forEach((section) => {
+    if (section.conclusion) pricingLines.push(section.conclusion);
+  });
+  (data.investment_judgment || []).forEach((section) => {
+    if (section.conclusion) pricingLines.push(section.conclusion);
+  });
+  (data.scenario_analysis || []).slice(0, 2).forEach((scenario) => {
+    if (scenario.decision_read || scenario.asset_implication) {
+      pricingLines.push(`${scenario.scenario || "Scenario"}: ${scenario.decision_read || scenario.asset_implication}`);
+    }
+  });
+  lines.push(...listLines(pricingLines, "가격 판단은 Quant 탭의 수치와 시나리오를 함께 확인해야 합니다."));
+
+  lines.push("");
+  lines.push("Synthesis (핵심 판단 구간)");
+  lines.push(...listLines([data.core_thesis]));
+  lines.push(...sectionLines("투자 판단", data.investment_judgment));
+
+  lines.push("");
+  lines.push("Decision Edge");
+  lines.push("상방 동인");
+  lines.push(...listLines(data.key_drivers));
+  lines.push("하방 리스크");
+  lines.push(...listLines(data.key_risks));
+  if (Array.isArray(data.related_tickers) && data.related_tickers.length) {
+    lines.push("관련 자산 / 표현 수단");
+    lines.push(...listLines(data.related_tickers.map((t) => `${t.ticker} (${t.role}): ${t.rationale}`)));
+  }
+  if (data.uncertainty) {
+    lines.push("불확실성");
+    lines.push(`- ${data.uncertainty}`);
+  }
+
+  lines.push("");
+  lines.push("결론");
+  const conclusions = (data.investment_judgment || []).map((s) => s.conclusion).filter(Boolean);
+  lines.push(...listLines(conclusions.length ? conclusions : [data.core_thesis]));
+  return joinProseLines(dedupeReportLines(lines));
+}
+
+function formatEquityDecisionMemo(data) {
+  if (!data || data.status === "failed") return data?.conclusion || "";
+  const lines = [];
+  const bull = Array.isArray(data.bull_points) ? data.bull_points : [];
+  const bear = Array.isArray(data.bear_points) ? data.bear_points : [];
+  const timeline = data.catalyst_timeline || {};
+  const near = Array.isArray(timeline.near_term) ? timeline.near_term : [];
+  const mid = Array.isArray(timeline.mid_term) ? timeline.mid_term : [];
+  const long = Array.isArray(timeline.long_term) ? timeline.long_term : [];
+  const bullishCatalysts = [...near, ...mid, ...long].filter((item) => /\[Bullish\]|상승|성장|수요|개선|beat|upside/i.test(item));
+  const bearishCatalysts = [...near, ...mid, ...long].filter((item) => /\[Bearish\]|하락|리스크|압박|둔화|miss|downside/i.test(item));
+  const macro = [...bull, ...bear, ...near, ...mid].filter((item) => /금리|연준|인플레이션|유동성|macro|rate|fed|inflation|liquidity/i.test(item));
+  const ai = [...bull, ...bear].filter((item) => /AI|인공지능|cloud|클라우드|GPU|Copilot|OpenAI|Google|Amazon|AWS|Azure|NVIDIA/i.test(item));
+  const cost = [...bull, ...bear].filter((item) => /margin|마진|cost|비용|capex|opex|hiring|구조조정/i.test(item));
+
+  if (data.decision_view) {
+    lines.push("Decision View");
+    lines.push(`- Rating: ${data.decision_view.rating || "neutral"} · confidence ${data.decision_view.confidence ?? data.confidence ?? "—"}`);
+    if (data.decision_view.decision_summary) lines.push(`- ${data.decision_view.decision_summary}`);
+    if (data.decision_view.primary_thesis) lines.push(`- 핵심 논지: ${data.decision_view.primary_thesis}`);
+    if (Array.isArray(data.decision_view.what_would_change_my_view) && data.decision_view.what_would_change_my_view.length) {
+      lines.push("판단 변경 조건");
+      lines.push(...listLines(data.decision_view.what_would_change_my_view));
+    }
+    lines.push("");
+  }
+
+  lines.push("핵심 분석");
+  lines.push("(1) 거시 환경");
+  lines.push(...listLines(macro, "수집 근거에서 거시 민감도가 직접 확인되지 않았습니다."));
+  lines.push("(2) 사업 및 매출 동인");
+  lines.push(...listLines(bull.slice(0, 4)));
+  lines.push("(3) 비용 구조 및 마진");
+  lines.push(...listLines(cost, "비용 구조와 마진 변화는 추가 실적/가이던스 확인이 필요합니다."));
+  lines.push("(4) AI 전략 및 경쟁 포지션");
+  lines.push(...listLines(ai, "AI가 핵심 투자 변수인지 현재 근거만으로는 확인되지 않습니다."));
+  lines.push("(5) 리스크 요인");
+  lines.push(...listLines(bear.slice(0, 4)));
+  lines.push("(6) 촉매 요인 (단기 / 중기)");
+  lines.push("상승 촉매");
+  lines.push(...listLines(bullishCatalysts.length ? bullishCatalysts : bull.slice(0, 2)));
+  lines.push("하락 촉매");
+  lines.push(...listLines(bearishCatalysts.length ? bearishCatalysts : bear.slice(0, 2)));
+  lines.push("(7) 시장 가격 vs 현실");
+  lines.push(...metricLines(data.key_metrics));
+  if (data.uncertainty) lines.push(`- 시장이 놓칠 수 있는 지점 / 근거 공백: ${data.uncertainty}`);
+  lines.push("");
+  lines.push("Synthesis (핵심 판단 구간)");
+  lines.push(...listLines([data.conclusion]));
+  lines.push("");
+  lines.push("Decision Edge");
+  lines.push("판단 체크포인트");
+  lines.push(...listLines(data.open_questions || [], "추가 확인 질문 없음"));
+  lines.push("");
+  lines.push("결론");
+  lines.push(...listLines([data.conclusion, data.uncertainty ? `판단 변경 조건: ${data.uncertainty}` : "판단 변경 조건: 다음 실적/가이던스와 핵심 리스크 트리거 확인"]));
+  return joinProseLines(dedupeReportLines(lines));
+}
+
+function classifyResponseBanner(data, isFastPhase) {
+  const extras = data?.execution_meta?.extras || {};
+  const warnings = Array.isArray(extras.warnings) ? extras.warnings.filter(Boolean) : [];
+  const errorType = extras.error_type || "";
+  const friendlyByType = {
+    validation_error: "입력 검증 오류입니다. 종목 모드에서는 ticker가 필요하고, ticker 없이 질문하려면 자동 또는 주제 모드를 사용하세요.",
+    data_unavailable: "핵심 데이터 일부를 가져오지 못했습니다. 가능한 대체 데이터로 보수적 판단을 표시합니다.",
+    evidence_sparse: "근거가 부족한 축이 있습니다. 누락된 데이터 축은 Diagnostics에서 확인하세요.",
+    model_json_error: "모델의 구조화 JSON 출력이 불안정했습니다. 가능한 경우 로컬 정량/규칙 기반 보정 결과를 표시합니다.",
+    model_language_error: "모델 출력 언어가 요청 기준을 위반했습니다. 한국어 우세 검증을 통과한 보정 결과만 사용해야 합니다.",
+    provider_entitlement: "일부 유료/권한 필요 provider가 제한되었습니다. Yahoo/FRED/수집 문서 기반 대체 경로를 확인하세요.",
+    infrastructure_error: "로컬 인프라 오류입니다. Ollama, Qdrant, 네트워크 상태를 확인하세요.",
+    unknown_error: "분류되지 않은 오류입니다. Diagnostics와 서버 로그를 확인하세요.",
+  };
+  if (isFastPhase) {
+    return {
+      level: "info",
+      message: data?.error_metadata || "초기 판단입니다. 심화 분석을 계속 진행합니다.",
+    };
+  }
+  if (data?.status === "failed") {
+    return { level: "error", message: friendlyByType[errorType] || data?.error_metadata || "요청이 실패했습니다." };
+  }
+  if (errorType === "validation_error") {
+    return { level: "none", message: "" };
+  }
+  if (errorType && friendlyByType[errorType]) {
+    return { level: errorType === "evidence_sparse" || errorType === "provider_entitlement" ? "warning" : "info", message: friendlyByType[errorType] };
+  }
+  if (data?.error_metadata) {
+    return { level: "warning", message: data.error_metadata };
+  }
+  if (warnings.length) {
+    return { level: "warning", message: warnings.join(" | ") };
+  }
+  if (data?.status === "partial") {
+    return {
+      level: "warning",
+      message: data?.uncertainty || "일부 근거가 부족해 보수적으로 해석해야 합니다.",
+    };
+  }
+  return { level: "none", message: "" };
+}
+
+function renderResponse(data, collection, request) {
+  if (data && (data.mode === "sector_macro" || data.mode === "concept")) {
+    const decisionMemo = formatTopicDecisionSections(data);
+    const decisionView = data.decision_view
+      ? `Decision View\n- Rating: ${data.decision_view.rating || "neutral"} · confidence ${data.decision_view.confidence ?? "—"}\n- ${data.decision_view.decision_summary || ""}\n- 핵심 논지: ${data.decision_view.primary_thesis || ""}`
+      : "";
+    const uncertainty = data.uncertainty ? `불확실성\n${data.uncertainty}` : "";
+    const keyMetrics = Array.isArray(data.key_metrics) && data.key_metrics.length
+      ? `핵심 지표\n${data.key_metrics.map(formatMetricLine).filter(Boolean).map((line) => `- ${line}`).join("\n")}`
+      : "";
+    const related = Array.isArray(data.related_tickers) && data.related_tickers.length
+      ? `관련 종목\n${data.related_tickers.map((t) => `- ${t.ticker} (${t.role}): ${t.rationale}`).join("\n")}`
+      : "";
+    data = {
+      ...data,
+      ticker: data.theme || "TOPIC",
+      summary: buildTopicHeadlineSummary(data),
+      conclusion: buildTopicDecisionMemo(data, decisionView, decisionMemo, uncertainty, keyMetrics, related),
+      sentiment: "Neutral",
+      confidence: data.decision_view?.confidence ?? data.confidence ?? data.confidence_rationale?.final_confidence ?? 0,
+      bull_points: (data.key_drivers || []).map((d) => d.text || String(d)),
+      bear_points: (data.key_risks || []).map((d) => d.text || String(d)),
+      bull_evidence_ids: (data.key_drivers || []).map((d) => d.evidence_doc_ids || []),
+      bear_evidence_ids: (data.key_risks || []).map((d) => d.evidence_doc_ids || []),
+    };
+  }
+  const phase = data?.execution_meta?.extras?.phase || "final";
+  const isFastPhase = phase === "fast";
+  state.lastResponse = data;
+  state.lastCollection = collection;
+  state.lastRequest = request;
+
+  els.emptyState.classList.add("hidden");
+  els.loadingState.classList.add("hidden");
+  els.resultView.classList.remove("hidden");
+  if (els.compareView) els.compareView.classList.add("hidden");
+
+  // Header
+  els.resTicker.textContent = data.ticker || "";
+  els.resStatus.textContent = isFastPhase ? "INITIAL" : (data.status || "").toUpperCase();
+  els.resStatus.className = `status-badge ${statusClass(data.status)}`;
+  els.resQuestion.textContent = data.question || "";
+
+  if (els.resCacheBadge) {
+    const cacheHit = collection?.cache_hit ?? data?.execution_meta?.extras?.cache_hit;
+    const cacheAge = collection?.cache_age_s ?? 0;
+    const cacheLabel = cacheAge ? `cache · ${formatAge(cacheAge)}` : "cache · reused";
+    const hit = !!cacheHit;
+    if (hit) {
+      els.resCacheBadge.textContent = cacheLabel;
+      els.resCacheBadge.classList.remove("hidden");
+    } else {
+      els.resCacheBadge.classList.add("hidden");
+    }
+  }
+
+  // Error / warning banner
+  const banner = classifyResponseBanner(data, isFastPhase);
+  if (banner.level === "none") {
+    els.errorBanner.classList.add("hidden");
+    els.errorBanner.classList.remove("failed", "warning", "info");
+  } else {
+    els.errorBanner.textContent = banner.message;
+    els.errorBanner.classList.remove("hidden");
+    els.errorBanner.classList.toggle("failed", banner.level === "error");
+    els.errorBanner.classList.toggle("warning", banner.level === "warning");
+    els.errorBanner.classList.toggle("info", banner.level === "info");
+  }
+
+  // KPIs
+  const sentiment = data.sentiment || "Neutral";
+  els.resSentiment.textContent = sentiment;
+  els.resSentiment.className = "kpi-value " + sentimentTone(sentiment);
+
+  const conf = Number(data.confidence || 0);
+  els.resConfidence.textContent = conf.toFixed(2);
+  els.confidenceFill.style.width = `${Math.max(0, Math.min(1, conf)) * 100}%`;
+
+  els.resCitationCount.textContent = (data.citations || []).length;
+  els.resChunkCount.textContent = (data.raw_context || []).length;
+
+  // Tabs content
+  renderProse(els.resSummary, data.summary || "—");
+  const isTopicMode = data && (data.mode === "sector_macro" || data.mode === "concept");
+  renderProse(els.resConclusion, (isTopicMode ? data.conclusion : formatEquityDecisionMemo(data) || data.conclusion) || "—");
+
+  // Evidence must be indexed before Bull/Bear render so chips can resolve titles.
+  renderEvidence(data.raw_context || []);
+  renderMetricTable(data.key_metrics || []);
+  renderQuantSnapshot(data);
+  renderRiskPanel(data);
+  renderScenarioPanel(data);
+  renderBullBear(
+    data.bull_points || [],
+    data.bear_points || [],
+    data.bull_evidence_ids || [],
+    data.bear_evidence_ids || []
+  );
+  renderCitations(data.citations || []);
+  renderDiagnostics(request, collection);
+  renderExecutionMeta(data.execution_meta || null);
+  renderRaw(data);
+  setExportAvailability(!isFastPhase && !!state.lastResponse && data.status !== "failed");
+  if (isFastPhase) {
+    els.reportMd.textContent = "# 최종 보고서 생성 중입니다.";
+  } else {
+    fetchMarkdownReport();
+  }
+}
+
+function renderFailure(request, message) {
+  const synthetic = {
+    ticker: request.ticker,
+    question: request.question,
+    status: "failed",
+    error_metadata: message,
+    summary: "요청이 실패했습니다.",
+    sentiment: "Neutral",
+    confidence: 0,
+    conclusion: "서버 또는 파이프라인 오류입니다. 로그를 확인해주세요.",
+    citations: [],
+    raw_context: [],
+    bull_points: [],
+    bear_points: [],
+  };
+  renderResponse(synthetic, null, request);
+}
+
+function sentimentTone(s) {
+  const key = (s || "").toLowerCase();
+  if (["positive", "bullish"].includes(key)) return "pos";
+  if (["negative", "bearish"].includes(key)) return "neg";
+  return "neu";
+}
+
+function renderBullBear(bull, bear, bullEv, bearEv) {
+  const evidenceIndex = buildEvidenceIndex(state.evidenceRaw);
+
+  const fill = (ul, items, evidence, emptyMsg) => {
+    ul.innerHTML = "";
+    if (!items.length) {
+      ul.innerHTML = `<li class="muted">${emptyMsg}</li>`;
+      return;
+    }
+    items.forEach((p, i) => {
+      const text = typeof p === "string" ? p : (p.text || JSON.stringify(p));
+      const ids = Array.isArray(evidence) && Array.isArray(evidence[i]) ? evidence[i] : [];
+      const li = document.createElement("li");
+      const textDiv = document.createElement("div");
+      textDiv.className = "tpoint-text";
+      textDiv.textContent = text;
+      li.appendChild(textDiv);
+      if (ids.length) {
+        const chipRow = document.createElement("div");
+        chipRow.className = "evidence-chips";
+        ids.forEach((docId) => {
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "evidence-chip";
+          const item = evidenceIndex.get(String(docId));
+          const label = item ? (item.title || docId) : docId;
+          chip.textContent = item ? truncateLabel(label, 34) : `doc ${truncateLabel(docId, 14)}`;
+          chip.title = item ? `${item.source || "doc"} · ${item.date || ""}\n${label}` : `doc_id: ${docId}`;
+          chip.addEventListener("click", () => jumpToEvidence(docId));
+          chipRow.appendChild(chip);
+        });
+        li.appendChild(chipRow);
+      } else {
+        const note = document.createElement("div");
+        note.className = "evidence-note";
+        note.textContent = "근거 링크 없음";
+        li.appendChild(note);
+      }
+      ul.appendChild(li);
+    });
+  };
+  fill(els.bullList, bull, bullEv, "식별된 상승 촉매 없음");
+  fill(els.bearList, bear, bearEv, "식별된 하락 리스크 없음");
+}
+
+function buildEvidenceIndex(items) {
+  const map = new Map();
+  (items || []).forEach((it, idx) => {
+    const docId = (it && it.metadata && it.metadata.doc_id) || it?.doc_id || it?.id;
+    if (docId) map.set(String(docId), { ...it, _index: idx });
+  });
+  return map;
+}
+
+function truncateLabel(text, n) {
+  const s = String(text || "");
+  return s.length <= n ? s : s.slice(0, n - 1) + "…";
+}
+
+function jumpToEvidence(docId) {
+  const evidenceTab = document.querySelector('.tab[data-tab="evidence"]');
+  if (evidenceTab) evidenceTab.click();
+  els.evidenceSearch.value = "";
+  applyEvidenceFilter();
+  setTimeout(() => {
+    const target = els.evidenceList.querySelector(`[data-doc-id="${CSS.escape(String(docId))}"]`);
+    if (target) {
+      target.open = true;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.classList.add("highlight");
+      setTimeout(() => target.classList.remove("highlight"), 1400);
+    }
+  }, 60);
+}
+
+function renderEvidence(items) {
+  state.evidenceRaw = items;
+  applyEvidenceFilter();
+}
+
+function applyEvidenceFilter() {
+  const q = (els.evidenceSearch.value || "").toLowerCase().trim();
+  const items = state.evidenceRaw.filter((it) => {
+    if (!q) return true;
+    return (
+      (it.title || "").toLowerCase().includes(q) ||
+      (it.chunk || "").toLowerCase().includes(q) ||
+      (it.source || "").toLowerCase().includes(q)
+    );
+  });
+  els.evidenceList.innerHTML = "";
+  if (!items.length) {
+    els.evidenceList.innerHTML = `<li class="muted" style="padding:14px;color:var(--text-mute);font-size:12px;">근거 컨텍스트가 없습니다.</li>`;
+    return;
+  }
+  items.forEach((it, idx) => {
+    const li = document.createElement("details");
+    li.className = "evidence-item";
+    if (idx < 2) li.open = true;
+    const docId = (it && it.metadata && it.metadata.doc_id) || it.doc_id || it.id || "";
+    if (docId) li.dataset.docId = String(docId);
+    const score = typeof it.score === "number" ? it.score.toFixed(3) : "—";
+    li.innerHTML = `
+      <summary>
+        <span class="ev-source">${escapeHtml(it.source || "doc")}</span>
+        <span class="ev-title">${escapeHtml(it.title || "Untitled")}</span>
+        <span class="ev-date">${escapeHtml(it.date || "")}</span>
+        <span class="ev-score">score ${score}</span>
+      </summary>
+      <div class="ev-body">${escapeHtml(it.chunk || "")}</div>
+    `;
+    els.evidenceList.appendChild(li);
+  });
+}
+
+function renderCitations(cits) {
+  els.citationsList.innerHTML = "";
+  if (!cits.length) {
+    els.citationsList.innerHTML = `<li style="color:var(--text-mute);font-family:inherit;">인용된 자료가 없습니다.</li>`;
+    return;
+  }
+  cits.forEach((c) => {
+    const li = document.createElement("li");
+    li.innerHTML = `
+      <span class="cit-source">${escapeHtml(c.source || "")}</span>
+      <span class="cit-title">${escapeHtml(c.title || "")}</span>
+      <span class="cit-date">${escapeHtml(c.date || "")}</span>
+    `;
+    els.citationsList.appendChild(li);
+  });
+}
+
+function kvPairs(container, obj) {
+  container.innerHTML = "";
+  if (!obj) {
+    container.innerHTML = `<span class="k">—</span><span class="v">데이터 없음</span>`;
+    return;
+  }
+  Object.entries(obj).forEach(([k, v]) => {
+    const kEl = document.createElement("span"); kEl.className = "k"; kEl.textContent = k;
+    const vEl = document.createElement("span"); vEl.className = "v";
+    vEl.textContent = typeof v === "object" ? JSON.stringify(v) : String(v);
+    container.appendChild(kEl); container.appendChild(vEl);
+  });
+}
+
+function renderDiagnostics(request, collection) {
+  kvPairs(els.diagRequest, request ? {
+    ticker: request.ticker,
+    question: request.question,
+    mode_hint: request.mode_hint,
+    intent_kind: request.intent_kind,
+    extracted_ticker: request.extracted_ticker || "",
+    route_hint: request.route_hint,
+    sources: (request.sources || []).join(", "),
+    lookback_days: request.lookback_days,
+    top_k: request.top_k,
+    model: request.model,
+  } : null);
+
+  els.sourceResultsBody.innerHTML = "";
+  els.providerResultsBody.innerHTML = "";
+
+  if (!collection) {
+    const noData = `<tr><td colspan="5" style="color:var(--text-mute);">수집 진단 데이터 없음</td></tr>`;
+    els.sourceResultsBody.innerHTML = noData;
+    els.providerResultsBody.innerHTML = noData;
+    kvPairs(els.diagRetrieval, null);
+    return;
+  }
+
+  (collection.source_results || []).forEach((r) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(r.source)}</td>
+      <td><span class="st ${sourceStatusClass(r.status)}">${escapeHtml(r.status)}</span></td>
+      <td>${escapeHtml(String(r.doc_count ?? 0))}</td>
+      <td>${escapeHtml(String(r.elapsed_s ?? "—"))}s</td>
+      <td>${escapeHtml(r.detail || "")}</td>
+    `;
+    els.sourceResultsBody.appendChild(tr);
+  });
+
+  (collection.provider_results || []).forEach((r) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(r.source)}</td>
+      <td><span class="st ${sourceStatusClass(r.status)}">${escapeHtml(r.status)}</span></td>
+      <td>${escapeHtml(String(r.doc_count ?? 0))}</td>
+      <td>${escapeHtml(String(r.elapsed_s ?? "—"))}s</td>
+      <td>${escapeHtml(r.detail || "")}</td>
+    `;
+    els.providerResultsBody.appendChild(tr);
+  });
+
+  kvPairs(els.diagRetrieval, {
+    run_started_at: collection.run_started_at || "—",
+    freshness_cutoff: collection.freshness_cutoff || "—",
+    retrieval_policy: collection.retrieval_policy || "—",
+    current_doc_ids: (collection.current_doc_ids || []).length,
+    lookback_days: collection.lookback_days || "—",
+    cache_hit: collection.cache_hit ? `yes · ${formatAge(collection.cache_age_s)} old` : "no",
+    cached_at: collection.cached_at || "—",
+  });
+}
+
+function formatAge(sec) {
+  const s = Number(sec || 0);
+  if (!s || s <= 0) return "0s";
+  if (s < 60) return `${Math.round(s)}s`;
+  if (s < 3600) return `${Math.round(s / 60)}m`;
+  return `${(s / 3600).toFixed(1)}h`;
+}
+
+const STAGE_ORDER = ["collect", "ingest", "retrieve", "infer", "analyze", "report", "output"];
+
+function renderExecutionMeta(meta) {
+  if (!els.diagInference) return;
+  if (!meta || typeof meta !== "object") {
+    kvPairs(els.diagInference, null);
+    els.stageTimeline.innerHTML = "";
+    return;
+  }
+  const extras = meta.extras || {};
+  const formatGate = (gate) => {
+    if (!gate || typeof gate !== "object") return "—";
+    if (gate.ok === true) return "ok";
+    const missing = gate.completeness?.missing;
+    if (!missing || typeof missing !== "object") return "not_ok";
+    const short = Object.entries(missing)
+      .filter(([, value]) => Number(value || 0) > 0)
+      .map(([key, value]) => `${key}:${value}`)
+      .join(", ");
+    return short || "not_ok";
+  };
+  const shown = {
+    primary_model: meta.primary_model || "—",
+    producing_model: meta.producing_model || "—",
+    fallback_used: meta.fallback_used === null || meta.fallback_used === undefined ? "—" : String(meta.fallback_used),
+    fallback_available: meta.fallback_available === null || meta.fallback_available === undefined ? "—" : String(meta.fallback_available),
+    retry_count: meta.retry_count ?? "—",
+    total_latency_s: meta.total_latency_s ?? "—",
+    pipeline_latency_s: meta.pipeline_latency_s ?? "—",
+    prompt_char_count: meta.prompt_char_count ?? "—",
+    chunks_used: meta.chunks_used ?? "—",
+    lens: meta.lens || "—",
+    context_horizon: meta.context_horizon || "—",
+    phase: extras.phase || "—",
+    retrieval_mode: extras.retrieval_mode || "—",
+    cache_hit: extras.cache_hit === null || extras.cache_hit === undefined ? "—" : String(extras.cache_hit),
+    ingest_skipped_docs: extras.ingest_skipped_docs ?? "—",
+    deep_pass_skipped: extras.deep_pass_skipped === null || extras.deep_pass_skipped === undefined ? "—" : String(extras.deep_pass_skipped),
+    deep_pass_reason: Array.isArray(extras.deep_pass_reason) ? (extras.deep_pass_reason.join(", ") || "—") : (extras.deep_pass_reason || "—"),
+    warnings: Array.isArray(extras.warnings) ? (extras.warnings.join(" | ") || "—") : (extras.warnings || "—"),
+    blocking_evidence_buckets: Array.isArray(extras.blocking_evidence_buckets) ? (extras.blocking_evidence_buckets.join(", ") || "—") : (extras.blocking_evidence_buckets || "—"),
+    warning_evidence_buckets: Array.isArray(extras.warning_evidence_buckets) ? (extras.warning_evidence_buckets.join(", ") || "—") : (extras.warning_evidence_buckets || "—"),
+    blocking_missing_buckets: Array.isArray(extras.blocking_missing_buckets) ? (extras.blocking_missing_buckets.join(", ") || "—") : (extras.blocking_missing_buckets || "—"),
+    warning_missing_buckets: Array.isArray(extras.warning_missing_buckets) ? (extras.warning_missing_buckets.join(", ") || "—") : (extras.warning_missing_buckets || "—"),
+    substituted_buckets: Array.isArray(extras.substituted_buckets) ? (extras.substituted_buckets.join(", ") || "—") : (extras.substituted_buckets || "—"),
+    error_type: extras.error_type || "—",
+    data_freshness: extras.data_freshness || "—",
+    provider_status: extras.provider_status || "—",
+    model_capabilities: extras.model_capabilities || "—",
+    validation_summary: extras.validation_summary || "—",
+    retrieval_plan: extras.retrieval_plan || "—",
+    quality_metrics: extras.quality_metrics || "—",
+    numeric_grounding_warnings: Array.isArray(extras.numeric_grounding_warnings) ? (extras.numeric_grounding_warnings.join(" | ") || "—") : (extras.numeric_grounding_warnings || "—"),
+    confidence_caps: Array.isArray(extras.confidence_caps) ? (extras.confidence_caps.join(" | ") || "—") : (extras.confidence_caps || "—"),
+    run_manifest: extras.run_manifest || "—",
+    fast_gate: formatGate(extras.fast_gate),
+    final_gate: formatGate(extras.final_gate),
+  };
+  kvPairs(els.diagInference, shown);
+
+  els.stageTimeline.innerHTML = "";
+  const stageTimings = extras.stage_timings || {};
+  const normalizeStage = (name) => {
+    const raw = String(name || "");
+    if (raw.startsWith("retrieve")) return "retrieve";
+    if (raw.startsWith("infer")) return "infer";
+    return raw;
+  };
+  const ran = new Set(Array.isArray(meta.stages_ran) ? meta.stages_ran : []);
+  Object.keys(stageTimings).forEach((name) => ran.add(normalizeStage(name)));
+  STAGE_ORDER.forEach((name) => {
+    const durations = Object.entries(stageTimings)
+      .filter(([key]) => normalizeStage(key) === name)
+      .map(([, value]) => `${value}s`);
+    const pill = document.createElement("span");
+    pill.className = "stage-pill " + (ran.has(name) ? "ran" : "skipped");
+    pill.textContent = durations.length ? `${name} ${durations.join(" / ")}` : name;
+    els.stageTimeline.appendChild(pill);
+  });
+}
+
+function renderRaw(data) {
+  els.rawJson.textContent = JSON.stringify(data, null, 2);
+}
+
+async function fetchMarkdownReport() {
+  try {
+    const res = await fetch(API.reportMd);
+    if (res.ok) {
+      els.reportMd.textContent = await res.text();
+    } else {
+      els.reportMd.textContent = "# Report not available yet.";
+    }
+  } catch {
+    els.reportMd.textContent = "# Report not available.";
+  }
+}
+
+// ---------- Tabs ----------
+function bindTabs() {
+  els.tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const target = tab.dataset.tab;
+      els.tabs.forEach((t) => t.classList.toggle("active", t === tab));
+      els.tabPanels.forEach((p) => p.classList.toggle("active", p.dataset.panel === target));
+    });
+  });
+}
+
+// ---------- Downloads ----------
+function downloadBlob(name, text, type = "text/plain") {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+}
+
+function bindDownloads() {
+  els.downloadMdBtn.addEventListener("click", async () => {
+    try {
+      const res = await fetch(API.reportMd);
+      const text = res.ok ? await res.text() : els.reportMd.textContent;
+      const ticker = state.lastResponse?.ticker || "report";
+      downloadBlob(`fingpt_${ticker}_${Date.now()}.md`, text, "text/markdown");
+    } catch (e) { alert("Markdown 다운로드 실패: " + e.message); }
+  });
+
+  els.downloadJsonBtn.addEventListener("click", () => {
+    if (!state.lastResponse) return;
+    const ticker = state.lastResponse.ticker || "response";
+    downloadBlob(`fingpt_${ticker}_${Date.now()}.json`, JSON.stringify(state.lastResponse, null, 2), "application/json");
+  });
+
+  els.openHtmlBtn.addEventListener("click", () => {
+    window.open(API.reportHtml, "_blank", "noopener");
+  });
+
+  const exportToggle = document.getElementById("exportToggleBtn");
+  const exportMenu = document.getElementById("exportMenu");
+  if (exportToggle && exportMenu) {
+    exportToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      exportMenu.classList.toggle("hidden");
+    });
+    // Dismiss when clicking anywhere outside — feels native without managing focus.
+    document.addEventListener("click", (e) => {
+      if (!exportMenu.classList.contains("hidden") && !exportMenu.contains(e.target) && e.target !== exportToggle) {
+        exportMenu.classList.add("hidden");
+      }
+    });
+    exportMenu.querySelectorAll("button[data-export]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        exportMenu.classList.add("hidden");
+        const kind = btn.dataset.export;
+        try {
+          await runExport(kind);
+        } catch (err) {
+          alert(`Export 실패: ${err.message || err}`);
+        }
+      });
+    });
+  }
+}
+
+async function runExport(kind) {
+  if (!state.lastResponse) {
+    alert("먼저 분석을 실행하거나 히스토리에서 불러오세요.");
+    return;
+  }
+  // kind => endpoint + query string. The server reads the latest archived
+  // response when run_id is omitted, so single-runs just work.
+  let url, filename, mime;
+  const ticker = state.lastResponse.ticker || "analysis";
+  const stamp = Date.now();
+  if (kind === "csv") {
+    url = "/api/v1/outputs/export/csv";
+    filename = `fingpt_${ticker}_${stamp}.csv`;
+    mime = "text/csv";
+  } else if (kind === "jsonl") {
+    url = "/api/v1/outputs/export/jsonl?include_raw_context=true";
+    filename = `fingpt_${ticker}_${stamp}.jsonl`;
+    mime = "application/x-ndjson";
+  } else if (kind === "jsonl-lean") {
+    url = "/api/v1/outputs/export/jsonl?include_raw_context=false";
+    filename = `fingpt_${ticker}_${stamp}_lean.jsonl`;
+    mime = "application/x-ndjson";
+  } else {
+    return;
+  }
+  const res = await fetch(url);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status}: ${detail.slice(0, 160)}`);
+  }
+  const text = await res.text();
+  downloadBlob(filename, text, mime);
+}
+
+// ---------- Load latest ----------
+async function loadLatest() {
+  try {
+    const res = await fetch(API.latest);
+    if (!res.ok) throw new Error("no data");
+    const blob = await res.json();
+    if (!blob.response) {
+      alert("이전 실행 결과를 찾을 수 없습니다. 먼저 한 번 분석을 실행하세요.");
+      return;
+    }
+    renderResponse(blob.response, blob.collection || null, blob.request || null);
+  } catch (e) {
+    alert("최신 결과 로드 실패: " + e.message);
+  }
+}
+
+// ---------- Bindings ----------
+function bindInputs() {
+  els.tickerChips.querySelectorAll("button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const chipTicker = btn.dataset.ticker;
+      if (els.compareMode && els.compareMode.checked) {
+        const current = els.ticker.value
+          .split(/[\s,]+/)
+          .map((t) => t.trim().toUpperCase())
+          .filter(Boolean);
+        if (!current.includes(chipTicker)) current.push(chipTicker);
+        els.ticker.value = current.join(", ");
+      } else {
+        els.ticker.value = chipTicker;
+      }
+      els.ticker.focus();
+      persistForm();
+    });
+  });
+  if (els.compareMode) {
+    els.compareMode.addEventListener("change", () => {
+      updateCompareModeUI();
+      setFormNotice("");
+      persistForm();
+    });
+    updateCompareModeUI();
+  }
+  els.ticker.addEventListener("input", () => { setFormNotice(""); persistForm(); });
+  els.researchModeInputs().forEach((i) => i.addEventListener("change", () => {
+    updateCompareModeUI();
+    setFormNotice("");
+    persistForm();
+  }));
+  els.question.addEventListener("input", () => { setFormNotice(""); persistForm(); });
+  els.model.addEventListener("change", persistForm);
+  els.sourceInputs().forEach((i) => i.addEventListener("change", persistForm));
+
+  els.lookback.addEventListener("input", () => {
+    els.lookback.dataset.dirty = "1";
+    updateRangeLabels(); persistForm();
+  });
+  els.topk.addEventListener("input", () => {
+    els.topk.dataset.dirty = "1";
+    updateRangeLabels(); persistForm();
+  });
+
+  els.form.addEventListener("submit", runAnalysis);
+
+  document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      els.form.requestSubmit();
+    }
+  });
+
+  els.loadLatestBtn.addEventListener("click", loadLatest);
+  if (els.homeBtn) els.homeBtn.addEventListener("click", showHome);
+  if (els.homeNewsRefresh) els.homeNewsRefresh.addEventListener("click", () => {
+    loadDashboardNews(true);
+    loadDashboardMarket(true);
+    loadDashboardEquityHeatmap(true);
+    initializeTradingViewDashboard(true);
+  });
+  if (els.historyToggleBtn) {
+    els.historyToggleBtn.addEventListener("click", () => {
+      state.historyExpanded = !state.historyExpanded;
+      renderHistory();
+    });
+  }
+  els.clearHistoryBtn.addEventListener("click", () => {
+    alert("서버 기반 히스토리는 디스크에 영속 저장됩니다.\n삭제가 필요하면 data/outputs/runs/ 폴더와 data/runs.db 파일을 직접 정리하세요.");
+  });
+
+  els.evidenceSearch.addEventListener("input", applyEvidenceFilter);
+
+  if (els.preflightPill) {
+    els.preflightPill.addEventListener("click", () => {
+      if (els.preflightPanel.classList.contains("hidden")) openPreflightPanel();
+      else closePreflightPanel();
+    });
+  }
+  if (els.preflightClose) {
+    els.preflightClose.addEventListener("click", closePreflightPanel);
+  }
+  if (els.preflightRefresh) {
+    els.preflightRefresh.addEventListener("click", async () => {
+      els.preflightLabel.textContent = "preflight…";
+      els.preflightPill.classList.remove("ok", "warn", "err");
+      const r = await loadPreflight(true);
+      if (r) renderPreflightPanel(r);
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !els.preflightPanel.classList.contains("hidden")) {
+      closePreflightPanel();
+    }
+  });
+
+  if (els.qdrantAdminBtn) {
+    els.qdrantAdminBtn.addEventListener("click", () => {
+      if (els.qdrantPanel.classList.contains("hidden")) openQdrantPanel();
+      else closeQdrantPanel();
+    });
+  }
+  if (els.qdrantClose) els.qdrantClose.addEventListener("click", closeQdrantPanel);
+  if (els.qdrantRefresh) els.qdrantRefresh.addEventListener("click", loadQdrantInfo);
+  if (els.qdrantPurgeDryRun) els.qdrantPurgeDryRun.addEventListener("click", () => runQdrantPurge(true));
+  if (els.qdrantPurgeRun) els.qdrantPurgeRun.addEventListener("click", () => runQdrantPurge(false));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && els.qdrantPanel && !els.qdrantPanel.classList.contains("hidden")) {
+      closeQdrantPanel();
+    }
+  });
+
+  if (els.qualityDashBtn) {
+    els.qualityDashBtn.addEventListener("click", () => {
+      if (els.qualityPanel.classList.contains("hidden")) openQualityPanel();
+      else closeQualityPanel();
+    });
+  }
+  if (els.qualityClose) els.qualityClose.addEventListener("click", closeQualityPanel);
+  if (els.qualityRefresh) els.qualityRefresh.addEventListener("click", loadQualityDashboard);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && els.qualityPanel && !els.qualityPanel.classList.contains("hidden")) {
+      closeQualityPanel();
+    }
+  });
+}
+
+// ---------- Init ----------
+(async function init() {
+  normalizeStaticLabels();
+  await loadConfig();
+  bindTabs();
+  bindDownloads();
+  bindInputs();
+  restoreForm();
+  renderHistory();
+  renderWatchlist();
+  initializeTradingViewDashboard(false);
+  loadDashboardEquityHeatmap(false);
+  loadDashboardMarket(false);
+  loadDashboardNews(false);
+  if (els.watchlistAddBtn) {
+    els.watchlistAddBtn.addEventListener("click", watchlistAddFromForm);
+  }
+  // Poll watchlist every 30s so scheduled runs and last_run_at timestamps stay fresh.
+  state.watchlistTimer = setInterval(renderWatchlist, 30000);
+  checkHealth();
+  loadRunbook();
+  loadPreflight(false);
+  state.preflightTimer = setInterval(() => loadPreflight(false), 60000);
+})();

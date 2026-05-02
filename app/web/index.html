@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FinGPT Local Research Assistant</title>
+  <link rel="stylesheet" href="styles.css?v=20260502-heatmap-polish" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='48' font-size='48'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <header class="topbar">
+    <button id="homeBtn" type="button" class="brand brand-button" aria-label="홈 화면으로 이동">
+      <div class="logo-dot"></div>
+      <div>
+        <div class="brand-title">FinGPT</div>
+        <div class="brand-sub">Local Research Assistant</div>
+      </div>
+    </button>
+    <nav class="topnav">
+      <span class="pipeline-pill">Collect -> Ingest -> Retrieve -> Infer -> Analyze -> Report</span>
+      <button id="preflightPill" type="button" class="preflight-pill" title="로컬 의존성 상태 확인">
+        <span class="dot" id="preflightDot"></span>
+        <span id="preflightLabel">preflight: checking</span>
+      </button>
+      <button id="qdrantAdminBtn" type="button" class="ghost-btn admin-btn" title="Vector DB collection status and purge">Qdrant</button>
+      <button id="qualityDashBtn" type="button" class="ghost-btn admin-btn" title="Evaluation and quality dashboard">Quality</button>
+      <span id="healthPill" class="health-pill">api · checking</span>
+    </nav>
+  </header>
+
+  <div id="qdrantPanel" class="preflight-panel qdrant-panel hidden" role="dialog" aria-labelledby="qdrantPanelTitle">
+    <div class="preflight-head">
+      <div>
+        <div id="qdrantPanelTitle" class="preflight-title">Qdrant Collection Admin</div>
+        <div class="preflight-sub" id="qdrantSubtitle">컬렉션 상태를 로드 중입니다.</div>
+      </div>
+      <div class="preflight-actions">
+        <button type="button" id="qdrantRefresh" class="ghost-btn">새로고침</button>
+        <button type="button" id="qdrantClose" class="ghost-btn">닫기</button>
+      </div>
+    </div>
+    <div class="qdrant-stats" id="qdrantStats"></div>
+    <section class="qdrant-purge">
+      <h4>Purge Embeddings</h4>
+      <p class="muted small">날짜 또는 ticker 조건으로 오래된 embedding을 정리합니다. 실제 삭제 전 dry run으로 대상 수를 확인하세요.</p>
+      <div class="qdrant-purge-row">
+        <label>Older than
+          <input type="number" id="qdrantPurgeDays" min="0" placeholder="days, e.g. 30" />
+        </label>
+        <label>Ticker
+          <input type="text" id="qdrantPurgeTicker" placeholder="AAPL (optional)" maxlength="24" />
+        </label>
+        <button type="button" id="qdrantPurgeDryRun" class="ghost-btn">Dry run</button>
+        <button type="button" id="qdrantPurgeRun" class="ghost-btn danger">Purge</button>
+      </div>
+      <div id="qdrantPurgeResult" class="qdrant-purge-result"></div>
+    </section>
+    <section class="qdrant-breakdown">
+      <h4>Per-ticker Breakdown <span id="qdrantBreakdownNote" class="muted small"></span></h4>
+      <ul id="qdrantBreakdownList" class="qdrant-breakdown-list"></ul>
+    </section>
+  </div>
+
+  <div id="qualityPanel" class="preflight-panel quality-panel hidden" role="dialog" aria-labelledby="qualityPanelTitle">
+    <div class="preflight-head">
+      <div>
+        <div id="qualityPanelTitle" class="preflight-title">Quality Dashboard</div>
+        <div class="preflight-sub" id="qualitySubtitle">평가 결과를 로드 중입니다.</div>
+      </div>
+      <div class="preflight-actions">
+        <button type="button" id="qualityRefresh" class="ghost-btn">새로고침</button>
+        <button type="button" id="qualityClose" class="ghost-btn">닫기</button>
+      </div>
+    </div>
+    <div id="qualitySummary" class="quality-summary"></div>
+    <section class="quality-section">
+      <h4>Categories</h4>
+      <ul id="qualityCategories" class="quality-category-list"></ul>
+    </section>
+    <section class="quality-section">
+      <h4>Recent Cases <span id="qualityCasesNote" class="muted small"></span></h4>
+      <ul id="qualityCases" class="quality-cases"></ul>
+    </section>
+    <details class="quality-report">
+      <summary>Latest eval report (markdown)</summary>
+      <pre id="qualityReport" class="report-md"></pre>
+    </details>
+  </div>
+
+  <div id="preflightPanel" class="preflight-panel hidden" role="dialog" aria-labelledby="preflightPanelTitle">
+    <div class="preflight-head">
+      <div>
+        <div id="preflightPanelTitle" class="preflight-title">Local Dependency Preflight</div>
+        <div class="preflight-sub" id="preflightSubtitle">마지막 점검: -</div>
+      </div>
+      <div class="preflight-actions">
+        <button type="button" id="preflightRefresh" class="ghost-btn">강제 재점검</button>
+        <button type="button" id="preflightClose" class="ghost-btn">닫기</button>
+      </div>
+    </div>
+    <ul id="preflightChecks" class="preflight-checks"></ul>
+    <details class="preflight-runbook">
+      <summary>실패 대응 가이드</summary>
+      <ul id="preflightRunbook"></ul>
+    </details>
+  </div>
+
+  <main class="layout">
+    <aside class="panel control-panel">
+      <form id="analysisForm" autocomplete="off">
+        <section class="field-group">
+          <div class="field-header-row">
+            <label class="field-label" for="ticker">
+              Ticker
+              <span class="hint" id="tickerHint">선택 입력. 비워두면 주제/거시 질의로 처리합니다.</span>
+            </label>
+            <label class="compare-toggle">
+              <input type="checkbox" id="compareMode" />
+              <span>Compare mode</span>
+            </label>
+          </div>
+          <div class="mode-toggle" role="radiogroup" aria-label="Research mode">
+            <label><input type="radio" name="researchMode" value="auto" checked /> <span>자동</span></label>
+            <label><input type="radio" name="researchMode" value="ticker" /> <span>종목</span></label>
+            <label><input type="radio" name="researchMode" value="topic" /> <span>주제</span></label>
+          </div>
+          <div class="ticker-row">
+            <input id="ticker" name="ticker" type="text" placeholder="예: AAPL 또는 비워두고 질문만 입력" maxlength="64" />
+            <div class="ticker-chips" id="tickerChips">
+              <button type="button" data-ticker="AAPL">AAPL</button>
+              <button type="button" data-ticker="MSFT">MSFT</button>
+              <button type="button" data-ticker="NVDA">NVDA</button>
+              <button type="button" data-ticker="TSLA">TSLA</button>
+              <button type="button" data-ticker="GOOGL">GOOGL</button>
+              <button type="button" data-ticker="AMZN">AMZN</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="field-group">
+          <label class="field-label" for="question">
+            Question
+            <span class="hint">자유 질문 또는 프리셋 선택</span>
+          </label>
+          <textarea id="question" name="question" rows="4" placeholder="예: 현재 드러나는 신용 리스크에는 어떤 것이 있나요?" required></textarea>
+          <div class="preset-chips" id="presetChips"></div>
+        </section>
+
+        <section class="field-group">
+          <label class="field-label">Sources</label>
+          <div class="source-toggles" id="sourceToggles">
+            <label class="toggle">
+              <input type="checkbox" name="source" value="news" checked />
+              <span>news <em>primary</em></span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" name="source" value="macro" checked />
+              <span>macro / prices <em>quant</em></span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" name="source" value="transcript" checked />
+              <span>transcript <em>supplementary</em></span>
+            </label>
+          </div>
+        </section>
+
+        <section class="field-group two-col">
+          <div>
+            <label class="field-label" for="lookback">Lookback <span id="lookbackValue" class="value-chip">30d</span></label>
+            <input id="lookback" type="range" min="1" max="90" value="30" step="1" />
+            <div class="range-scale"><span>1d</span><span>30d</span><span>90d</span></div>
+          </div>
+          <div>
+            <label class="field-label" for="topk">Top-K <span id="topkValue" class="value-chip">5</span></label>
+            <input id="topk" type="range" min="1" max="20" value="5" step="1" />
+            <div class="range-scale"><span>1</span><span>10</span><span>20</span></div>
+          </div>
+        </section>
+
+        <section class="field-group">
+          <label class="field-label" for="model">Inference Route</label>
+          <select id="model" name="model">
+            <option value="qwen">qwen2.5:7b (Ollama · 기본)</option>
+          </select>
+        </section>
+
+        <div class="button-row">
+          <button type="submit" id="runBtn" class="primary-btn">
+            <span class="btn-label">Run Analysis</span>
+            <span class="btn-spinner" aria-hidden="true"></span>
+          </button>
+          <button type="button" id="loadLatestBtn" class="ghost-btn">Load latest</button>
+        </div>
+
+        <div class="meta-row">
+          <span class="kbd">Ctrl</span> + <span class="kbd">Enter</span> 실행
+        </div>
+        <div id="formNotice" class="form-notice hidden" role="status"></div>
+      </form>
+
+      <section class="history-block">
+        <div class="block-header">
+          <h3>Run History</h3>
+          <div class="block-actions">
+            <span id="historySummary" class="history-summary"></span>
+            <button type="button" id="historyToggleBtn" class="linkish">펼치기</button>
+            <button type="button" id="clearHistoryBtn" class="linkish" title="서버 저장 히스토리 관리 안내">manage</button>
+          </div>
+        </div>
+        <div id="tickerSummary" class="ticker-summary hidden">
+          <div id="sparkline" class="sparkline" aria-label="최근 실행 추이"></div>
+          <div id="sparklineLabel" class="sparkline-label"></div>
+        </div>
+        <ul id="historyList" class="history-list"><li class="history-empty">아직 실행된 분석이 없습니다.</li></ul>
+      </section>
+
+      <section class="watchlist-block">
+        <div class="block-header">
+          <h3>Watchlist</h3>
+          <div class="block-actions">
+            <span id="watchlistSchedStatus" class="watchlist-sched-status" title="스케줄러 상태">sched</span>
+            <button type="button" id="watchlistAddBtn" class="linkish" title="현재 설정을 Watchlist에 추가">+ add</button>
+          </div>
+        </div>
+        <ul id="watchlistList" class="watchlist-list"><li class="watchlist-empty">저장된 Watchlist 항목이 없습니다.</li></ul>
+      </section>
+    </aside>
+
+    <section class="panel results-panel" id="resultsPanel">
+      <div id="emptyState" class="empty-state">
+        <div class="home-hero">
+          <div>
+            <p class="eyebrow">Quant-aware local research</p>
+            <h2>시장 대시보드</h2>
+            <p>티커를 입력하면 종목 분석으로, 비워두고 질문만 입력하면 금리·신용·FX·원자재·테마 topic 분석으로 라우팅합니다.</p>
+          </div>
+          <div class="home-status">
+            <span>OpenBB/Yahoo/FRED/SEC 중심</span>
+            <span>qwen2.5:7b 로컬 추론</span>
+          </div>
+        </div>
+        <div class="home-grid">
+          <section class="home-card home-chart-card">
+            <div class="home-card-head">
+              <h3>TradingView 단일 차트</h3>
+              <span>SPY · Daily</span>
+            </div>
+            <div id="tvOverviewWidget" class="tradingview-widget-container tv-overview">
+              <div class="tradingview-widget-container__widget"></div>
+            </div>
+            <div id="tvOverviewFallback" class="tv-fallback hidden">TradingView 단일 차트를 불러오는 중입니다.</div>
+          </section>
+          <section class="home-card home-heatmap-card">
+            <div class="home-card-head">
+              <h3>미국 주식 5분봉 히트맵</h3>
+              <span id="homeHeatmapMeta" class="home-heatmap-meta-bar">Yahoo/yfinance · 최신/지연 데이터만 표시</span>
+            </div>
+            <div id="homeHeatmap" class="home-stock-heatmap">
+              <div class="home-news-empty">5분봉 히트맵 데이터를 불러오는 중입니다.</div>
+            </div>
+            <div id="tvHeatmapWidgetDisabled" class="hidden" aria-hidden="true"></div>
+            <div id="tvHeatmapFallback" class="tv-fallback hidden">TradingView 히트맵은 공개 임베드에서 EOD로 표시될 수 있어 의사결정용 표시에서 제외했습니다.</div>
+          </section>
+          <section class="home-card home-market-panel">
+            <div class="home-card-head">
+              <h3>내부 시장 스냅샷</h3>
+              <span>Yahoo/yfinance · 기준일 포함</span>
+            </div>
+            <div id="homeMarketList" class="home-market-grid">
+              <div class="home-news-empty">시장 데이터를 불러오는 중입니다.</div>
+            </div>
+          </section>
+          <section class="home-card">
+            <div class="home-card-head">
+              <h3>주요 뉴스</h3>
+              <button type="button" id="homeNewsRefresh" class="linkish">새로고침</button>
+            </div>
+            <div id="homeNewsCategories" class="home-news-categories"></div>
+            <div id="homeNewsList" class="home-news-list">
+              <div class="home-news-empty">뉴스를 불러오는 중입니다.</div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div id="loadingState" class="loading-state hidden">
+        <div class="loading-header">
+          <div class="pulse-dot"></div>
+          <div>
+            <div class="loading-title" id="loadingTitle">Analyzing <span id="loadingTicker">-</span></div>
+            <div class="loading-sub" id="loadingSub">파이프라인을 실행 중입니다.</div>
+          </div>
+          <div id="loadingTimer" class="loading-timer">00:00</div>
+        </div>
+        <div class="progress-stages" id="progressStages">
+          <div class="pstage" data-stage="collect"><div class="pdot"></div><span>Collect</span></div>
+          <div class="pstage" data-stage="ingest"><div class="pdot"></div><span>Ingest</span></div>
+          <div class="pstage" data-stage="retrieve"><div class="pdot"></div><span>Retrieve</span></div>
+          <div class="pstage" data-stage="infer"><div class="pdot"></div><span>Infer</span></div>
+          <div class="pstage" data-stage="analyze"><div class="pdot"></div><span>Analyze</span></div>
+          <div class="pstage" data-stage="report"><div class="pdot"></div><span>Report</span></div>
+          <div class="pstage" data-stage="output"><div class="pdot"></div><span>Output</span></div>
+        </div>
+        <p class="loading-note">초기 판단이 먼저 표시되고, 최종 보강 결과가 도착하면 같은 패널을 갱신합니다.</p>
+      </div>
+
+      <article id="compareView" class="compare-view hidden">
+        <header class="result-header">
+          <div class="result-title">
+            <h1>Compare</h1>
+            <span id="compareMeta" class="compare-meta"></span>
+          </div>
+        </header>
+        <div id="compareTable" class="compare-table"></div>
+        <section class="compare-detail">
+          <h3>Summaries</h3>
+          <div id="compareSummaries" class="compare-summaries"></div>
+        </section>
+      </article>
+
+      <article id="resultView" class="result-view hidden">
+        <header class="result-header">
+          <div class="result-title">
+            <h1><span id="resTicker"></span></h1>
+            <span id="resStatus" class="status-badge"></span>
+            <span id="resCacheBadge" class="cache-badge hidden" title="수집 결과가 캐시에서 재사용되었습니다."></span>
+          </div>
+          <div class="result-actions">
+            <button type="button" id="downloadMdBtn" class="ghost-btn" title="Markdown 다운로드">.md</button>
+            <button type="button" id="downloadJsonBtn" class="ghost-btn" title="JSON 다운로드">.json</button>
+            <button type="button" id="openHtmlBtn" class="ghost-btn" title="HTML 보고서 열기">html</button>
+            <div class="export-menu">
+              <button type="button" id="exportToggleBtn" class="ghost-btn" title="다른 포맷으로 내보내기">Export</button>
+              <div id="exportMenu" class="export-menu-items hidden" role="menu">
+                <button type="button" data-export="csv" role="menuitem">CSV (Bull/Bear + Evidence)</button>
+                <button type="button" data-export="jsonl" role="menuitem">JSONL (eval)</button>
+                <button type="button" data-export="jsonl-lean" role="menuitem">JSONL (lean)</button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <p class="result-question" id="resQuestion"></p>
+        <div id="errorBanner" class="error-banner hidden"></div>
+
+        <section class="kpi-grid">
+          <div class="kpi">
+            <div class="kpi-label">Sentiment</div>
+            <div class="kpi-value" id="resSentiment">-</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Confidence</div>
+            <div class="kpi-value" id="resConfidence">-</div>
+            <div class="confidence-bar"><div id="confidenceFill" class="confidence-fill"></div></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Citations</div>
+            <div class="kpi-value" id="resCitationCount">0</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Evidence Chunks</div>
+            <div class="kpi-value" id="resChunkCount">0</div>
+          </div>
+        </section>
+
+        <nav class="tabs" role="tablist">
+          <button class="tab active" data-tab="summary" role="tab">Snapshot</button>
+          <button class="tab" data-tab="quant" role="tab">Quant</button>
+          <button class="tab" data-tab="risk" role="tab">Risk</button>
+          <button class="tab" data-tab="scenarios" role="tab">Scenarios</button>
+          <button class="tab" data-tab="evidence" role="tab">Evidence</button>
+          <button class="tab" data-tab="diagnostics" role="tab">Diagnostics</button>
+          <button class="tab" data-tab="report" role="tab">Report</button>
+          <button class="tab" data-tab="raw" role="tab">Raw JSON</button>
+        </nav>
+
+        <section class="tab-panel active" data-panel="summary">
+          <h3 class="panel-subtitle">Decision Summary</h3>
+          <div id="resSummary" class="prose"></div>
+          <h3 class="panel-subtitle">Conclusion</h3>
+          <div id="resConclusion" class="prose"></div>
+          <h3 class="panel-subtitle top-gap">Key Metrics</h3>
+          <div id="metricsTable" class="metric-table-wrap"></div>
+        </section>
+
+        <section class="tab-panel" data-panel="quant">
+          <h3 class="panel-subtitle">Quant Snapshot</h3>
+          <div id="quantSnapshot" class="quant-panel"></div>
+        </section>
+
+        <section class="tab-panel" data-panel="risk">
+          <h3 class="panel-subtitle">Risk / Reward</h3>
+          <div id="riskPanel" class="risk-panel"></div>
+          <div class="thesis-grid top-gap">
+            <div class="thesis-col bull">
+              <h3>Bull Drivers</h3>
+              <ul id="bullList"><li class="muted">식별된 상방 요인이 없습니다.</li></ul>
+            </div>
+            <div class="thesis-col bear">
+              <h3>Bear Risks</h3>
+              <ul id="bearList"><li class="muted">식별된 하방 리스크가 없습니다.</li></ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="scenarios">
+          <h3 class="panel-subtitle">Scenario Table</h3>
+          <div id="scenarioPanel" class="scenario-panel"></div>
+        </section>
+
+        <section class="tab-panel" data-panel="evidence">
+          <div class="evidence-header">
+            <h3 class="panel-subtitle">Evidence Documents</h3>
+            <div class="evidence-filter">
+              <input id="evidenceSearch" type="search" placeholder="검색: 제목, 내용, source, doc_id" />
+            </div>
+          </div>
+          <ul id="evidenceList" class="evidence-list"></ul>
+          <h3 class="panel-subtitle top-gap">Citations</h3>
+          <ul id="citationsList" class="citations-list"></ul>
+        </section>
+
+        <section class="tab-panel" data-panel="diagnostics">
+          <h3 class="panel-subtitle">Run Configuration</h3>
+          <div id="diagRequest" class="diag-kv"></div>
+          <h3 class="panel-subtitle top-gap">Inference / Model Trace</h3>
+          <div id="diagInference" class="diag-kv"></div>
+          <div id="stageTimeline" class="stage-timeline"></div>
+          <h3 class="panel-subtitle top-gap">Source Results</h3>
+          <table class="diag-table"><thead><tr><th>Source</th><th>Status</th><th>Docs</th><th>Elapsed</th><th>Detail</th></tr></thead><tbody id="sourceResultsBody"></tbody></table>
+          <h3 class="panel-subtitle top-gap">Provider Results</h3>
+          <table class="diag-table"><thead><tr><th>Provider</th><th>Status</th><th>Docs</th><th>Elapsed</th><th>Detail</th></tr></thead><tbody id="providerResultsBody"></tbody></table>
+          <h3 class="panel-subtitle top-gap">Retrieval / Validation</h3>
+          <div id="diagRetrieval" class="diag-kv"></div>
+        </section>
+
+        <section class="tab-panel" data-panel="report">
+          <h3 class="panel-subtitle">Markdown Report</h3>
+          <pre id="reportMd" class="report-md"></pre>
+        </section>
+
+        <section class="tab-panel" data-panel="raw">
+          <h3 class="panel-subtitle">Raw Response JSON</h3>
+          <pre id="rawJson" class="code-block"></pre>
+        </section>
+      </article>
+    </section>
+  </main>
+
+  <script src="app.js?v=20260502-heatmap-polish"></script>
+</body>
+</html>
