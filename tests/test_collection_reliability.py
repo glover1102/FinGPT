@@ -303,6 +303,17 @@ class CollectionCoordinatorTests(unittest.TestCase):
 
 
 class NoContextPipelineTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        super().setUp()
+        self._structured_context_patchers = [
+            patch.object(research_pipeline, "build_structured_context", return_value={}),
+            patch.object(research_pipeline, "structured_context_to_retrieval_item", return_value=None),
+            patch.object(research_pipeline, "structured_context_metrics", return_value=[]),
+        ]
+        for patcher in self._structured_context_patchers:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     async def test_empty_context_returns_partial_without_invoking_inference(self):
         request = AnalysisRequest(
             ticker="JPM",

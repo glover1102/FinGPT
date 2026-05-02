@@ -26,6 +26,10 @@ const API = {
   dashboardNews: "/api/v1/dashboard/news?limit=20",
   dashboardMarket: "/api/v1/dashboard/market",
   dashboardEquityHeatmap: "/api/v1/dashboard/equity-heatmap",
+  dataHealth: "/api/v1/data/health",
+  dataPrices: (ticker, limit = 252) => `/api/v1/data/prices/${encodeURIComponent(ticker)}?limit=${encodeURIComponent(limit)}`,
+  backtestRun: "/api/v1/backtest/run",
+  portfolioOptimize: "/api/v1/portfolio/optimize",
 };
 
 const STORAGE = {
@@ -157,6 +161,19 @@ const els = {
   homeHeatmap: document.getElementById("homeHeatmap"),
   homeHeatmapMeta: document.getElementById("homeHeatmapMeta"),
   homeMarketList: document.getElementById("homeMarketList"),
+  dataHealthRefresh: document.getElementById("dataHealthRefresh"),
+  homeDataHealth: document.getElementById("homeDataHealth"),
+  assetDetailTicker: document.getElementById("assetDetailTicker"),
+  assetDetailLoad: document.getElementById("assetDetailLoad"),
+  assetDetailSurface: document.getElementById("assetDetailSurface"),
+  backtestTicker: document.getElementById("backtestTicker"),
+  backtestStrategy: document.getElementById("backtestStrategy"),
+  backtestRun: document.getElementById("backtestRun"),
+  backtestSurface: document.getElementById("backtestSurface"),
+  portfolioTickers: document.getElementById("portfolioTickers"),
+  portfolioMethod: document.getElementById("portfolioMethod"),
+  portfolioOptimize: document.getElementById("portfolioOptimize"),
+  portfolioSurface: document.getElementById("portfolioSurface"),
   tvOverviewWidget: document.getElementById("tvOverviewWidget"),
   tvOverviewFallback: document.getElementById("tvOverviewFallback"),
   tvHeatmapWidget: document.getElementById("tvHeatmapWidget"),
@@ -182,6 +199,7 @@ const state = {
   historyExpanded: false,
   dashboardLoaded: false,
   marketLoaded: false,
+  dataHealthLoaded: false,
   dashboardHeatmapLoaded: false,
   tradingViewInitialized: false,
   dashboardNewsItems: [],
@@ -1187,6 +1205,202 @@ async function loadDashboardMarket(force = false) {
     state.marketLoaded = true;
   } catch (err) {
     els.homeMarketList.innerHTML = `<div class="home-news-empty">시장 데이터 로드 실패: ${escapeHtml(err.message || err)}</div>`;
+  }
+}
+
+function decisionStatusClass(status) {
+  const key = String(status || "").toLowerCase();
+  if (["ok", "success"].includes(key)) return "ok";
+  if (["failed", "fail", "error"].includes(key)) return "fail";
+  if (["partial", "warn", "stale", "empty", "credentials_missing"].includes(key)) return "warn";
+  return "muted";
+}
+
+function decisionEmpty(message) {
+  return `<div class="home-news-empty">${escapeHtml(message)}</div>`;
+}
+
+function decisionMetric(label, value, status = "") {
+  return `
+    <div class="decision-metric ${escapeHtml(decisionStatusClass(status))}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value ?? "-")}</strong>
+    </div>
+  `;
+}
+
+async function loadDataHealth(force = false) {
+  if (!els.homeDataHealth || (state.dataHealthLoaded && !force)) return;
+  els.homeDataHealth.innerHTML = decisionEmpty("Structured data mart health is loading.");
+  try {
+    const res = await fetch(API.dataHealth);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const summary = data.summary || {};
+    const status = summary.decision_status || data.status || "unknown";
+    const counts = data.table_counts || {};
+    const latest = data.latest_run || {};
+    const providerRows = Array.isArray(data.recent_provider_status) ? data.recent_provider_status.slice(0, 4) : [];
+    const qualityRows = Array.isArray(data.recent_quality_checks) ? data.recent_quality_checks.slice(0, 4) : [];
+    els.homeDataHealth.innerHTML = `
+      <div class="decision-status-row">
+        <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
+        <span>${escapeHtml(latest.finished_at || latest.started_at || "No update run recorded")}</span>
+      </div>
+      <div class="decision-metric-grid">
+        ${decisionMetric("Prices", _fmtNumber(counts.prices_daily), status)}
+        ${decisionMetric("Macro", _fmtNumber(counts.macro_observations), status)}
+        ${decisionMetric("News", _fmtNumber(counts.news_articles), status)}
+        ${decisionMetric("Failures", _fmtNumber(summary.failed_provider_rows), summary.failed_provider_rows ? "failed" : "ok")}
+      </div>
+      <div class="decision-list">
+        ${providerRows.length ? providerRows.map((row) => `
+          <div class="decision-list-row">
+            <span>${escapeHtml(row.provider || "provider")}</span>
+            <strong class="${escapeHtml(decisionStatusClass(row.status))}">${escapeHtml(row.status || "unknown")}</strong>
+          </div>
+        `).join("") : '<div class="muted small">No provider status rows yet.</div>'}
+      </div>
+      <div class="decision-list compact">
+        ${qualityRows.length ? qualityRows.map((row) => `
+          <div class="decision-list-row">
+            <span>${escapeHtml(row.check_name || "quality")}</span>
+            <strong class="${escapeHtml(decisionStatusClass(row.status))}">${escapeHtml(row.status || "unknown")}</strong>
+          </div>
+        `).join("") : '<div class="muted small">No quality checks recorded yet.</div>'}
+      </div>
+    `;
+    state.dataHealthLoaded = true;
+  } catch (err) {
+    els.homeDataHealth.innerHTML = decisionEmpty(`Data health failed: ${err.message || err}`);
+  }
+}
+
+async function loadAssetDetail() {
+  if (!els.assetDetailSurface || !els.assetDetailTicker) return;
+  const ticker = normalizeTickerToken(els.assetDetailTicker.value || "");
+  if (!ticker) {
+    els.assetDetailSurface.innerHTML = decisionEmpty("Ticker is required.");
+    return;
+  }
+  els.assetDetailSurface.innerHTML = decisionEmpty(`${ticker} prices are loading.`);
+  try {
+    const res = await fetch(API.dataPrices(ticker, 260));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const latest = data.latest || {};
+    if (!data.count) {
+      els.assetDetailSurface.innerHTML = decisionEmpty(`${ticker} has no stored prices. Run daily_update first.`);
+      return;
+    }
+    const rows = Array.isArray(data.items) ? data.items : [];
+    const first = rows[0] || {};
+    const last = rows[rows.length - 1] || {};
+    const firstPrice = Number(first.adjusted_close ?? first.close);
+    const lastPrice = Number(last.adjusted_close ?? last.close);
+    const periodReturn = Number.isFinite(firstPrice) && firstPrice > 0 && Number.isFinite(lastPrice)
+      ? (lastPrice / firstPrice - 1) * 100
+      : null;
+    els.assetDetailSurface.innerHTML = `
+      <div class="decision-status-row">
+        <span class="decision-badge ok">ok</span>
+        <span>${escapeHtml(String(data.count))} rows · ${escapeHtml(latest.source || "source unknown")}</span>
+      </div>
+      <div class="decision-metric-grid">
+        ${decisionMetric("Latest date", latest.date || "-", "ok")}
+        ${decisionMetric("Close", latest.adjusted_close ?? latest.close ?? "-", "ok")}
+        ${decisionMetric("Volume", _fmtNumber(latest.volume), "ok")}
+        ${decisionMetric("Period return", periodReturn === null ? "-" : fmtPct(periodReturn), periodReturn === null ? "warn" : "ok")}
+      </div>
+    `;
+  } catch (err) {
+    els.assetDetailSurface.innerHTML = decisionEmpty(`Asset detail failed: ${err.message || err}`);
+  }
+}
+
+async function runHomeBacktest() {
+  if (!els.backtestSurface || !els.backtestTicker) return;
+  const ticker = normalizeTickerToken(els.backtestTicker.value || "");
+  if (!ticker) {
+    els.backtestSurface.innerHTML = decisionEmpty("Ticker is required.");
+    return;
+  }
+  els.backtestSurface.innerHTML = decisionEmpty(`${ticker} backtest is running.`);
+  try {
+    const res = await fetch(API.backtestRun, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ticker,
+        strategy: els.backtestStrategy?.value || "buy_and_hold",
+        lookback_days: 756,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    const metrics = data.metrics || {};
+    const status = data.status || "unknown";
+    els.backtestSurface.innerHTML = `
+      <div class="decision-status-row">
+        <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
+        <span>${escapeHtml(data.date_range?.start || "-")} -> ${escapeHtml(data.date_range?.end || "-")} · ${escapeHtml(data.data_status || "")}</span>
+      </div>
+      <div class="decision-metric-grid">
+        ${decisionMetric("CAGR", fmtPct(Number(metrics.cagr || 0) * 100), status)}
+        ${decisionMetric("Sharpe", metrics.sharpe ?? "-", status)}
+        ${decisionMetric("MDD", fmtPct(Number(metrics.max_drawdown || 0) * 100), status)}
+        ${decisionMetric("Trades", _fmtNumber(metrics.trade_count), status)}
+      </div>
+      ${status === "success" ? "" : decisionEmpty(data.reason || "Backtest did not have enough stored data.")}
+    `;
+  } catch (err) {
+    els.backtestSurface.innerHTML = decisionEmpty(`Backtest failed: ${err.message || err}`);
+  }
+}
+
+async function runPortfolioOptimize() {
+  if (!els.portfolioSurface || !els.portfolioTickers) return;
+  const tickers = parseTickerInput(els.portfolioTickers.value || "");
+  if (!tickers.length) {
+    els.portfolioSurface.innerHTML = decisionEmpty("At least one ticker is required.");
+    return;
+  }
+  els.portfolioSurface.innerHTML = decisionEmpty("Portfolio optimization is running.");
+  try {
+    const res = await fetch(API.portfolioOptimize, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tickers,
+        method: els.portfolioMethod?.value || "equal_weight",
+        lookback_days: 756,
+        max_weight: 0.6,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    const weights = data.weights || {};
+    const entries = Object.entries(weights).sort((a, b) => Number(b[1]) - Number(a[1]));
+    const status = data.status || "unknown";
+    els.portfolioSurface.innerHTML = `
+      <div class="decision-status-row">
+        <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
+        <span>${escapeHtml(data.method || "")} · sum ${escapeHtml(String(data.sum_weights ?? "-"))}</span>
+      </div>
+      <div class="portfolio-weight-list">
+        ${entries.length ? entries.map(([ticker, weight]) => `
+          <div class="portfolio-weight-row">
+            <span>${escapeHtml(ticker)}</span>
+            <div><i style="width:${Math.max(2, Math.min(100, Number(weight) * 100))}%"></i></div>
+            <strong>${escapeHtml(fmtPct(Number(weight) * 100))}</strong>
+          </div>
+        `).join("") : '<div class="muted small">No weights available.</div>'}
+      </div>
+      ${(data.missing_assets || []).length ? `<div class="decision-warning">Missing data: ${escapeHtml(data.missing_assets.join(", "))}</div>` : ""}
+      ${(data.warnings || []).length ? `<div class="decision-warning">${escapeHtml(data.warnings.join(" "))}</div>` : ""}
+    `;
+  } catch (err) {
+    els.portfolioSurface.innerHTML = decisionEmpty(`Portfolio optimization failed: ${err.message || err}`);
   }
 }
 
@@ -3999,8 +4213,13 @@ function bindInputs() {
     loadDashboardNews(true);
     loadDashboardMarket(true);
     loadDashboardEquityHeatmap(true);
+    loadDataHealth(true);
     initializeTradingViewDashboard(true);
   });
+  if (els.dataHealthRefresh) els.dataHealthRefresh.addEventListener("click", () => loadDataHealth(true));
+  if (els.assetDetailLoad) els.assetDetailLoad.addEventListener("click", loadAssetDetail);
+  if (els.backtestRun) els.backtestRun.addEventListener("click", runHomeBacktest);
+  if (els.portfolioOptimize) els.portfolioOptimize.addEventListener("click", runPortfolioOptimize);
   if (els.historyToggleBtn) {
     els.historyToggleBtn.addEventListener("click", () => {
       state.historyExpanded = !state.historyExpanded;
@@ -4080,6 +4299,7 @@ function bindInputs() {
   initializeTradingViewDashboard(false);
   loadDashboardEquityHeatmap(false);
   loadDashboardMarket(false);
+  loadDataHealth(false);
   loadDashboardNews(false);
   if (els.watchlistAddBtn) {
     els.watchlistAddBtn.addEventListener("click", watchlistAddFromForm);

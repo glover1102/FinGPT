@@ -1,0 +1,220 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+from pipelines.factors.core import momentum_return
+from pipelines.backtest.metrics import performance_metrics
+
+
+@dataclass(frozen=True)
+class BacktestConfig:
+    strategy: str = "buy_and_hold"
+    short_window: int = 20
+    long_window: int = 50
+    transaction_cost_bps: float = 5.0
+    slippage_bps: float = 2.0
+    initial_capital: float = 1.0
+
+
+def run_backtest(price_rows: list[dict[str, Any]], config: BacktestConfig | None = None) -> dict[str, Any]:
+    config = config or BacktestConfig()
+    rows = [row for row in price_rows if _price(row) is not None]
+    rows.sort(key=lambda row: str(row.get("date") or ""))
+    if len(rows) < 2:
+        return {
+            "status": "partial",
+            "reason": "not_enough_price_history",
+            "strategy": config.strategy,
+            "equity_curve": [],
+            "trades": [],
+            "metrics": performance_metrics([]),
+        }
+
+    prices = [_price(row) for row in rows]
+    dates = [str(row.get("date") or "") for row in rows]
+    signals = _signals(prices, config)
+    cost = (float(config.transaction_cost_bps) + float(config.slippage_bps)) / 10000.0
+    equity = [float(config.initial_capital)]
+    trades: list[dict[str, Any]] = []
+    prev_position = 0.0
+    for idx in range(1, len(prices)):
+        position = signals[idx - 1]  # previous close signal prevents lookahead
+        daily_return = prices[idx] / prices[idx - 1] - 1.0 if prices[idx - 1] else 0.0
+        turnover = abs(position - prev_position)
+        if turnover > 0:
+            trades.append({"date": dates[idx], "from": prev_position, "to": position, "turnover": turnover})
+        equity.append(equity[-1] * (1.0 + position * daily_return - turnover * cost))
+        prev_position = position
+
+    metrics = performance_metrics(equity)
+    metrics.update(
+        {
+            "turnover": round(sum(trade["turnover"] for trade in trades), 6),
+            "exposure": round(sum(abs(signal) for signal in signals[:-1]) / max(len(signals) - 1, 1), 6),
+            "trade_count": len(trades),
+        }
+    )
+    return {
+        "status": "success",
+        "strategy": config.strategy,
+        "assumptions": {
+            "transaction_cost_bps": config.transaction_cost_bps,
+            "slippage_bps": config.slippage_bps,
+            "lookahead_policy": "signals are applied one bar after calculation",
+        },
+        "date_range": {"start": dates[0], "end": dates[-1]},
+        "equity_curve": [{"date": date, "equity": round(value, 8)} for date, value in zip(dates, equity)],
+        "trades": trades,
+        "metrics": metrics,
+    }
+
+
+def _price(row: dict[str, Any]) -> float | None:
+    value = row.get("adjusted_close")
+    if value is None:
+        value = row.get("close")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _signals(prices: list[float], config: BacktestConfig) -> list[float]:
+    strategy = str(config.strategy or "buy_and_hold").lower()
+    if strategy == "buy_and_hold":
+        return [1.0 for _ in prices]
+    if strategy == "moving_average":
+        out: list[float] = []
+        for idx in range(len(prices)):
+            if idx + 1 < config.long_window:
+                out.append(0.0)
+                continue
+            short_avg = sum(prices[idx + 1 - config.short_window: idx + 1]) / config.short_window
+            long_avg = sum(prices[idx + 1 - config.long_window: idx + 1]) / config.long_window
+            out.append(1.0 if short_avg > long_avg else 0.0)
+        return out
+    if strategy == "volatility_targeting":
+        out = []
+        target_vol = 0.12
+        for idx in range(len(prices)):
+            if idx < 21:
+                out.append(0.0)
+                continue
+            window = prices[idx - 21: idx + 1]
+            returns = [window[i] / window[i - 1] - 1.0 for i in range(1, len(window)) if window[i - 1]]
+            vol = _stdev(returns) * (252 ** 0.5)
+            out.append(max(0.0, min(1.5, target_vol / vol)) if vol else 0.0)
+        return out
+    raise ValueError(f"unsupported strategy: {config.strategy}")
+
+
+def run_momentum_ranking_backtest(
+    prices_by_asset: dict[str, list[dict[str, Any]]],
+    *,
+    lookback: int = 21,
+    top_n: int = 1,
+    rebalance_every: int = 21,
+    config: BacktestConfig | None = None,
+) -> dict[str, Any]:
+    config = config or BacktestConfig(strategy="momentum_ranking")
+    series = {
+        asset.upper().strip(): sorted([row for row in rows if _price(row) is not None], key=lambda row: str(row.get("date") or ""))
+        for asset, rows in prices_by_asset.items()
+        if str(asset).strip()
+    }
+    series = {asset: rows for asset, rows in series.items() if len(rows) >= lookback + 2}
+    if not series:
+        return {
+            "status": "partial",
+            "reason": "not_enough_price_history",
+            "strategy": "momentum_ranking",
+            "equity_curve": [],
+            "trades": [],
+            "metrics": performance_metrics([]),
+        }
+
+    common_dates = sorted(set.intersection(*(set(str(row.get("date") or "") for row in rows) for rows in series.values())))
+    if len(common_dates) < lookback + 2:
+        return {
+            "status": "partial",
+            "reason": "not_enough_common_history",
+            "strategy": "momentum_ranking",
+            "equity_curve": [],
+            "trades": [],
+            "metrics": performance_metrics([]),
+        }
+
+    prices = {
+        asset: {str(row.get("date") or ""): _price(row) for row in rows}
+        for asset, rows in series.items()
+    }
+    top_n = max(1, min(int(top_n), len(prices)))
+    rebalance_every = max(1, int(rebalance_every))
+    cost = (float(config.transaction_cost_bps) + float(config.slippage_bps)) / 10000.0
+    equity = [float(config.initial_capital)]
+    weights = {asset: 0.0 for asset in prices}
+    trades: list[dict[str, Any]] = []
+    selected_history: list[dict[str, Any]] = []
+    exposure_history: list[float] = []
+
+    for idx in range(1, len(common_dates)):
+        date = common_dates[idx]
+        prev_date = common_dates[idx - 1]
+        if idx > lookback and (idx - lookback - 1) % rebalance_every == 0:
+            scores: list[tuple[str, float]] = []
+            for asset in prices:
+                history = [prices[asset][d] for d in common_dates[:idx] if prices[asset].get(d) is not None]
+                score = momentum_return(history, lookback=lookback)
+                if score is not None:
+                    scores.append((asset, score))
+            selected = [asset for asset, _ in sorted(scores, key=lambda item: item[1], reverse=True)[:top_n]]
+            next_weights = {asset: (1.0 / len(selected) if asset in selected and selected else 0.0) for asset in prices}
+            turnover = sum(abs(next_weights[asset] - weights.get(asset, 0.0)) for asset in prices)
+            if turnover:
+                trades.append({"date": date, "turnover": round(turnover, 8), "selected": selected})
+            weights = next_weights
+            selected_history.append({"date": date, "selected": selected})
+        exposure_history.append(sum(abs(weight) for weight in weights.values()))
+        daily_return = 0.0
+        for asset, weight in weights.items():
+            prev_price = prices[asset].get(prev_date)
+            current_price = prices[asset].get(date)
+            if not prev_price or current_price is None:
+                continue
+            daily_return += weight * (current_price / prev_price - 1.0)
+        turnover_cost = trades[-1]["turnover"] * cost if trades and trades[-1]["date"] == date else 0.0
+        equity.append(equity[-1] * (1.0 + daily_return - turnover_cost))
+
+    metrics = performance_metrics(equity)
+    metrics.update(
+        {
+            "turnover": round(sum(trade["turnover"] for trade in trades), 6),
+            "exposure": round(sum(exposure_history) / max(len(exposure_history), 1), 6),
+            "trade_count": len(trades),
+        }
+    )
+    return {
+        "status": "success",
+        "strategy": "momentum_ranking",
+        "assumptions": {
+            "lookback": lookback,
+            "top_n": top_n,
+            "rebalance_every": rebalance_every,
+            "transaction_cost_bps": config.transaction_cost_bps,
+            "slippage_bps": config.slippage_bps,
+            "lookahead_policy": "ranking uses history through the previous close before applying weights",
+        },
+        "date_range": {"start": common_dates[0], "end": common_dates[-1]},
+        "equity_curve": [{"date": date, "equity": round(value, 8)} for date, value in zip(common_dates, equity)],
+        "trades": trades,
+        "selected_history": selected_history,
+        "metrics": metrics,
+    }
+
+
+def _stdev(values: list[float]) -> float:
+    if len(values) < 2:
+        return 0.0
+    mean = sum(values) / len(values)
+    return (sum((value - mean) ** 2 for value in values) / (len(values) - 1)) ** 0.5

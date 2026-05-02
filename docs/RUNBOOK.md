@@ -24,6 +24,10 @@ Copy `.env.example` to `.env` and set:
 - `QDRANT_API_KEY`: optional unless your Qdrant requires auth
 - `OLLAMA_BASE_URL`: defaults to `http://localhost:11434`
 - `PRIMARY_MODEL`: keep as `qwen2.5:7b`
+- `DATA_MART_BACKEND`: defaults to `sqlite`
+- `DATA_MART_DB_PATH`: defaults to `data/research_mart.db`; structured price, macro, news, provider, quality, backtest input data lives here
+- `DATA_MART_DUCKDB_PATH`: optional analytics backend path for future DuckDB workloads
+- `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`: optional; when both are set, `scripts/run_daily_update.ps1` sends retry/failure alerts
 - `ENABLE_EXPERIMENTAL_FALLBACK`: keep `false` in production
 - `EXPERIMENTAL_FALLBACK_MODEL`: keep as `gemma4:e4b` only for explicit experiments
 
@@ -142,6 +146,63 @@ python app/cli/main.py --ticker MSFT --question "Summarize recent earnings risks
 
 Default sources are `news transcript`. `report` is a known but disabled source and should not be used as the only source.
 
+## Structured Data Mart Operations
+The structured mart is intentionally separate from `data/runs.db` and Qdrant:
+
+- `data/runs.db`: research execution history only.
+- `data/research_mart.db`: assets, daily prices, macro observations, news article metadata, filings, data-update runs, provider status, and quality checks.
+- Qdrant: text evidence chunks for current-run retrieval.
+
+Initialize or inspect the mart:
+```powershell
+python scripts/daily_update.py --market us --dry-run --skip-news --skip-macro --json
+python scripts/daily_update.py --market us --start-date 2025-01-01 --json
+python scripts/daily_update.py --market kr --skip-macro --json
+```
+
+Watchlists live at:
+```text
+config/watchlists/core_us.yaml
+config/watchlists/core_kr.yaml
+```
+
+Operational interpretation:
+- `provider_status.status=ok`: provider returned usable rows.
+- `provider_status.status=partial`: some tickers/series failed; inspect `details_json`.
+- `provider_status.status=credentials_missing`: expected for FRED until `FRED_API_KEY` is set.
+- `data_quality_checks.status=warn`: data is stale or incomplete; UI must not render this as success.
+- `data_quality_checks.status=fail`: duplicate or structurally invalid data; fix before using reports for decisions.
+
+Manual stale-data recovery:
+```powershell
+python scripts/daily_update.py --market us --retry-failed --json
+python scripts/daily_update.py --market us --watchlist config/watchlists/core_us.yaml --start-date 2024-01-01 --json
+```
+
+If the mart DB is corrupt, move it aside rather than deleting it blindly:
+```powershell
+Move-Item data/research_mart.db data/research_mart.db.bak
+python scripts/daily_update.py --market us --json
+```
+
+## Windows Daily Scheduler
+Use `scripts/run_daily_update.ps1` from Windows Task Scheduler. It activates `.venv` when present, runs `scripts/daily_update.py`, retries once after 5 minutes, then runs a fallback attempt without news capture. Telegram alerts are sent only when `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set.
+
+Recommended Asia/Seoul schedules:
+- 07:00: US close update.
+- 18:00: Korea close update.
+- 22:00: US premarket issue update.
+
+Example Task Scheduler action:
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File F:\LLM\FinGPT\scripts\run_daily_update.ps1 -Market us
+```
+
+For Korea close:
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File F:\LLM\FinGPT\scripts\run_daily_update.ps1 -Market kr -SkipMacro
+```
+
 ## Verification Gate
 Run this after infrastructure changes or before calling the system production-ready:
 ```powershell
@@ -205,6 +266,11 @@ python scripts/profile_topic_latency.py
 | `no usable primary source` | All requested primary sources ended in `timeout`, `failed`, or `empty`. | Treat the run as collection-degraded and investigate Yahoo Finance/network access before trusting output. |
 | `no usable current-run primary documents` | The run has no fresh primary evidence from this execution. | The pipeline should skip retrieval/inference and return `partial`; do not override this with old Qdrant context. |
 | `stale Qdrant context blocked` | Qdrant returned chunks, but none matched current-run `doc_id`s. | Treat as correct safety behavior; inspect collection coverage rather than retrieval tuning first. |
+| `data mart empty` | `data/research_mart.db` exists but prices/macro tables have no usable rows. | Run `python scripts/daily_update.py --market us --json`, then check `/api/v1/data/health`. |
+| `provider_status partial` | Daily update completed with one or more failed tickers/series. | Inspect `details_json`, rerun with `--retry-failed`, and treat downstream UI/report output as partial until fixed. |
+| `macro credentials_missing` | FRED was skipped because `FRED_API_KEY` is unset. | This is warning-only for local default runs; set `FRED_API_KEY` before relying on macro regime analysis. |
+| `prices_freshness warn` | Latest stored daily price is older than the quality threshold. | Re-run the relevant watchlist after market close; do not present the stored price snapshot as fresh. |
+| `scheduler fallback mode` | `run_daily_update.ps1` reached the third attempt and skipped news capture. | Treat the update as recovered but partial; check provider status and optional Telegram alert text. |
 | `JSON malformed/truncated after retry` | Ollama stayed reachable, but `qwen2.5:7b` still failed structured output after the built-in self-retry. | Treat this as local inference instability. Restart Ollama, confirm `qwen2.5:7b` is intact, then rerun `scripts/verify_production_path.ps1 -RunQualityReview`. |
 | `status=failed` | Required subsystem broke or inference aborted. Treat as non-usable output. | Fix the failing dependency first. |
 | `status=partial` | Pipeline completed, but evidence coverage degraded. Use with caution. | Check `error_metadata`, retrieval depth, and source freshness. |

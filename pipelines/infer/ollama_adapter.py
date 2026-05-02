@@ -153,6 +153,7 @@ _SYSTEM_PROMPT = (
     "3. CROSS-DOCUMENT VALIDATION: Prioritize evidence corroborated by multiple sources. Explicitly flag material contradictions between documents.\n"
     "4. PRECISION: Be specific with numbers, names, and technical terms. Avoid vague boilerplate like 'increased competition'; specify WHO the competitor is and WHAT the quantified impact is.\n"
     "5. QUANTIFY IMPACT: Whenever the context contains numerical evidence (EPS, revenue, guidance, growth rate, margin, yield, price target, AUM, rates), extract the exact figure into key_metrics with its source context and source DATE as as_of. If a narrative sentence repeats a number, include the date basis in that sentence as well. Do not hallucinate numbers that are not present in the documents.\n"
+    "5a. STRUCTURED DATA POLICY: If a context block is labeled STRUCTURED DATA MART CONTEXT, treat it as the authoritative source for numeric price, macro, factor, and risk values. Use retrieved news, filings, and transcripts for qualitative interpretation and citations, not for inventing or overriding stored numeric values.\n"
     "6. SOURCE HIERARCHY: When weighing evidence, treat official filings and earnings-call transcripts as higher-tier than secondary news; treat primary issuer sources as higher-tier than syndicated wire copies. Contradictions between tiers must be called out.\n"
     "7. EXPLICIT UNCERTAINTY: If evidence is thin, stale, or contradictory, state this candidly in the uncertainty field and list concrete data the reader would need next in open_questions. Do not paper over gaps with boilerplate optimism.\n"
     "8. CHAIN-OF-THOUGHT DISCIPLINE: Before writing bull_points / bear_points, mentally enumerate every distinct material event in the retrieved context, then keep only the ones that are directly investable. Drop filler and duplicates.\n"
@@ -269,7 +270,8 @@ def _build_ollama_prompt(
         "DOMAIN PLAYBOOK: Apply the relevant domain-specific decision variables from the system prompt. "
         "For example, do not analyze a commodity ETF like a software company, or a bank like a growth-stock ETF.\n"
         "REPORT SHAPE: Internally answer as a buy-side decision memo: Summary, Core Analysis, Synthesis, Decision Edge, Conclusion. "
-        "The JSON fields must contain the raw material for that memo: compact summary, distinct bull/bear points, concrete risk scenarios, catalysts, pricing tension, and view-change triggers."
+        "The JSON fields must contain the raw material for that memo: compact summary, distinct bull/bear points, concrete risk scenarios, catalysts, pricing tension, and view-change triggers. "
+        "If STRUCTURED DATA MART CONTEXT is present, use it as authoritative numeric evidence and do not invent numbers."
     )
 
     fundamentals_block = _fundamentals_prompt_block(fundamentals)

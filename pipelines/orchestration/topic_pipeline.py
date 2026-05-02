@@ -33,6 +33,11 @@ from core.utils.query_planner import plan_query
 from pipelines.analyze.topic_quant import build_topic_quant_snapshot, key_metrics_from_quant_snapshot
 from pipelines.analyze.topic_report_builder import build_topic_report
 from pipelines.collect.topic_collector import collect_topic_bundle
+from pipelines.data_mart.context.structured_context import (
+    build_structured_context,
+    structured_context_metrics,
+    structured_context_to_retrieval_item,
+)
 from pipelines.infer.topic_prompt import (
     build_evidence_pack,
     build_topic_plan,
@@ -1732,6 +1737,17 @@ async def run_topic_pipeline_async(
         request.related_tickers,
         fast_context,
     )
+    structured_context = await asyncio.to_thread(
+        build_structured_context,
+        request.related_tickers[0] if request.related_tickers else theme,
+        related_tickers=request.related_tickers,
+    )
+    structured_item = structured_context_to_retrieval_item(structured_context)
+    if structured_item is not None:
+        fast_context.append(structured_item)
+        quant_snapshot.setdefault("metrics", [])
+        quant_snapshot["metrics"].extend(structured_context_metrics(structured_context))
+        quant_snapshot["structured_context"] = structured_context
 
     infer_fast_started = time.time()
     _emit(event_sink, "stage_started", stage="infer", phase="fast", chunks=len(fast_context))
@@ -1870,6 +1886,9 @@ async def run_topic_pipeline_async(
             "missing_evidence_buckets": fast_meta.get("missing_evidence_buckets"),
             "substituted_buckets": fast_meta.get("substituted_buckets") or list((quant_snapshot or {}).get("substituted_buckets") or []),
             "quant_snapshot": fast_meta.get("quant_snapshot") or quant_snapshot,
+            "structured_context": structured_context,
+            "data_mart_freshness": structured_context.get("freshness") if isinstance(structured_context, dict) else {},
+            "data_quality_summary": structured_context.get("data_quality_summary") if isinstance(structured_context, dict) else {},
             "llm_skipped_reason": fast_meta.get("llm_skipped_reason") or "",
             "metric_as_of_coverage": partial_metric_coverage,
             "claim_evidence_date_coverage": partial_claim_coverage,
@@ -2162,6 +2181,9 @@ async def run_topic_pipeline_async(
             "warning_evidence_buckets": warning_buckets,
             "blocking_evidence_buckets": blocking_buckets,
             "quant_snapshot": final_meta.get("quant_snapshot") or fast_meta.get("quant_snapshot") or quant_snapshot,
+            "structured_context": structured_context,
+            "data_mart_freshness": structured_context.get("freshness") if isinstance(structured_context, dict) else {},
+            "data_quality_summary": structured_context.get("data_quality_summary") if isinstance(structured_context, dict) else {},
             "llm_skipped_reason": final_meta.get("llm_skipped_reason") or fast_meta.get("llm_skipped_reason") or "",
             "metric_as_of_coverage": metric_coverage,
             "claim_evidence_date_coverage": claim_date_coverage,

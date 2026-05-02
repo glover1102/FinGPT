@@ -42,6 +42,11 @@ from pipelines.analyze.risk_analysis import HeuristicRiskEngine
 from pipelines.analyze.risk_factory import get_risk_engine
 from pipelines.analyze.thesis_builder import build_thesis
 from pipelines.analyze.report_builder import build_report
+from pipelines.data_mart.context.structured_context import (
+    build_structured_context,
+    structured_context_metrics,
+    structured_context_to_retrieval_item,
+)
 from pipelines.output.output_writer import save_outputs
 from pipelines.orchestration.precheck import run_execution_precheck
 from core.config.settings import load_settings
@@ -79,7 +84,14 @@ def _inference_timeout_s() -> float:
     """Keep production inference unchanged while bounding validation smoke runs."""
 
     if os.environ.get("FINGPT_VALIDATION_FAST_INFERENCE", "").strip().lower() in {"1", "true", "yes"}:
-        return 60.0
+        return float(
+            _coerce_int(
+                os.environ.get("FINGPT_VALIDATION_INFERENCE_TIMEOUT_S"),
+                60,
+                lower=10,
+                upper=300,
+            )
+        )
     return 300.0
 
 
@@ -1219,92 +1231,105 @@ async def run_pipeline_async(
             )
 
         task_type, horizon = _detect_lens(request.question)
+        structured_context = await asyncio.to_thread(build_structured_context, request_ticker)
+        structured_context_item = structured_context_to_retrieval_item(structured_context)
+        structured_metric_dicts = structured_context_metrics(structured_context)
 
         if not current_doc_ids:
+            if structured_context_item is None:
+                status = "partial"
+                stale_block_reason = (
+                    "No usable current-run primary documents; stale Qdrant context blocked."
+                    if _primary_collection_failed(collection_outcome)
+                    else "No usable current-run documents; stale Qdrant context blocked."
+                )
+                error_metadata = _merge_error_metadata(
+                    error_metadata,
+                    stale_block_reason,
+                )
+                logger.warning("[RETRIEVAL_SKIPPED] No current-run documents. Blocking stale Qdrant context.")
+                response = _build_no_context_response(
+                    request,
+                    status=status,
+                    error_metadata=error_metadata,
+                    task_type=task_type,
+                    horizon=horizon,
+                    fundamentals=fundamentals_card,
+                )
+                return await _finalize_response(
+                    request,
+                    response,
+                    start_time=start_time,
+                    collection_outcome=collection_outcome,
+                    stages_ran=stages_ran,
+                    event_sink=event_sink,
+                )
             status = "partial"
-            stale_block_reason = (
-                "No usable current-run primary documents; stale Qdrant context blocked."
-                if _primary_collection_failed(collection_outcome)
-                else "No usable current-run documents; stale Qdrant context blocked."
-            )
             error_metadata = _merge_error_metadata(
                 error_metadata,
-                stale_block_reason,
+                "No usable current-run documents; using structured data mart numeric context only.",
             )
-            logger.warning("[RETRIEVAL_SKIPPED] No current-run documents. Blocking stale Qdrant context.")
-            response = _build_no_context_response(
-                request,
-                status=status,
-                error_metadata=error_metadata,
-                task_type=task_type,
-                horizon=horizon,
-                fundamentals=fundamentals_card,
+            logger.warning("[RETRIEVAL_SKIPPED] No current-run documents. Using data mart structured context only.")
+            context_items = [structured_context_item]
+        else:
+            # 3. Retrieve
+            settings_for_retrieval = load_settings()
+            strategy = (getattr(settings_for_retrieval, "retrieval_strategy", "multi_query") or "multi_query").lower()
+            use_multi_query = strategy == "multi_query"
+            retrieval_limit = max(request.top_k * 5, 25)
+            logger.info(
+                "Retrieving relevant context... (strategy=%s limit=%d top_k=%d)",
+                strategy,
+                retrieval_limit,
+                request.top_k,
             )
-            return await _finalize_response(
-                request,
-                response,
-                start_time=start_time,
-                collection_outcome=collection_outcome,
-                stages_ran=stages_ran,
-                event_sink=event_sink,
-            )
-
-        # 3. Retrieve
-        settings_for_retrieval = load_settings()
-        strategy = (getattr(settings_for_retrieval, "retrieval_strategy", "multi_query") or "multi_query").lower()
-        use_multi_query = strategy == "multi_query"
-        retrieval_limit = max(request.top_k * 5, 25)
-        logger.info(
-            "Retrieving relevant context... (strategy=%s limit=%d top_k=%d)",
-            strategy,
-            retrieval_limit,
-            request.top_k,
-        )
-        _emit(
-            event_sink,
-            "stage_started",
-            stage="retrieve",
-            top_k=request.top_k,
-            limit=retrieval_limit,
-            strategy=strategy,
-        )
-        retrieve_started = time.time()
-        retriever_callable = retrieve_context_multi if use_multi_query else retrieve_context
-        try:
-            context_items = await asyncio.wait_for(
-                asyncio.to_thread(retriever_callable, request_ticker, request.question, retrieval_limit),
-                timeout=20.0
-            )
-            stages_ran.append("retrieve")
             _emit(
                 event_sink,
-                "stage_completed",
+                "stage_started",
                 stage="retrieve",
-                duration_s=round(time.time() - retrieve_started, 2),
-                chunks=len(context_items),
+                top_k=request.top_k,
+                limit=retrieval_limit,
+                strategy=strategy,
             )
-        except getattr(asyncio.exceptions, "TimeoutError", asyncio.TimeoutError):
-            logger.error("Qdrant retrieve timed out.")
-            context_items = []
-            status = "partial"
-            error_metadata = _merge_error_metadata(error_metadata, "Retrieval timed out.")
-            _emit(event_sink, "stage_completed", stage="retrieve", duration_s=round(time.time() - retrieve_started, 2), status="timeout")
-        except Exception as exc:  # noqa: BLE001
-            logger.error("[RETRIEVAL_FAILED] %s", exc)
-            context_items = []
-            status = "partial"
-            error_metadata = _merge_error_metadata(error_metadata, f"Retrieval failed: {exc}")
-            _emit(
-                event_sink,
-                "stage_completed",
-                stage="retrieve",
-                duration_s=round(time.time() - retrieve_started, 2),
-                status="failed",
-                error=str(exc),
-            )
+            retrieve_started = time.time()
+            retriever_callable = retrieve_context_multi if use_multi_query else retrieve_context
+            try:
+                context_items = await asyncio.wait_for(
+                    asyncio.to_thread(retriever_callable, request_ticker, request.question, retrieval_limit),
+                    timeout=20.0
+                )
+                stages_ran.append("retrieve")
+                _emit(
+                    event_sink,
+                    "stage_completed",
+                    stage="retrieve",
+                    duration_s=round(time.time() - retrieve_started, 2),
+                    chunks=len(context_items),
+                )
+            except getattr(asyncio.exceptions, "TimeoutError", asyncio.TimeoutError):
+                logger.error("Qdrant retrieve timed out.")
+                context_items = []
+                status = "partial"
+                error_metadata = _merge_error_metadata(error_metadata, "Retrieval timed out.")
+                _emit(event_sink, "stage_completed", stage="retrieve", duration_s=round(time.time() - retrieve_started, 2), status="timeout")
+            except Exception as exc:  # noqa: BLE001
+                logger.error("[RETRIEVAL_FAILED] %s", exc)
+                context_items = []
+                status = "partial"
+                error_metadata = _merge_error_metadata(error_metadata, f"Retrieval failed: {exc}")
+                _emit(
+                    event_sink,
+                    "stage_completed",
+                    stage="retrieve",
+                    duration_s=round(time.time() - retrieve_started, 2),
+                    status="failed",
+                    error=str(exc),
+                )
 
-        context_items = _filter_current_run_context(context_items, current_doc_ids, request.top_k)
-        context_items = _append_priority_documents(context_items, collection_outcome.documents, top_k=request.top_k)
+            context_items = _filter_current_run_context(context_items, current_doc_ids, request.top_k)
+            context_items = _append_priority_documents(context_items, collection_outcome.documents, top_k=request.top_k)
+            if structured_context_item is not None:
+                context_items.append(structured_context_item)
         if not context_items:
             status = "partial"
             if current_doc_ids:
@@ -1467,7 +1492,7 @@ async def run_pipeline_async(
                     evidence_doc_ids=evidence_doc_ids,
                 )
             )
-        key_metrics = _merge_key_metric_dicts(key_metrics, technical_metric_dicts, context_items)
+        key_metrics = _merge_key_metric_dicts(key_metrics, [*structured_metric_dicts, *technical_metric_dicts], context_items)
 
         (
             sanitized_summary,
@@ -1540,6 +1565,9 @@ async def run_pipeline_async(
                 or model_capability_dict(str(getattr(request, "model", "") or ""), _meta.get("primary_model")),
                 "provider_status": _provider_statuses(collection_outcome),
                 "data_freshness": _data_freshness(context_items),
+                "structured_context": structured_context,
+                "data_mart_freshness": structured_context.get("freshness") if isinstance(structured_context, dict) else {},
+                "data_quality_summary": structured_context.get("data_quality_summary") if isinstance(structured_context, dict) else {},
                 "error_type": _classify_error_type(error_metadata, status),
             },
         )

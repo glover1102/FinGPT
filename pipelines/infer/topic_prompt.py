@@ -223,12 +223,20 @@ Domain-specific decision playbook:
 - General rule: do not invent numbers, keep document ids intact, and turn missing evidence into explicit uncertainty.
 """.strip()
 
+STRUCTURED_NUMERIC_EVIDENCE_POLICY = """
+Structured numeric evidence policy:
+- If the prompt includes STRUCTURED DATA MART CONTEXT or quant_snapshot metrics, use those stored values as authoritative numeric evidence.
+- Do not invent prices, returns, macro values, factor values, risk metrics, or portfolio weights.
+- Use RAG documents for qualitative interpretation, source citations, and catalyst/risk explanations.
+""".strip()
+
 TOPIC_SYSTEM_PROMPT = (
     "You are a senior macro and cross-asset strategist. "
     "Return only valid JSON matching the provided structured format. "
     "Do not wrap JSON in markdown fences. "
     "When Korean is requested, every descriptive field must be Korean. "
-    "Keep tickers, source titles, company names, and numeric values unchanged."
+    "Keep tickers, source titles, company names, and numeric values unchanged. "
+    f"{STRUCTURED_NUMERIC_EVIDENCE_POLICY}"
 )
 
 

@@ -270,6 +270,65 @@
               <div class="home-news-empty">시장 데이터를 불러오는 중입니다.</div>
             </div>
           </section>
+          <section class="home-card data-mart-card">
+            <div class="home-card-head">
+              <h3>Data Health</h3>
+              <button type="button" id="dataHealthRefresh" class="linkish">Refresh</button>
+            </div>
+            <div id="homeDataHealth" class="decision-surface">
+              <div class="home-news-empty">Structured data mart health is loading.</div>
+            </div>
+          </section>
+          <section class="home-card asset-detail-card">
+            <div class="home-card-head">
+              <h3>Asset Detail</h3>
+              <span>data mart prices</span>
+            </div>
+            <div class="decision-form compact-form">
+              <input id="assetDetailTicker" type="text" value="SPY" maxlength="24" aria-label="Asset detail ticker" />
+              <button type="button" id="assetDetailLoad" class="ghost-btn">Load</button>
+            </div>
+            <div id="assetDetailSurface" class="decision-surface">
+              <div class="home-news-empty">Select a ticker to inspect stored prices.</div>
+            </div>
+          </section>
+          <section class="home-card backtest-card">
+            <div class="home-card-head">
+              <h3>Backtest</h3>
+              <span>buy & hold baseline</span>
+            </div>
+            <div class="decision-form compact-form">
+              <input id="backtestTicker" type="text" value="SPY" maxlength="24" aria-label="Backtest ticker" />
+              <select id="backtestStrategy" aria-label="Backtest strategy">
+                <option value="buy_and_hold">Buy & hold</option>
+                <option value="moving_average">Moving average</option>
+                <option value="volatility_targeting">Vol targeting</option>
+              </select>
+              <button type="button" id="backtestRun" class="ghost-btn">Run</button>
+            </div>
+            <div id="backtestSurface" class="decision-surface">
+              <div class="home-news-empty">Run a stored-price backtest. Empty data will be shown as partial, not success.</div>
+            </div>
+          </section>
+          <section class="home-card portfolio-card">
+            <div class="home-card-head">
+              <h3>Portfolio</h3>
+              <span>optimizer</span>
+            </div>
+            <div class="decision-form compact-form">
+              <input id="portfolioTickers" type="text" value="SPY,TLT,GLD" maxlength="96" aria-label="Portfolio tickers" />
+              <select id="portfolioMethod" aria-label="Portfolio method">
+                <option value="equal_weight">Equal weight</option>
+                <option value="inverse_volatility">Inverse vol</option>
+                <option value="risk_parity">Risk parity</option>
+                <option value="max_sharpe">Max Sharpe</option>
+              </select>
+              <button type="button" id="portfolioOptimize" class="ghost-btn">Optimize</button>
+            </div>
+            <div id="portfolioSurface" class="decision-surface">
+              <div class="home-news-empty">Optimize with data-mart returns. Missing assets are reported explicitly.</div>
+            </div>
+          </section>
           <section class="home-card">
             <div class="home-card-head">
               <h3>주요 뉴스</h3>

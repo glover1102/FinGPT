@@ -206,6 +206,17 @@ class EvidenceIdNormalizationTests(unittest.TestCase):
 
 
 class TopicPipelineTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        super().setUp()
+        self._structured_context_patchers = [
+            patch.object(topic_pipeline, "build_structured_context", return_value={}),
+            patch.object(topic_pipeline, "structured_context_to_retrieval_item", return_value=None),
+            patch.object(topic_pipeline, "structured_context_metrics", return_value=[]),
+        ]
+        for patcher in self._structured_context_patchers:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     async def test_topic_pipeline_emits_partial_result_and_skips_deep_pass_when_fast_gate_is_enough(self):
         request = TopicRequest(
             question="거시경제와 금리 구조를 감안할 때 지금 TLT가 매력적인지 분석해줘.",

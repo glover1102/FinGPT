@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field, field_validator
 
 from app.api.openbb_agent import router as openbb_agent_router
 from core.schemas.request import (
@@ -35,10 +36,13 @@ from core.utils.eval_dashboard import load_eval_dashboard
 from core.utils.qdrant_admin import get_collection_info, purge_points
 from pipelines.collect.cache import get_cache as get_collection_cache
 from pipelines.collect.google_news_rss import collect_news_from_google_rss
+from pipelines.backtest.engine import BacktestConfig, run_backtest
+from pipelines.data_mart.storage.repository import data_health as data_mart_health, get_prices as data_mart_get_prices
 from pipelines.output.exporters import response_to_csv, response_to_jsonl
 from pipelines.orchestration.dispatch import dispatch_async
 from pipelines.orchestration.research_pipeline import run_pipeline_async
 from pipelines.analyze.portfolio_quant import analyze_portfolio_risk
+from pipelines.portfolio.optimizer import optimize_portfolio
 from pipelines.output.run_history import (
     get_run as history_get_run,
     list_runs as history_list_runs,
@@ -75,6 +79,53 @@ SUPPORTED_INFERENCE_ROUTES = (
 )
 
 _NON_COMPANY_DIRECT_ASSET_CLASSES = {"bond_etf", "commodity_etf", "forex", "futures", "crypto"}
+
+
+class BacktestRunRequest(BaseModel):
+    ticker: str | None = Field(default=None)
+    strategy: str = Field(default="buy_and_hold")
+    lookback_days: int = Field(default=252, ge=2, le=5000)
+    short_window: int = Field(default=20, ge=1, le=252)
+    long_window: int = Field(default=50, ge=2, le=756)
+    transaction_cost_bps: float = Field(default=5.0, ge=0, le=1000)
+    slippage_bps: float = Field(default=2.0, ge=0, le=1000)
+    initial_capital: float = Field(default=1.0, gt=0)
+    price_rows: list[dict[str, Any]] | None = None
+
+    @field_validator("ticker", mode="before")
+    @classmethod
+    def _clean_ticker(cls, value: Any) -> str | None:
+        cleaned = str(value or "").strip().upper()
+        return cleaned or None
+
+    @field_validator("strategy", mode="before")
+    @classmethod
+    def _clean_strategy(cls, value: Any) -> str:
+        return str(value or "buy_and_hold").strip().lower()
+
+
+class PortfolioOptimizeRequest(BaseModel):
+    tickers: list[str] = Field(default_factory=list)
+    method: str = Field(default="equal_weight")
+    lookback_days: int = Field(default=252, ge=2, le=5000)
+    max_weight: float = Field(default=1.0, gt=0, le=1.0)
+    returns_by_asset: dict[str, list[float]] | None = None
+
+    @field_validator("tickers", mode="before")
+    @classmethod
+    def _clean_tickers(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            raw = value.replace(",", " ").split()
+        else:
+            raw = list(value)
+        return [str(item or "").strip().upper() for item in raw if str(item or "").strip()]
+
+    @field_validator("method", mode="before")
+    @classmethod
+    def _clean_method(cls, value: Any) -> str:
+        return str(value or "equal_weight").strip().lower()
 
 _EQUITY_HEATMAP_UNIVERSE: tuple[dict[str, Any], ...] = (
     {"symbol": "NVDA", "label": "NVIDIA", "sector": "전자 기술", "weight": 10.0},
@@ -341,6 +392,120 @@ async def portfolio_risk(request: PortfolioRiskRequest) -> PortfolioRiskResponse
     """Deterministic portfolio concentration, factor exposure, and stress analysis."""
 
     return await asyncio.to_thread(analyze_portfolio_risk, request)
+
+
+@app.get("/api/v1/data/health")
+async def data_health() -> Dict[str, Any]:
+    """Structured data mart health, update history, provider status, and quality checks."""
+
+    payload = await asyncio.to_thread(data_mart_health)
+    provider_rows = payload.get("recent_provider_status") or []
+    quality_rows = payload.get("recent_quality_checks") or []
+    failed = [row for row in provider_rows if str(row.get("status") or "").lower() in {"failed", "error"}]
+    stale = [row for row in quality_rows if str(row.get("status") or "").lower() in {"warn", "fail"}]
+    payload["summary"] = {
+        "provider_rows": len(provider_rows),
+        "failed_provider_rows": len(failed),
+        "quality_rows": len(quality_rows),
+        "stale_or_failed_quality_rows": len(stale),
+        "decision_status": "failed" if failed else ("partial" if stale else "ok"),
+    }
+    return payload
+
+
+@app.get("/api/v1/data/prices/{ticker}")
+async def data_prices(ticker: str, limit: int = 252) -> Dict[str, Any]:
+    """Return normalized daily prices from the structured data mart."""
+
+    clean_ticker = str(ticker or "").strip().upper()
+    if not clean_ticker:
+        raise HTTPException(status_code=422, detail="ticker is required")
+    limit = max(1, min(int(limit or 252), 5000))
+    rows = await asyncio.to_thread(data_mart_get_prices, clean_ticker, limit=limit)
+    latest = rows[-1] if rows else None
+    return {
+        "status": "ok" if rows else "empty",
+        "ticker": clean_ticker,
+        "count": len(rows),
+        "latest": latest,
+        "items": rows,
+    }
+
+
+@app.post("/api/v1/backtest/run")
+async def backtest_run(request: BacktestRunRequest) -> Dict[str, Any]:
+    """Run a deterministic backtest against data-mart prices or explicit request rows."""
+
+    rows = list(request.price_rows or [])
+    data_status = "request_rows" if rows else "data_mart"
+    if not rows:
+        if not request.ticker:
+            raise HTTPException(status_code=422, detail="ticker or price_rows is required")
+        rows = await asyncio.to_thread(data_mart_get_prices, request.ticker, limit=request.lookback_days)
+    config = BacktestConfig(
+        strategy=request.strategy,
+        short_window=request.short_window,
+        long_window=request.long_window,
+        transaction_cost_bps=request.transaction_cost_bps,
+        slippage_bps=request.slippage_bps,
+        initial_capital=request.initial_capital,
+    )
+    try:
+        result = await asyncio.to_thread(run_backtest, rows, config)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    result["ticker"] = request.ticker
+    result["price_count"] = len(rows)
+    result["data_status"] = data_status if rows else "empty"
+    return result
+
+
+@app.post("/api/v1/portfolio/optimize")
+async def portfolio_optimize(request: PortfolioOptimizeRequest) -> Dict[str, Any]:
+    """Optimize portfolio weights from supplied returns or data-mart daily prices."""
+
+    returns_by_asset = dict(request.returns_by_asset or {})
+    missing: list[str] = []
+    if not returns_by_asset:
+        if not request.tickers:
+            raise HTTPException(status_code=422, detail="tickers or returns_by_asset is required")
+        for ticker in request.tickers:
+            rows = await asyncio.to_thread(data_mart_get_prices, ticker, limit=request.lookback_days)
+            returns = _returns_from_price_rows(rows)
+            if returns:
+                returns_by_asset[ticker] = returns
+            else:
+                missing.append(ticker)
+    try:
+        result = await asyncio.to_thread(
+            optimize_portfolio,
+            returns_by_asset,
+            method=request.method,
+            max_weight=request.max_weight,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    result["missing_assets"] = missing
+    result["data_status"] = "request_returns" if request.returns_by_asset else ("partial" if missing else "data_mart")
+    return result
+
+
+def _returns_from_price_rows(rows: list[dict[str, Any]]) -> list[float]:
+    returns: list[float] = []
+    prices: list[float] = []
+    for row in sorted(rows, key=lambda item: str(item.get("date") or "")):
+        value = row.get("adjusted_close")
+        if value is None:
+            value = row.get("close")
+        try:
+            price = float(value)
+        except (TypeError, ValueError):
+            continue
+        if price > 0:
+            prices.append(price)
+    for idx in range(1, len(prices)):
+        returns.append(prices[idx] / prices[idx - 1] - 1.0)
+    return returns
 
 
 def _sse_pack(event: str, data: Any) -> bytes:

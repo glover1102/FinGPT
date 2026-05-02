@@ -22,14 +22,60 @@ graph TD
     N --> O[Outputs (JSON/Markdown/HTML)]
 ```
 
+The scheduled data path is additive to the request-time RAG path:
+
+```mermaid
+graph TD
+    S[Windows Task Scheduler / scripts/daily_update.py] --> P[Data providers]
+    P --> NORM[Normalization and quality checks]
+    NORM --> MART[(SQLite data/research_mart.db)]
+    MART --> CTX[Structured context builder]
+    CTX --> INF[pipelines/infer]
+    Q[(Qdrant evidence store)] --> INF
+    INF --> R[Report / API / UI]
+```
+
+Qdrant remains a document evidence store. Structured market data belongs in the data mart:
+
+- `data/research_mart.db`: assets, daily OHLCV, macro series/observations, article metadata, filings, update runs, provider status, quality checks.
+- `data/runs.db`: research execution history and output lookup only.
+- Qdrant: news, filings, transcripts, report chunks, and current-run evidence retrieval.
+
 ## Data Movement
 1. AnalysisRequest initializes the process.
 2. `collect` fetches bounded source-specific records, records per-source status, and saves a snapshot into `data/raw`.
 3. `ingest` processes, normalizes, chunks, and creates vectors inside Qdrant.
 4. `retrieve` translates the query and isolates exactly `top_k` documents to fit context windows.
-5. The model adapter accepts the `documents` array and the string query, outputs JSON.
-6. The analyze layer builds summaries.
-7. Save routines dump it to `data/outputs`.
+5. The structured context builder loads authoritative numeric price/macro/freshness data from `data/research_mart.db` when available.
+6. The model adapter accepts the `documents` array, structured context, and the string query, then outputs JSON.
+7. The analyze layer builds summaries.
+8. Save routines dump it to `data/outputs`.
+
+## Structured Data Mart Boundary
+
+`pipelines/data_mart` owns structured storage and scheduled updates:
+
+- `storage/schema.py`: idempotent SQLite DDL and schema version.
+- `storage/db.py`: SQLite connection setup, WAL mode, migration table, `init_db()`.
+- `storage/repository.py`: upsert/query APIs for prices, macro observations, news metadata, run logs, provider status, and quality checks.
+- `providers/*`: external provider adapters such as yfinance and FRED.
+- `jobs/*`: daily update orchestration and data quality checks.
+- `context/structured_context.py`: converts stored data into LLM-safe numeric context with source, `as_of`, and freshness metadata.
+
+LLM numeric policy:
+
+- Structured context is authoritative for numeric values.
+- RAG documents are qualitative/citation evidence.
+- If a required structured value is missing or stale, the report must surface partial/unknown state instead of inventing a metric.
+
+## Quant Analytics Boundary
+
+The deterministic quant layer is split by responsibility:
+
+- `pipelines/factors`: returns, momentum, volatility, drawdown, correlation, rate sensitivity.
+- `pipelines/backtest`: strategy execution, cost/slippage assumptions, no-lookahead signal application, metrics.
+- `pipelines/portfolio`: equal weight, inverse volatility, risk parity-style inverse-vol baseline, and max-Sharpe baseline optimizer.
+- `pipelines/analyze/portfolio_quant.py`: existing deterministic API baseline retained for `/api/v1/research/portfolio/risk`.
 
 ## Provider Boundary
 

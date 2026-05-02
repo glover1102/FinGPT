@@ -25,6 +25,10 @@ REQUIRED_UI_MARKERS: dict[str, str] = {
     "home news": 'id="homeNewsList"',
     "tradingview chart": 'id="tvOverviewWidget"',
     "intraday heatmap": 'id="homeHeatmap"',
+    "data health": 'id="homeDataHealth"',
+    "asset detail": 'id="assetDetailSurface"',
+    "backtest": 'id="backtestSurface"',
+    "portfolio optimizer": 'id="portfolioSurface"',
 }
 
 

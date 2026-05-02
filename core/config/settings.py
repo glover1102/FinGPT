@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     outputs_dir: Path = Field(default=OUTPUTS_DIR)
     raw_dir: Path = Field(default=RAW_DIR)
 
+    # Structured data mart. This is separate from ``data/runs.db`` (research
+    # execution history) and Qdrant (document evidence retrieval).
+    data_mart_backend: str = Field(default="sqlite")
+    data_mart_db_path: Path = Field(default=DATA_DIR / "research_mart.db")
+    data_mart_duckdb_path: Path = Field(default=DATA_DIR / "research_mart.duckdb")
+
     # Qdrant Database
     qdrant_url: str = Field(default="http://localhost:6333")
     qdrant_api_key: str = Field(default="")

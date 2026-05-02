@@ -1189,6 +1189,7 @@ def run_quality_gate() -> dict[str, Any]:
             str(QUALITY_RESULTS_PATH),
         ],
         timeout_s=7200,
+        extra_env={"FINGPT_VALIDATION_FAST_INFERENCE": "1", "FINGPT_VALIDATION_INFERENCE_TIMEOUT_S": "30"},
     )
     summary, artifact_error = _read_gate_summary(QUALITY_RESULTS_PATH)
     if artifact_error or not _artifact_gate_passed(summary):

@@ -70,6 +70,24 @@ powershell -ExecutionPolicy Bypass -File scripts/run_web.ps1
 - UI: `http://127.0.0.1:8000/ui/`
 - API 문서: `http://127.0.0.1:8000/docs`
 
+### Local Data Mart Update
+
+Structured financial data is stored separately from Qdrant in `data/research_mart.db`.
+Use this for daily prices, macro observations, provider status, and data quality checks:
+
+```bash
+python scripts/daily_update.py --market us --json
+python scripts/daily_update.py --market kr --skip-macro --json
+```
+
+For Windows Task Scheduler, use:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_daily_update.ps1 -Market us
+```
+
+Qdrant remains the document evidence store for news, filings, transcripts, and current-run RAG chunks. `data/runs.db` remains the research-run history database.
+
 수동으로 띄울 때는 다음 명령을 사용합니다.
 
 ```bash

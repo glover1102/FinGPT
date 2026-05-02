@@ -14,6 +14,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -633,7 +635,7 @@ async def run_quality_review(
     results: list[dict[str, Any]] = []
 
     for case in cases:
-        print(f"[{case['suite']}] {case['category']} :: {case['desc']}")
+        print(f"[{case['suite']}] {case['category']} :: {case['desc']}", flush=True)
         if case["suite"] == "analysis":
             result = await _run_analysis_case(case)
         else:
@@ -642,7 +644,8 @@ async def run_quality_review(
         tag = str(result["status"]).upper().ljust(7)
         print(
             f"  -> {tag} mode={result['mode']} model={result['model_used']} "
-            f"lang={result['language_ok']} gate={result['gate_pass']} elapsed={result['elapsed_s']}s"
+            f"lang={result['language_ok']} gate={result['gate_pass']} elapsed={result['elapsed_s']}s",
+            flush=True,
         )
 
     status_counts: dict[str, int] = {}
@@ -697,15 +700,15 @@ async def run_quality_review(
     if legacy_output.resolve() != primary_output.resolve():
         legacy_output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    print("\n============================================================")
-    print("QUALITY REVIEW SUMMARY")
-    print("============================================================")
-    print(f"suite: {suite}")
-    print(f"preflight passed: {preflight['passed']}")
-    print(f"status counts: {status_counts}")
-    print(f"gate failures: {gate_failures}")
-    print(f"results: {primary_output}")
-    print("============================================================")
+    print("\n============================================================", flush=True)
+    print("QUALITY REVIEW SUMMARY", flush=True)
+    print("============================================================", flush=True)
+    print(f"suite: {suite}", flush=True)
+    print(f"preflight passed: {preflight['passed']}", flush=True)
+    print(f"status counts: {status_counts}", flush=True)
+    print(f"gate failures: {gate_failures}", flush=True)
+    print(f"results: {primary_output}", flush=True)
+    print("============================================================", flush=True)
     return report
 
 
@@ -731,16 +734,29 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    os.environ.setdefault("FINGPT_VALIDATION_FAST_INFERENCE", "1")
+    os.environ.setdefault("FINGPT_VALIDATION_INFERENCE_TIMEOUT_S", "30")
     args = _parse_args()
-    report = asyncio.run(
-        run_quality_review(
-            suite=args.suite,
-            output_path=args.output,
-            measure_latency=bool(args.measure_latency),
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        report = loop.run_until_complete(
+            run_quality_review(
+                suite=args.suite,
+                output_path=args.output,
+                measure_latency=bool(args.measure_latency),
+            )
         )
-    )
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
     return 0 if report["summary"]["gate_passed"] else 1
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    exit_code = main()
+    if os.environ.get("FINGPT_QUALITY_FORCE_EXIT", "1").strip().lower() in {"1", "true", "yes"}:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(exit_code)
+    raise SystemExit(exit_code)

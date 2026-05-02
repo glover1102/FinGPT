@@ -147,6 +147,8 @@ fingpt/FinGPT_Benchmark/data/*/**
 data/outputs/
 data/raw/
 data/runs.db
+data/research_mart.db*
+data/research_mart.duckdb*
 data/watchlist.json
 reports/
 .playwright-cli/
