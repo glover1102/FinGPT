@@ -855,6 +855,13 @@ function setDashboardTab(tab = "market") {
   }
 }
 
+function applyUrlUiMode() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("focus") !== "heatmap") return;
+  document.body.classList.add("heatmap-focus-mode");
+  setDashboardTab("market");
+}
+
 function normalizeStaticLabels() {
   document.title = "FinGPT Local Research Assistant";
   if (els.tickerHint) els.tickerHint.textContent = "ticker 없이 질의 가능, ticker는 참고 힌트";
@@ -874,6 +881,7 @@ function normalizeStaticLabels() {
   const evidenceSearch = document.getElementById("evidenceSearch");
   if (evidenceSearch) evidenceSearch.placeholder = "검색: 제목, 내용, source, doc_id";
   setDashboardTab(state.activeDashboardTab || "market");
+  applyUrlUiMode();
   const homeStatus = document.querySelectorAll(".home-status span");
   if (homeStatus[0]) homeStatus[0].textContent = "OpenBB/Yahoo/FRED/SEC 중심";
   if (homeStatus[1]) homeStatus[1].textContent = "qwen2.5:7b 로컬 추론";
@@ -1057,10 +1065,19 @@ function fmtPct(value) {
 
 function heatColor(value) {
   const n = Number(value);
-  if (!Number.isFinite(n)) return "rgba(63, 63, 70, 0.9)";
+  if (!Number.isFinite(n)) return "rgb(55, 65, 81)";
   const intensity = Math.min(Math.abs(n) / 3.0, 1);
-  if (n >= 0) return `linear-gradient(135deg, rgba(8, 145, 104, ${0.56 + intensity * 0.34}), rgba(6, 95, 70, ${0.74 + intensity * 0.18}))`;
-  return `linear-gradient(135deg, rgba(185, 28, 28, ${0.55 + intensity * 0.34}), rgba(88, 28, 28, ${0.76 + intensity * 0.18}))`;
+  if (Math.abs(n) < 0.08) return "rgb(64, 70, 82)";
+  if (n > 0) {
+    const r = Math.round(28 + intensity * 20);
+    const g = Math.round(116 + intensity * 86);
+    const b = Math.round(65 + intensity * 44);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+  const r = Math.round(116 + intensity * 112);
+  const g = Math.round(58 - intensity * 8);
+  const b = Math.round(70 - intensity * 16);
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
 function weightedSectorChange(items) {
@@ -1113,6 +1130,76 @@ function heatmapTileRows(tileSpan, itemCount) {
   return 1;
 }
 
+function heatmapTicker(item) {
+  return String(item?.symbol || "").trim().toUpperCase();
+}
+
+function fallbackHeatmapClassification(item) {
+  const rawSector = String(item?.sector || "").toUpperCase();
+  if (rawSector.includes("TECH") || rawSector.includes("전자") || rawSector.includes("테크")) {
+    return { sector: "TECHNOLOGY", industry: "INFORMATION TECHNOLOGY" };
+  }
+  if (rawSector.includes("FIN") || rawSector.includes("금융")) {
+    return { sector: "FINANCIAL", industry: "FINANCIAL SERVICES" };
+  }
+  if (rawSector.includes("HEALTH") || rawSector.includes("의료") || rawSector.includes("헬스")) {
+    return { sector: "HEALTHCARE", industry: "HEALTHCARE" };
+  }
+  if (rawSector.includes("ENERGY") || rawSector.includes("에너지")) {
+    return { sector: "ENERGY", industry: "ENERGY" };
+  }
+  if (rawSector.includes("INDUSTR") || rawSector.includes("제조")) {
+    return { sector: "INDUSTRIALS", industry: "INDUSTRIALS" };
+  }
+  if (rawSector.includes("CONSUMER") || rawSector.includes("소비")) {
+    return { sector: "CONSUMER CYCLICAL", industry: "CONSUMER SERVICES" };
+  }
+  return { sector: "OTHER", industry: item?.sector ? String(item.sector).toUpperCase() : "UNCATEGORIZED" };
+}
+
+function heatmapProfile(item) {
+  return HEATMAP_CLASSIFICATION[heatmapTicker(item)] || fallbackHeatmapClassification(item);
+}
+
+function heatmapSectorRank(sector) {
+  const idx = HEATMAP_SECTOR_ORDER.indexOf(sector);
+  return idx >= 0 ? idx : HEATMAP_SECTOR_ORDER.length;
+}
+
+function heatmapLayoutForSector(sector, sectorWeight, totalWeight, sectorCount) {
+  const fixed = HEATMAP_SECTOR_LAYOUT[sector];
+  if (fixed) return fixed;
+  return {
+    cols: heatmapSectorSpan(sectorWeight, totalWeight, sectorCount),
+    rows: sectorWeight > 2 ? 2 : 1,
+  };
+}
+
+function heatmapIndustrySpan(industryWeight, sectorWeight, groupCount) {
+  if (groupCount <= 1) return 12;
+  const share = sectorWeight > 0 ? industryWeight / sectorWeight : 1 / Math.max(groupCount, 1);
+  if (share >= 0.48) return 7;
+  if (share >= 0.30) return 6;
+  if (share >= 0.16) return 4;
+  return 3;
+}
+
+function heatmapTileGeometry(itemWeight, peerCount = 1) {
+  if (peerCount <= 1) {
+    if (itemWeight >= 5) return { cols: 12, rows: 4, size: "mega" };
+    if (itemWeight >= 2) return { cols: 12, rows: 3, size: "lg" };
+    return { cols: 12, rows: 2, size: "md" };
+  }
+  if (peerCount === 2 && itemWeight >= 3) return { cols: 6, rows: 4, size: "xl" };
+  if (peerCount === 2) return { cols: 6, rows: 2, size: "md" };
+  if (itemWeight >= 8) return { cols: 7, rows: 4, size: "mega" };
+  if (itemWeight >= 6) return { cols: 6, rows: 4, size: "xl" };
+  if (itemWeight >= 4) return { cols: 5, rows: 3, size: "lg" };
+  if (itemWeight >= 2) return { cols: 4, rows: 2, size: "md" };
+  if (itemWeight >= 1.3) return { cols: 3, rows: 2, size: "sm" };
+  return { cols: 2, rows: 1, size: "xs" };
+}
+
 function fmtHeatmapAsOf(value) {
   if (!value) return "기준시각 미확인";
   try {
@@ -1136,6 +1223,76 @@ const FRESHNESS_LABELS = {
   stale_prior_close: "전일 기준",
   closed: "장마감",
   unknown: "미확인",
+};
+
+const HEATMAP_SECTOR_ORDER = [
+  "TECHNOLOGY",
+  "COMMUNICATION SERVICES",
+  "CONSUMER CYCLICAL",
+  "CONSUMER DEFENSIVE",
+  "FINANCIAL",
+  "HEALTHCARE",
+  "INDUSTRIALS",
+  "ENERGY",
+  "UTILITIES",
+  "REAL ESTATE",
+  "BASIC MATERIALS",
+  "OTHER",
+];
+
+const HEATMAP_SECTOR_LAYOUT = {
+  TECHNOLOGY: { cols: 9, rows: 4 },
+  "COMMUNICATION SERVICES": { cols: 5, rows: 4 },
+  "CONSUMER CYCLICAL": { cols: 4, rows: 3 },
+  "CONSUMER DEFENSIVE": { cols: 4, rows: 3 },
+  FINANCIAL: { cols: 7, rows: 3 },
+  HEALTHCARE: { cols: 5, rows: 3 },
+  INDUSTRIALS: { cols: 4, rows: 3 },
+  ENERGY: { cols: 3, rows: 3 },
+  UTILITIES: { cols: 3, rows: 2 },
+  "REAL ESTATE": { cols: 3, rows: 2 },
+  "BASIC MATERIALS": { cols: 3, rows: 2 },
+  OTHER: { cols: 3, rows: 2 },
+};
+
+const HEATMAP_CLASSIFICATION = {
+  MSFT: { sector: "TECHNOLOGY", industry: "SOFTWARE - INFRASTRUCTURE" },
+  ORCL: { sector: "TECHNOLOGY", industry: "SOFTWARE - INFRASTRUCTURE" },
+  CRM: { sector: "TECHNOLOGY", industry: "SOFTWARE - APPLICATION" },
+  AAPL: { sector: "TECHNOLOGY", industry: "CONSUMER ELECTRONICS" },
+  NVDA: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  AVGO: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  AMD: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  MU: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  QCOM: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  CSCO: { sector: "TECHNOLOGY", industry: "COMMUNICATION EQUIPMENT" },
+  GOOGL: { sector: "COMMUNICATION SERVICES", industry: "INTERNET CONTENT & INFORMATION" },
+  META: { sector: "COMMUNICATION SERVICES", industry: "INTERNET CONTENT & INFORMATION" },
+  NFLX: { sector: "COMMUNICATION SERVICES", industry: "ENTERTAINMENT" },
+  AMZN: { sector: "CONSUMER CYCLICAL", industry: "INTERNET RETAIL" },
+  TSLA: { sector: "CONSUMER CYCLICAL", industry: "AUTO MANUFACTURERS" },
+  HD: { sector: "CONSUMER CYCLICAL", industry: "HOME IMPROVEMENT" },
+  MCD: { sector: "CONSUMER CYCLICAL", industry: "RESTAURANTS" },
+  BKNG: { sector: "CONSUMER CYCLICAL", industry: "TRAVEL SERVICES" },
+  WMT: { sector: "CONSUMER DEFENSIVE", industry: "DISCOUNT STORES" },
+  COST: { sector: "CONSUMER DEFENSIVE", industry: "DISCOUNT STORES" },
+  PG: { sector: "CONSUMER DEFENSIVE", industry: "HOUSEHOLD & PERSONAL PRODUCTS" },
+  KO: { sector: "CONSUMER DEFENSIVE", industry: "BEVERAGES - NON-ALCOHOLIC" },
+  PEP: { sector: "CONSUMER DEFENSIVE", industry: "BEVERAGES - NON-ALCOHOLIC" },
+  "BRK-B": { sector: "FINANCIAL", industry: "INSURANCE - DIVERSIFIED" },
+  JPM: { sector: "FINANCIAL", industry: "BANKS - DIVERSIFIED" },
+  BAC: { sector: "FINANCIAL", industry: "BANKS - DIVERSIFIED" },
+  V: { sector: "FINANCIAL", industry: "CREDIT SERVICES" },
+  MA: { sector: "FINANCIAL", industry: "CREDIT SERVICES" },
+  LLY: { sector: "HEALTHCARE", industry: "DRUG MANUFACTURERS - GENERAL" },
+  JNJ: { sector: "HEALTHCARE", industry: "DRUG MANUFACTURERS - GENERAL" },
+  ABBV: { sector: "HEALTHCARE", industry: "DRUG MANUFACTURERS - GENERAL" },
+  UNH: { sector: "HEALTHCARE", industry: "HEALTHCARE PLANS" },
+  XOM: { sector: "ENERGY", industry: "OIL & GAS INTEGRATED" },
+  CVX: { sector: "ENERGY", industry: "OIL & GAS INTEGRATED" },
+  CAT: { sector: "INDUSTRIALS", industry: "FARM & HEAVY CONSTRUCTION" },
+  GE: { sector: "INDUSTRIALS", industry: "AEROSPACE & DEFENSE" },
+  RTX: { sector: "INDUSTRIALS", industry: "AEROSPACE & DEFENSE" },
 };
 
 function isDecisionUsableMarketItem(item) {
@@ -1175,27 +1332,45 @@ function renderHomeHeatmap(items, meta = {}) {
       ${staleTotal ? `<strong class="stale">제외: ${staleTotal}개 stale</strong>` : '<strong>신선도 정상</strong>'}
     `;
   }
+  const profiledItems = usable.map((item) => ({ ...item, heatmap_profile: heatmapProfile(item) }));
   const bySector = new Map();
-  usable.forEach((item) => {
-    const key = item.sector || "기타";
+  profiledItems.forEach((item) => {
+    const key = item.heatmap_profile.sector || "OTHER";
     if (!bySector.has(key)) bySector.set(key, []);
     bySector.get(key).push(item);
   });
   const sectors = Array.from(bySector.entries())
     .map(([sector, sectorItems]) => [sector, sectorItems.sort((a, b) => (Number(b.weight) || 0) - (Number(a.weight) || 0))])
-    .sort((a, b) => b[1].reduce((sum, row) => sum + (Number(row.weight) || 1), 0) - a[1].reduce((sum, row) => sum + (Number(row.weight) || 1), 0));
+    .sort((a, b) => {
+      const rankDiff = heatmapSectorRank(a[0]) - heatmapSectorRank(b[0]);
+      if (rankDiff) return rankDiff;
+      return b[1].reduce((sum, row) => sum + heatmapWeight(row), 0) - a[1].reduce((sum, row) => sum + heatmapWeight(row), 0);
+    });
   const sectorWeights = sectors.map(([, sectorItems]) => sectorItems.reduce((sum, item) => sum + heatmapWeight(item), 0));
   const totalWeight = sectorWeights.reduce((sum, weight) => sum + weight, 0);
   els.homeHeatmap.classList.add("finviz-treemap");
-  els.homeHeatmap.innerHTML = sectors.map(([sector, sectorItems], index) => {
+  const sectorMarkup = sectors.map(([sector, sectorItems], index) => {
     const sectorWeight = sectorWeights[index] || sectorItems.length || 1;
-    const sectorSpan = heatmapSectorSpan(sectorWeight, totalWeight, sectors.length);
+    const sectorLayout = heatmapLayoutForSector(sector, sectorWeight, totalWeight, sectors.length);
     const sectorChange = weightedSectorChange(sectorItems);
     const sectorCls = Number.isFinite(Number(sectorChange)) ? (Number(sectorChange) >= 0 ? "up" : "down") : "muted";
     const sectorChangeText = Number.isFinite(Number(sectorChange)) ? fmtPct(sectorChange) : "-";
     const breadth = sectorBreadth(sectorItems);
+    const byIndustry = new Map();
+    sectorItems.forEach((item) => {
+      const key = item.heatmap_profile.industry || "UNCATEGORIZED";
+      if (!byIndustry.has(key)) byIndustry.set(key, []);
+      byIndustry.get(key).push(item);
+    });
+    const industryGroups = Array.from(byIndustry.entries())
+      .map(([industry, industryItems]) => [
+        industry,
+        industryItems.sort((a, b) => heatmapWeight(b) - heatmapWeight(a)),
+        industryItems.reduce((sum, item) => sum + heatmapWeight(item), 0),
+      ])
+      .sort((a, b) => b[2] - a[2]);
     return `
-    <section class="finviz-sector stock-heatmap-sector ${sectorCls}" style="--sector-span:${sectorSpan}">
+    <section class="finviz-sector stock-heatmap-sector ${sectorCls}" style="--sector-span:${sectorLayout.cols}; --sector-rows:${sectorLayout.rows}">
       <div class="finviz-sector-title stock-sector-title">
         <div>
           <strong>${escapeHtml(sector)}</strong>
@@ -1203,29 +1378,50 @@ function renderHomeHeatmap(items, meta = {}) {
         </div>
         <span class="${sectorCls}">${escapeHtml(sectorChangeText)}</span>
       </div>
-      <div class="finviz-sector-tiles">
-        ${sectorItems.map((item) => {
-          const change = item.change_pct;
-          const cls = Number(change) >= 0 ? "up" : "down";
-          const freshness = item.freshness_status || "unknown";
-          const itemWeight = heatmapWeight(item);
-          const tileSpan = heatmapTileSpan(itemWeight, sectorWeight, sectorItems.length);
-          const tileRows = heatmapTileRows(tileSpan, sectorItems.length);
-          const title = `${item.symbol} ${item.label || ""} ${fmtPct(change)} · ${fmtHeatmapAsOf(item.as_of)} ET · ${FRESHNESS_LABELS[freshness] || freshness}`;
+      <div class="finviz-sector-body">
+        ${industryGroups.map(([industry, industryItems, industryWeight]) => {
+          const industrySpan = heatmapIndustrySpan(industryWeight, sectorWeight, industryGroups.length);
           return `
-            <article class="finviz-heatmap-tile stock-heatmap-tile ${cls} ${freshness}" style="--heat-bg:${heatColor(change)}; --tile-span:${tileSpan}; --tile-rows:${tileRows}" title="${escapeHtml(title)}">
-              <div class="stock-heatmap-main">
-                <span class="stock-heatmap-symbol">${escapeHtml(item.symbol || "")}</span>
-                <span class="stock-heatmap-change">${escapeHtml(fmtPct(change))}</span>
+            <section class="finviz-industry" style="--industry-span:${industrySpan}">
+              <div class="finviz-industry-title">${escapeHtml(industry)}</div>
+              <div class="finviz-industry-tiles">
+                ${industryItems.map((item) => {
+                  const change = item.change_pct;
+                  const cls = Number(change) >= 0 ? "up" : "down";
+                  const freshness = item.freshness_status || "unknown";
+                  const itemWeight = heatmapWeight(item);
+                  const tile = heatmapTileGeometry(itemWeight, industryItems.length);
+                  const title = `${item.symbol} ${item.label || ""} ${fmtPct(change)} · ${fmtHeatmapAsOf(item.as_of)} ET · ${FRESHNESS_LABELS[freshness] || freshness}`;
+                  return `
+                    <article class="finviz-heatmap-tile stock-heatmap-tile ${cls} ${freshness} size-${tile.size}" style="--heat-bg:${heatColor(change)}; --tile-span:${tile.cols}; --tile-rows:${tile.rows}" title="${escapeHtml(title)}">
+                      <div class="stock-heatmap-main">
+                        <span class="stock-heatmap-symbol">${escapeHtml(item.symbol || "")}</span>
+                        <span class="stock-heatmap-change">${escapeHtml(fmtPct(change))}</span>
+                      </div>
+                      <div class="stock-heatmap-name">${escapeHtml(item.label || "")}</div>
+                    </article>
+                  `;
+                }).join("")}
               </div>
-              <div class="stock-heatmap-name">${escapeHtml(item.label || "")}</div>
-            </article>
+            </section>
           `;
         }).join("")}
       </div>
     </section>
   `;
   }).join("");
+  els.homeHeatmap.innerHTML = `
+    ${sectorMarkup}
+    <div class="finviz-legend" aria-label="Heatmap return legend">
+      <span class="legend-box legend-down-3">-3%</span>
+      <span class="legend-box legend-down-2">-2%</span>
+      <span class="legend-box legend-down-1">-1%</span>
+      <span class="legend-box legend-flat">0%</span>
+      <span class="legend-box legend-up-1">+1%</span>
+      <span class="legend-box legend-up-2">+2%</span>
+      <span class="legend-box legend-up-3">+3%</span>
+    </div>
+  `;
 }
 
 async function loadDashboardEquityHeatmap(force = false) {

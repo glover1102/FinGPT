@@ -732,6 +732,43 @@ input[type="range"]::-moz-range-thumb {
 .dashboard-surface-grid[data-dashboard-tab="quant"] .portfolio-card {
   grid-column: 1 / -1;
 }
+.heatmap-focus-mode {
+  overflow: hidden;
+}
+.heatmap-focus-mode .topbar,
+.heatmap-focus-mode .control-panel,
+.heatmap-focus-mode .home-hero,
+.heatmap-focus-mode .home-dashboard-tabs,
+.heatmap-focus-mode .home-chart-card,
+.heatmap-focus-mode .home-market-panel,
+.heatmap-focus-mode .data-mart-card,
+.heatmap-focus-mode .home-news-card {
+  display: none !important;
+}
+.heatmap-focus-mode .layout {
+  display: block;
+  padding: 0;
+}
+.heatmap-focus-mode .results-panel {
+  border: 0;
+  padding: 8px;
+  min-height: 100vh;
+}
+.heatmap-focus-mode .empty-state {
+  gap: 0;
+}
+.heatmap-focus-mode .home-grid {
+  display: block;
+}
+.heatmap-focus-mode .home-heatmap-card {
+  border-radius: 0;
+  padding: 8px;
+  min-height: 100vh;
+}
+.heatmap-focus-mode .home-stock-heatmap.finviz-treemap {
+  height: calc(100vh - 72px);
+  min-height: 0;
+}
 .home-card {
   background: var(--bg);
   border: 1px solid var(--border);
@@ -1143,69 +1180,182 @@ input[type="range"]::-moz-range-thumb {
   gap: 8px;
 }
 .home-stock-heatmap.finviz-treemap {
+  position: relative;
   max-height: none;
-  min-height: 520px;
+  min-height: 690px;
+  height: min(78vh, 860px);
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  grid-auto-rows: 88px;
   grid-auto-flow: dense;
   align-items: stretch;
-  gap: 6px;
-  padding: 6px;
-  background: #070b12;
+  gap: 3px;
+  padding: 4px 4px 44px;
+  background: #151922;
+  border-color: rgba(148, 163, 184, 0.28);
 }
 .finviz-sector.stock-heatmap-sector {
   grid-column: span var(--sector-span);
+  grid-row: span var(--sector-rows);
   display: flex;
   flex-direction: column;
-  min-height: 154px;
-  border-radius: 4px;
-  background: #0b111c;
+  min-height: 0;
+  border-radius: 2px;
+  border-color: rgba(15, 23, 42, 0.88);
+  background: #111827;
 }
 .finviz-sector-title.stock-sector-title {
-  min-height: 34px;
-  padding: 7px 8px;
-  background: rgba(2, 6, 23, 0.76);
+  min-height: 22px;
+  padding: 2px 6px;
+  background: #2c3440;
+  text-transform: uppercase;
+  letter-spacing: 0;
 }
 .finviz-sector-title.stock-sector-title strong {
-  font-size: 11px;
+  font-size: 13px;
+  color: #f8fafc;
 }
 .finviz-sector-title.stock-sector-title small {
-  font-size: 8px;
+  display: none;
 }
-.finviz-sector-tiles {
+.finviz-sector-body {
   flex: 1;
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  grid-auto-rows: minmax(46px, 1fr);
+  grid-auto-rows: minmax(48px, 1fr);
   grid-auto-flow: dense;
-  gap: 4px;
-  padding: 4px;
+  gap: 2px;
+  padding: 2px;
+  overflow: hidden;
+}
+.finviz-industry {
+  grid-column: span var(--industry-span);
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.72);
+  background: rgba(15, 23, 42, 0.24);
+}
+.finviz-industry-title {
+  height: 16px;
+  min-height: 16px;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(51, 65, 85, 0.82);
+  color: rgba(248, 250, 252, 0.92);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 16px;
+  text-transform: uppercase;
+}
+.finviz-industry-tiles {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: minmax(32px, 1fr);
+  grid-auto-flow: dense;
+  gap: 2px;
+  padding: 2px;
 }
 .finviz-heatmap-tile.stock-heatmap-tile {
   grid-column: span var(--tile-span);
   grid-row: span var(--tile-rows);
-  min-height: 46px;
-  border-radius: 3px;
-  padding: 6px;
+  min-height: 0;
+  border-radius: 1px;
+  padding: 4px;
+  justify-content: center;
+  text-align: center;
+  border-color: rgba(15, 23, 42, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+  container-type: inline-size;
 }
 .finviz-heatmap-tile .stock-heatmap-main {
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
 }
 .finviz-heatmap-tile .stock-heatmap-symbol {
-  font-size: 12px;
+  max-width: 100%;
+  font-size: clamp(10px, 16cqw, 18px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow-wrap: normal;
 }
 .finviz-heatmap-tile .stock-heatmap-change {
-  font-size: 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: clamp(8px, 8cqw, 12px);
 }
 .finviz-heatmap-tile .stock-heatmap-name {
   font-size: 8px;
-  margin-top: 4px;
+  margin-top: 2px;
+  text-align: center;
+  color: rgba(255,255,255,0.68);
 }
+.finviz-heatmap-tile.size-mega .stock-heatmap-symbol {
+  font-size: clamp(22px, 32cqw, 52px);
+  letter-spacing: 0;
+}
+.finviz-heatmap-tile.size-mega .stock-heatmap-change {
+  font-size: clamp(13px, 15cqw, 26px);
+}
+.finviz-heatmap-tile.size-xl .stock-heatmap-symbol {
+  font-size: clamp(20px, 28cqw, 46px);
+}
+.finviz-heatmap-tile.size-xl .stock-heatmap-change {
+  font-size: clamp(12px, 13cqw, 24px);
+}
+.finviz-heatmap-tile.size-lg .stock-heatmap-symbol {
+  font-size: clamp(16px, 24cqw, 34px);
+}
+.finviz-heatmap-tile.size-lg .stock-heatmap-change {
+  font-size: clamp(10px, 11cqw, 18px);
+}
+.finviz-heatmap-tile.size-md .stock-heatmap-symbol {
+  font-size: clamp(12px, 20cqw, 24px);
+}
+.finviz-heatmap-tile.size-sm .stock-heatmap-symbol {
+  font-size: clamp(10px, 17cqw, 16px);
+}
+.finviz-heatmap-tile.size-xs .stock-heatmap-name {
+  display: none;
+}
+.finviz-legend {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+  padding-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+}
+.legend-box {
+  min-width: 44px;
+  padding: 5px 8px;
+  text-align: center;
+  color: white;
+  border: 1px solid rgba(15, 23, 42, 0.58);
+}
+.legend-down-3 { background: #ef4444; }
+.legend-down-2 { background: #b43b48; }
+.legend-down-1 { background: #7c3f4b; }
+.legend-flat { background: #4b5563; }
+.legend-up-1 { background: #287a47; }
+.legend-up-2 { background: #22a653; }
+.legend-up-3 { background: #30d158; }
 .stock-heatmap-sector {
   min-width: 0;
   flex: 0 0 auto;
