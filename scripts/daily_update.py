@@ -10,6 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipelines.data_mart.jobs.quality_checks import run_data_quality_checks
+from pipelines.data_mart.jobs.update_filings_daily import update_filings_daily
 from pipelines.data_mart.jobs.update_macro_daily import DEFAULT_US_MACRO_SERIES, update_macro_daily
 from pipelines.data_mart.jobs.update_news_daily import update_news_daily
 from pipelines.data_mart.jobs.update_prices_daily import update_prices_daily
@@ -46,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--retry-failed", action="store_true", help="Reserved for scheduler retry flows; current run still updates the full watchlist.")
     parser.add_argument("--skip-news", action="store_true", help="Skip Google News RSS article capture.")
     parser.add_argument("--skip-macro", action="store_true", help="Skip FRED macro capture.")
+    parser.add_argument("--skip-filings", action="store_true", help="Skip SEC filings capture for US watchlists.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     args = parser.parse_args(argv)
 
@@ -89,6 +91,14 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=args.dry_run,
         )
         results["jobs"].append(news_result.__dict__)
+
+    if not args.skip_filings and args.market == "us":
+        filings_result = update_filings_daily(
+            tickers,
+            market=args.market,
+            dry_run=args.dry_run,
+        )
+        results["jobs"].append(filings_result.__dict__)
 
     if not args.dry_run:
         checks = run_data_quality_checks()

@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import sys
+from types import SimpleNamespace
+
+import pandas as pd
+
+from pipelines.data_mart.jobs.update_filings_daily import update_filings_daily
 from pipelines.data_mart.jobs.update_macro_daily import update_macro_daily
 from pipelines.data_mart.jobs.update_prices_daily import update_prices_daily
 from pipelines.data_mart.models import MacroObservation, PriceBar, ProviderFetchResult
+from pipelines.data_mart.providers.yfinance_provider import fetch_daily_prices
 from pipelines.data_mart.storage import repository
 from scripts.daily_update import parse_watchlist
 
@@ -57,6 +64,18 @@ def _macro_fetcher(series_ids, **kwargs):
     )
 
 
+def _sec_collector(ticker, lookback_days, sec_user_agent, limit=5):
+    result = SimpleNamespace(status="ok", detail="ok")
+    return result, [
+        {
+            "title": f"SEC 10-Q filing for {ticker}",
+            "text": f"{ticker} filed SEC form 10-Q.",
+            "published_at": "2026-04-25",
+            "url": f"https://sec.example/{ticker}/10q",
+        }
+    ]
+
+
 def test_daily_price_update_is_idempotent_and_logs_provider(tmp_path) -> None:
     db_path = tmp_path / "research_mart.db"
 
@@ -92,6 +111,40 @@ def test_macro_update_records_observations(tmp_path) -> None:
     assert result.status == "success"
     assert result.rows_inserted == 2
     assert repository.latest_macro("DGS10", db_path=db_path)["value"] == 4.5
+
+
+def test_filings_update_records_sec_filings(tmp_path) -> None:
+    db_path = tmp_path / "research_mart.db"
+
+    result = update_filings_daily(["MSFT"], market="us", db_path=db_path, collector=_sec_collector)
+    second = update_filings_daily(["MSFT"], market="us", db_path=db_path, collector=_sec_collector)
+    health = repository.data_health(db_path=db_path)
+
+    assert result.status == "success"
+    assert result.rows_inserted == 1
+    assert second.rows_updated == 1
+    assert health["table_counts"]["filings"] == 1
+
+
+def test_yfinance_provider_skips_rows_without_close(monkeypatch) -> None:
+    class FakeTicker:
+        def history(self, **kwargs):
+            return pd.DataFrame(
+                [
+                    {"Open": None, "High": None, "Low": None, "Close": None, "Adj Close": None, "Volume": 0},
+                    {"Open": 100, "High": 101, "Low": 99, "Close": 100.5, "Adj Close": None, "Volume": 1000},
+                ],
+                index=pd.to_datetime(["2026-05-01", "2026-05-02"]),
+            )
+
+    monkeypatch.setitem(sys.modules, "yfinance", SimpleNamespace(Ticker=lambda _ticker: FakeTicker()))
+
+    result = fetch_daily_prices(["TLT"], start_date="2026-05-01", end_date="2026-05-03")
+
+    assert result.status == "ok"
+    assert len(result.records) == 1
+    assert result.records[0].adjusted_close == result.records[0].close
+    assert result.detail["skipped_empty_price_rows"] == {"TLT": 1}
 
 
 def test_parse_simple_watchlist_yaml(tmp_path) -> None:

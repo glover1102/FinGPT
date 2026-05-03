@@ -160,6 +160,8 @@ python scripts/daily_update.py --market us --start-date 2025-01-01 --json
 python scripts/daily_update.py --market kr --skip-macro --json
 ```
 
+`--market us` captures yfinance prices, FRED macro, Google News RSS metadata, and SEC EDGAR filing metadata by default. Use `--skip-filings` for provider-isolation recovery runs or when SEC is rate-limited. KR runs skip SEC filings because they are not SEC-covered instruments.
+
 Watchlists live at:
 ```text
 config/watchlists/core_us.yaml
@@ -170,6 +172,7 @@ Operational interpretation:
 - `provider_status.status=ok`: provider returned usable rows.
 - `provider_status.status=partial`: some tickers/series failed; inspect `details_json`.
 - `provider_status.status=credentials_missing`: expected for FRED until `FRED_API_KEY` is set.
+- `provider_status.status=empty`: provider was reachable but returned no usable current rows; this is common for thin news/filing coverage and should be shown as no coverage, not as a hard failure.
 - `data_quality_checks.status=warn`: data is stale or incomplete; UI must not render this as success.
 - `data_quality_checks.status=fail`: duplicate or structurally invalid data; fix before using reports for decisions.
 

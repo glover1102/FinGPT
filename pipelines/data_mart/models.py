@@ -48,6 +48,17 @@ class NewsArticle:
 
 
 @dataclass(frozen=True)
+class Filing:
+    ticker: str
+    form_type: str
+    filed_at: str = ""
+    url: str = ""
+    source: str = "sec"
+    filing_id: str | None = None
+    collected_at: str = field(default_factory=utc_now_iso)
+
+
+@dataclass(frozen=True)
 class ProviderFetchResult:
     provider: str
     status: str

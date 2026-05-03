@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pipelines.data_mart.models import MacroObservation, NewsArticle, PriceBar
+from pipelines.data_mart.models import Filing, MacroObservation, NewsArticle, PriceBar
 from pipelines.data_mart.storage import repository
 
 
@@ -95,6 +95,24 @@ def test_macro_and_news_upserts_have_stable_keys(tmp_path) -> None:
     assert repository.latest_macro("DGS10", db_path=db_path)["value"] == 4.25
     assert news_first == {"inserted": 1, "updated": 0}
     assert news_second == {"inserted": 0, "updated": 1}
+
+
+def test_filing_upsert_is_idempotent(tmp_path) -> None:
+    db_path = tmp_path / "research_mart.db"
+
+    first = repository.upsert_filings(
+        [Filing(ticker="MSFT", form_type="10-Q", filed_at="2026-04-25", url="https://sec.example/msft-10q")],
+        db_path=db_path,
+    )
+    second = repository.upsert_filings(
+        [Filing(ticker="MSFT", form_type="10-Q", filed_at="2026-04-25", url="https://sec.example/msft-10q")],
+        db_path=db_path,
+    )
+    health = repository.data_health(db_path=db_path)
+
+    assert first == {"inserted": 1, "updated": 0}
+    assert second == {"inserted": 0, "updated": 1}
+    assert health["table_counts"]["filings"] == 1
 
 
 def test_update_run_provider_status_and_health(tmp_path) -> None:

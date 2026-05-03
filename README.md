@@ -73,12 +73,14 @@ powershell -ExecutionPolicy Bypass -File scripts/run_web.ps1
 ### Local Data Mart Update
 
 Structured financial data is stored separately from Qdrant in `data/research_mart.db`.
-Use this for daily prices, macro observations, provider status, and data quality checks:
+Use this for daily prices, macro observations, news metadata, SEC filing metadata, provider status, and data quality checks:
 
 ```bash
 python scripts/daily_update.py --market us --json
 python scripts/daily_update.py --market kr --skip-macro --json
 ```
+
+Use `--skip-news`, `--skip-macro`, or `--skip-filings` when a provider is intentionally unavailable during a recovery run.
 
 For Windows Task Scheduler, use:
 

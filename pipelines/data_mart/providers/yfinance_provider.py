@@ -58,6 +58,7 @@ def fetch_daily_prices(
 
     records: list[PriceBar] = []
     failed: dict[str, str] = {}
+    skipped_rows: dict[str, int] = {}
     for raw in tickers:
         ticker = str(raw or "").upper().strip()
         if not ticker:
@@ -71,20 +72,27 @@ def fetch_daily_prices(
             failed[ticker] = "empty history"
             continue
         for idx, row in frame.iterrows():
+            open_value = _clean_float(row.get("Open"))
+            high_value = _clean_float(row.get("High"))
+            low_value = _clean_float(row.get("Low"))
             close = _clean_float(row.get("Close"))
             adjusted = _clean_float(row.get("Adj Close"))
+            volume = _clean_float(row.get("Volume"))
+            if close is None:
+                skipped_rows[ticker] = skipped_rows.get(ticker, 0) + 1
+                continue
             if adjusted is None:
                 adjusted = close
             records.append(
                 PriceBar(
                     ticker=ticker,
                     date=_as_date_text(idx),
-                    open=_clean_float(row.get("Open")),
-                    high=_clean_float(row.get("High")),
-                    low=_clean_float(row.get("Low")),
+                    open=open_value,
+                    high=high_value,
+                    low=low_value,
                     close=close,
                     adjusted_close=adjusted,
-                    volume=_clean_float(row.get("Volume")),
+                    volume=volume,
                     source=provider,
                     collected_at=datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
                 )
@@ -100,7 +108,11 @@ def fetch_daily_prices(
         rows=len(records),
         records=records,
         error="; ".join(f"{ticker}: {msg}" for ticker, msg in sorted(failed.items())) or None,
-        detail={"failed_tickers": failed, "requested_tickers": [str(t).upper().strip() for t in tickers if str(t).strip()]},
+        detail={
+            "failed_tickers": failed,
+            "skipped_empty_price_rows": skipped_rows,
+            "requested_tickers": [str(t).upper().strip() for t in tickers if str(t).strip()],
+        },
         started_at=started,
         finished_at=utc_now_iso(),
     )

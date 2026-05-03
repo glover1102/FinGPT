@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Iterable
 
-from pipelines.data_mart.models import MacroObservation, NewsArticle, PriceBar, utc_now_iso
+from pipelines.data_mart.models import Filing, MacroObservation, NewsArticle, PriceBar, utc_now_iso
 from pipelines.data_mart.storage.db import connect, init_db
 
 
@@ -222,6 +222,46 @@ def upsert_news_articles(articles: Iterable[NewsArticle], *, db_path: str | Path
                     article.published_at,
                     article.summary,
                     article.collected_at,
+                ),
+            )
+            inserted += 0 if existing else 1
+            updated += 1 if existing else 0
+        conn.commit()
+    return {"inserted": inserted, "updated": updated}
+
+
+def upsert_filings(filings: Iterable[Filing], *, db_path: str | Path | None = None) -> dict[str, int]:
+    inserted = 0
+    updated = 0
+    with _conn(db_path) as conn:
+        for filing in filings:
+            ticker = filing.ticker.upper().strip()
+            form_type = filing.form_type.upper().strip()
+            if not ticker or not form_type:
+                continue
+            seed = filing.filing_id or "|".join([ticker, form_type, filing.filed_at, filing.url])
+            filing_id = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:24]
+            existing = conn.execute("SELECT 1 FROM filings WHERE filing_id=?", (filing_id,)).fetchone()
+            conn.execute(
+                """
+                INSERT INTO filings(filing_id, ticker, form_type, filed_at, url, source, collected_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(filing_id) DO UPDATE SET
+                    ticker=excluded.ticker,
+                    form_type=excluded.form_type,
+                    filed_at=excluded.filed_at,
+                    url=excluded.url,
+                    source=excluded.source,
+                    collected_at=excluded.collected_at
+                """,
+                (
+                    filing_id,
+                    ticker,
+                    form_type,
+                    filing.filed_at,
+                    filing.url,
+                    filing.source,
+                    filing.collected_at,
                 ),
             )
             inserted += 0 if existing else 1

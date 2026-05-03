@@ -57,9 +57,9 @@ Qdrant remains a document evidence store. Structured market data belongs in the 
 
 - `storage/schema.py`: idempotent SQLite DDL and schema version.
 - `storage/db.py`: SQLite connection setup, WAL mode, migration table, `init_db()`.
-- `storage/repository.py`: upsert/query APIs for prices, macro observations, news metadata, run logs, provider status, and quality checks.
+- `storage/repository.py`: upsert/query APIs for prices, macro observations, news metadata, SEC filing metadata, run logs, provider status, and quality checks.
 - `providers/*`: external provider adapters such as yfinance and FRED.
-- `jobs/*`: daily update orchestration and data quality checks.
+- `jobs/*`: daily update orchestration for prices, macro, news, SEC filings, and data quality checks.
 - `context/structured_context.py`: converts stored data into LLM-safe numeric context with source, `as_of`, and freshness metadata.
 
 LLM numeric policy:
