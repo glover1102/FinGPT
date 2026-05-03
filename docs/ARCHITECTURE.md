@@ -73,8 +73,8 @@ LLM numeric policy:
 The deterministic quant layer is split by responsibility:
 
 - `pipelines/factors`: returns, momentum, volatility, drawdown, correlation, rate sensitivity.
-- `pipelines/backtest`: strategy execution, cost/slippage assumptions, no-lookahead signal application, metrics.
-- `pipelines/portfolio`: equal weight, inverse volatility, risk parity-style inverse-vol baseline, and max-Sharpe baseline optimizer.
+- `pipelines/backtest`: strategy execution, cost/slippage assumptions, no-lookahead signal application, single-asset metrics, and aligned multi-asset portfolio equity curves.
+- `pipelines/portfolio`: equal weight, inverse volatility, covariance-aware risk parity, minimum-volatility, max-Sharpe, and momentum-tilt optimizers with expected return/volatility/Sharpe and risk-contribution diagnostics.
 - `pipelines/analyze/portfolio_quant.py`: existing deterministic API baseline retained for `/api/v1/research/portfolio/risk`.
 
 ## Provider Boundary

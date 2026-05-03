@@ -36,7 +36,7 @@ from core.utils.eval_dashboard import load_eval_dashboard
 from core.utils.qdrant_admin import get_collection_info, purge_points
 from pipelines.collect.cache import get_cache as get_collection_cache
 from pipelines.collect.google_news_rss import collect_news_from_google_rss
-from pipelines.backtest.engine import BacktestConfig, run_backtest, run_momentum_ranking_backtest
+from pipelines.backtest.engine import BacktestConfig, run_backtest, run_momentum_ranking_backtest, run_multi_asset_backtest
 from pipelines.data_mart.storage.repository import data_health as data_mart_health, get_prices as data_mart_get_prices
 from pipelines.output.exporters import response_to_csv, response_to_jsonl
 from pipelines.orchestration.dispatch import dispatch_async
@@ -512,7 +512,8 @@ async def backtest_run(request: BacktestRunRequest) -> Dict[str, Any]:
                 if len(asset_results) == 1:
                     result = next(iter(asset_results.values()))
                 else:
-                    result = _summarize_backtest_results(asset_results, request.strategy)
+                    result = await asyncio.to_thread(run_multi_asset_backtest, rows_by_asset, config)
+                    result["summary_policy"] = "reported metrics come from one aligned multi-asset portfolio equity curve"
                 result["asset_results"] = asset_results
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
@@ -594,33 +595,6 @@ def _filter_price_rows(
             continue
         out.append(row)
     return out
-
-
-def _summarize_backtest_results(asset_results: dict[str, dict[str, Any]], strategy: str) -> dict[str, Any]:
-    successes = {ticker: result for ticker, result in asset_results.items() if result.get("status") == "success"}
-    metrics: dict[str, float] = {}
-    metric_keys = ("cagr", "volatility", "sharpe", "sortino", "max_drawdown", "calmar", "turnover", "exposure", "trade_count")
-    for key in metric_keys:
-        values: list[float] = []
-        for result in successes.values():
-            value = (result.get("metrics") or {}).get(key)
-            try:
-                values.append(float(value))
-            except (TypeError, ValueError):
-                continue
-        metrics[key] = round(sum(values) / len(values), 6) if values else 0.0
-    starts = [str(result.get("date_range", {}).get("start") or "") for result in successes.values() if result.get("date_range")]
-    ends = [str(result.get("date_range", {}).get("end") or "") for result in successes.values() if result.get("date_range")]
-    return {
-        "status": "success" if successes else "partial",
-        "strategy": strategy,
-        "reason": "" if successes else "not_enough_price_history",
-        "date_range": {"start": min(starts) if starts else None, "end": max(ends) if ends else None},
-        "equity_curve": [],
-        "trades": [],
-        "metrics": metrics,
-        "summary_policy": "reported metrics are simple averages across successful asset-level backtests",
-    }
 
 
 def _returns_from_price_rows(rows: list[dict[str, Any]]) -> list[float]:

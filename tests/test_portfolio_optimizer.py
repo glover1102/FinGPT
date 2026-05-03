@@ -59,3 +59,34 @@ def test_minimum_volatility_alias_is_supported() -> None:
 
     assert result["status"] == "success"
     assert result["weights"]["LOW"] > result["weights"]["HIGH"]
+
+
+def test_covariance_optimizer_reports_portfolio_metrics() -> None:
+    result = optimize_portfolio(
+        {
+            "LOW": [0.001, 0.002, 0.001, 0.002, 0.001],
+            "HIGH": [0.05, -0.04, 0.03, -0.02, 0.01],
+        },
+        method="minimum_volatility",
+    )
+
+    assert result["diagnostics"]["uses_covariance"] is True
+    assert result["diagnostics"]["sample_count"] == 5
+    assert result["portfolio_metrics"]["annualized_volatility"] >= 0
+    assert math.isclose(sum(result["risk_contributions"].values()), 1.0, rel_tol=1e-5)
+
+
+def test_risk_parity_uses_covariance_and_keeps_weights_normalized() -> None:
+    result = optimize_portfolio(
+        {
+            "A": [0.01, 0.02, -0.01, 0.01, 0.0],
+            "B": [0.005, 0.004, 0.006, 0.005, 0.004],
+            "C": [-0.01, 0.01, 0.0, -0.005, 0.002],
+        },
+        method="risk_parity",
+        max_weight=0.7,
+    )
+
+    assert result["diagnostics"]["uses_covariance"] is True
+    assert math.isclose(sum(result["weights"].values()), 1.0)
+    assert all(weight <= 0.7 for weight in result["weights"].values())

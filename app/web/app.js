@@ -1551,6 +1551,7 @@ async function runHomeBacktest() {
       <div class="decision-assumption">
         비용 ${escapeHtml(String(request.transaction_cost_bps))}bps · 슬리피지 ${escapeHtml(String(request.slippage_bps))}bps · ${escapeHtml(data.assumptions?.lookahead_policy || "signals applied after calculation")}
       </div>
+      ${data.summary_policy ? `<div class="decision-summary ok">${escapeHtml(data.summary_policy)}</div>` : ""}
       ${assetEntries.length > 1 ? `
         <div class="decision-section-title">종목별 결과</div>
         <div class="decision-table-wrap">
@@ -1622,6 +1623,8 @@ async function runPortfolioOptimize() {
     const status = data.status || "unknown";
     const diagnostics = data.diagnostics || {};
     const returnCounts = data.return_counts || {};
+    const portfolioMetrics = data.portfolio_metrics || {};
+    const riskContributions = data.risk_contributions || {};
     els.portfolioSurface.innerHTML = `
       <div class="decision-status-row">
         <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
@@ -1644,7 +1647,17 @@ async function runPortfolioOptimize() {
         ${decisionMetric("최대 비중", fmtPct(Number(data.max_weight || maxWeight) * 100), status)}
         ${decisionMetric("최소 비중", entries.length ? fmtPct(Math.min(...entries.map(([, weight]) => Number(weight))) * 100) : "-", status)}
         ${decisionMetric("수익률 샘플", _fmtNumber(Object.values(returnCounts).reduce((sum, value) => sum + Number(value || 0), 0)), status)}
+        ${decisionMetric("기대수익", fmtMetricRatio(portfolioMetrics.expected_annual_return), status)}
+        ${decisionMetric("예상 변동성", fmtMetricRatio(portfolioMetrics.annualized_volatility), status)}
+        ${decisionMetric("예상 Sharpe", fmtDecimal(portfolioMetrics.sharpe, 2), status)}
+        ${decisionMetric("공분산 사용", diagnostics.uses_covariance ? "yes" : "no", diagnostics.uses_covariance ? "ok" : "warn")}
       </div>
+      ${Object.keys(riskContributions).length ? `
+        <div class="decision-section-title">위험 기여도</div>
+        <div class="decision-chip-row">
+          ${Object.entries(riskContributions).map(([ticker, contribution]) => `<span>${escapeHtml(ticker)} ${escapeHtml(fmtPct(Number(contribution) * 100))}</span>`).join("")}
+        </div>
+      ` : ""}
       ${Object.keys(returnCounts).length ? `
         <div class="decision-section-title">데이터 사용량</div>
         <div class="decision-chip-row">

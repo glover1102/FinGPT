@@ -10,20 +10,32 @@ def optimize_portfolio(
     method: str = "equal_weight",
     max_weight: float = 1.0,
 ) -> dict[str, object]:
-    assets = [asset for asset in returns_by_asset if str(asset).strip()]
+    returns_table, warnings = _aligned_returns_table(returns_by_asset)
+    assets = list(returns_table)
     if not assets:
         return {"status": "failed", "weights": {}, "method": method, "warnings": ["No assets supplied."]}
     method = str(method or "equal_weight").lower()
+    matrix = [returns_table[asset] for asset in assets]
+    means = [_mean(rows) for rows in matrix]
+    covariance = _covariance_matrix(matrix)
+    uses_covariance = False
     if method == "equal_weight":
         raw = {asset: 1.0 for asset in assets}
     elif method in {"inverse_volatility", "risk_parity", "equal_risk_contribution"}:
-        raw = {asset: 1.0 / max(_vol(list(returns_by_asset[asset])), 1e-9) for asset in assets}
+        if method in {"risk_parity", "equal_risk_contribution"}:
+            uses_covariance = True
+            raw_weights = _risk_parity_weights(covariance)
+            raw = {asset: raw_weights[idx] for idx, asset in enumerate(assets)}
+        else:
+            raw = {asset: 1.0 / max(_vol(returns_table[asset]), 1e-9) for asset in assets}
     elif method in {"minimum_volatility", "min_volatility"}:
-        raw = {asset: 1.0 / max(_vol(list(returns_by_asset[asset])) ** 2, 1e-12) for asset in assets}
+        uses_covariance = True
+        raw_weights = _minimum_variance_weights(covariance)
+        raw = {asset: raw_weights[idx] for idx, asset in enumerate(assets)}
     elif method == "momentum_tilt":
         raw = {}
         for asset in assets:
-            rows = list(returns_by_asset[asset])
+            rows = returns_table[asset]
             cumulative = 1.0
             for row in rows:
                 try:
@@ -34,17 +46,17 @@ def optimize_portfolio(
         if not any(raw.values()):
             raw = {asset: 1.0 for asset in assets}
     elif method in {"max_sharpe", "sharpe_tilt"}:
-        raw = {}
-        for asset in assets:
-            rows = list(returns_by_asset[asset])
-            vol = max(_vol(rows), 1e-9)
-            mean = sum(rows) / len(rows) if rows else 0.0
-            raw[asset] = max(mean / vol, 0.0)
-        if not any(raw.values()):
+        uses_covariance = True
+        raw_weights = _max_sharpe_weights(covariance, means)
+        raw = {asset: raw_weights[idx] for idx, asset in enumerate(assets)}
+        if not any(value > 0 for value in raw.values()):
+            warnings.append("All covariance-adjusted Sharpe scores were non-positive; fell back to equal weight.")
             raw = {asset: 1.0 for asset in assets}
     else:
         raise ValueError(f"unsupported optimizer method: {method}")
-    weights, effective_cap, warnings = _normalize_with_cap(raw, max_weight=max_weight)
+    weights, effective_cap, cap_warnings = _normalize_with_cap(raw, max_weight=max_weight)
+    warnings.extend(cap_warnings)
+    portfolio_metrics = _portfolio_metrics(weights, assets, means, covariance)
     return {
         "status": "success",
         "method": method,
@@ -52,11 +64,46 @@ def optimize_portfolio(
         "sum_weights": round(sum(weights.values()), 8),
         "max_weight": effective_cap,
         "warnings": warnings,
+        "portfolio_metrics": portfolio_metrics,
+        "risk_contributions": _risk_contributions(weights, assets, covariance),
         "diagnostics": {
             "asset_count": len(assets),
-            "uses_covariance": False,
+            "sample_count": len(next(iter(returns_table.values()), [])),
+            "uses_covariance": uses_covariance,
+            "optimizer": "closed_form_covariance_long_only" if uses_covariance else "deterministic_score_weighting",
         },
     }
+
+
+def _aligned_returns_table(returns_by_asset: dict[str, Iterable[float]]) -> tuple[dict[str, list[float]], list[str]]:
+    warnings: list[str] = []
+    cleaned: dict[str, list[float]] = {}
+    for raw_asset, raw_values in returns_by_asset.items():
+        asset = str(raw_asset or "").strip().upper()
+        if not asset:
+            continue
+        values: list[float] = []
+        for value in raw_values:
+            try:
+                val = float(value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(val):
+                values.append(val)
+        if len(values) >= 2:
+            cleaned[asset] = values
+        else:
+            warnings.append(f"{asset} excluded: fewer than 2 finite returns.")
+    if not cleaned:
+        return {}, warnings
+    min_len = min(len(values) for values in cleaned.values())
+    if len({len(values) for values in cleaned.values()}) > 1:
+        warnings.append(f"Return histories had different lengths; aligned on the most recent {min_len} observations.")
+    return {asset: values[-min_len:] for asset, values in cleaned.items()}, warnings
+
+
+def _mean(values: list[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
 
 
 def _vol(values: list[float]) -> float:
@@ -72,6 +119,144 @@ def _vol(values: list[float]) -> float:
         return 0.0
     mean = sum(clean) / len(clean)
     return math.sqrt(sum((value - mean) ** 2 for value in clean) / (len(clean) - 1))
+
+
+def _covariance_matrix(matrix: list[list[float]]) -> list[list[float]]:
+    if not matrix:
+        return []
+    n_assets = len(matrix)
+    n_obs = min(len(row) for row in matrix)
+    if n_obs < 2:
+        return [[0.0 for _ in range(n_assets)] for _ in range(n_assets)]
+    means = [_mean(row[-n_obs:]) for row in matrix]
+    cov = [[0.0 for _ in range(n_assets)] for _ in range(n_assets)]
+    for i in range(n_assets):
+        for j in range(i, n_assets):
+            value = sum((matrix[i][-n_obs + k] - means[i]) * (matrix[j][-n_obs + k] - means[j]) for k in range(n_obs)) / (n_obs - 1)
+            cov[i][j] = value
+            cov[j][i] = value
+    avg_var = sum(max(cov[i][i], 0.0) for i in range(n_assets)) / max(n_assets, 1)
+    ridge = max(avg_var * 1e-6, 1e-12)
+    for i in range(n_assets):
+        cov[i][i] += ridge
+    return cov
+
+
+def _minimum_variance_weights(covariance: list[list[float]]) -> list[float]:
+    n_assets = len(covariance)
+    if n_assets == 0:
+        return []
+    solution = _solve_linear_system(covariance, [1.0 for _ in range(n_assets)])
+    if not solution:
+        return [1.0 / n_assets for _ in range(n_assets)]
+    return _normalize_positive(solution)
+
+
+def _max_sharpe_weights(covariance: list[list[float]], means: list[float]) -> list[float]:
+    n_assets = len(covariance)
+    if n_assets == 0:
+        return []
+    positive_means = [max(value, 0.0) for value in means]
+    if not any(positive_means):
+        return [1.0 / n_assets for _ in range(n_assets)]
+    solution = _solve_linear_system(covariance, positive_means)
+    if not solution:
+        return _normalize_positive(positive_means)
+    return _normalize_positive([max(value, 0.0) for value in solution])
+
+
+def _risk_parity_weights(covariance: list[list[float]], *, iterations: int = 300) -> list[float]:
+    n_assets = len(covariance)
+    if n_assets == 0:
+        return []
+    weights = [1.0 / n_assets for _ in range(n_assets)]
+    for _ in range(iterations):
+        variance = _portfolio_variance_vec(weights, covariance)
+        if variance <= 0:
+            break
+        target = variance / n_assets
+        cov_weight = _mat_vec(covariance, weights)
+        next_weights = []
+        for weight, marginal in zip(weights, cov_weight):
+            contribution = weight * marginal
+            if contribution <= 0:
+                next_weights.append(weight)
+            else:
+                next_weights.append(weight * math.sqrt(target / contribution))
+        weights = _normalize_positive(next_weights)
+    return weights
+
+
+def _solve_linear_system(matrix: list[list[float]], vector: list[float]) -> list[float] | None:
+    n = len(vector)
+    if n == 0:
+        return []
+    a = [list(row[:n]) + [float(vector[idx])] for idx, row in enumerate(matrix[:n])]
+    for col in range(n):
+        pivot = max(range(col, n), key=lambda row: abs(a[row][col]))
+        if abs(a[pivot][col]) < 1e-18:
+            return None
+        if pivot != col:
+            a[col], a[pivot] = a[pivot], a[col]
+        pivot_value = a[col][col]
+        for j in range(col, n + 1):
+            a[col][j] /= pivot_value
+        for row in range(n):
+            if row == col:
+                continue
+            factor = a[row][col]
+            if factor == 0:
+                continue
+            for j in range(col, n + 1):
+                a[row][j] -= factor * a[col][j]
+    return [a[row][n] for row in range(n)]
+
+
+def _normalize_positive(values: list[float]) -> list[float]:
+    clean = [max(float(value), 0.0) if math.isfinite(float(value)) else 0.0 for value in values]
+    total = sum(clean)
+    if total <= 0:
+        return [1.0 / len(values) for _ in values] if values else []
+    return [value / total for value in clean]
+
+
+def _mat_vec(matrix: list[list[float]], vector: list[float]) -> list[float]:
+    return [sum(row[j] * vector[j] for j in range(len(vector))) for row in matrix]
+
+
+def _portfolio_variance_vec(weights: list[float], covariance: list[list[float]]) -> float:
+    cov_weight = _mat_vec(covariance, weights)
+    return sum(weight * marginal for weight, marginal in zip(weights, cov_weight))
+
+
+def _portfolio_metrics(
+    weights: dict[str, float],
+    assets: list[str],
+    means: list[float],
+    covariance: list[list[float]],
+) -> dict[str, float]:
+    weight_vec = [float(weights.get(asset, 0.0)) for asset in assets]
+    daily_return = sum(weight * mean for weight, mean in zip(weight_vec, means))
+    variance = max(_portfolio_variance_vec(weight_vec, covariance), 0.0)
+    annual_return = daily_return * 252
+    annual_vol = math.sqrt(variance) * math.sqrt(252) if variance else 0.0
+    return {
+        "expected_annual_return": round(annual_return, 6),
+        "annualized_volatility": round(annual_vol, 6),
+        "sharpe": round(annual_return / annual_vol, 6) if annual_vol else 0.0,
+    }
+
+
+def _risk_contributions(weights: dict[str, float], assets: list[str], covariance: list[list[float]]) -> dict[str, float]:
+    weight_vec = [float(weights.get(asset, 0.0)) for asset in assets]
+    variance = _portfolio_variance_vec(weight_vec, covariance)
+    if variance <= 0:
+        return {asset: 0.0 for asset in assets}
+    marginal = _mat_vec(covariance, weight_vec)
+    return {
+        asset: round(max(weight_vec[idx] * marginal[idx] / variance, 0.0), 6)
+        for idx, asset in enumerate(assets)
+    }
 
 
 def _normalize_with_cap(raw: dict[str, float], *, max_weight: float) -> tuple[dict[str, float], float, list[str]]:

@@ -213,6 +213,119 @@ def run_momentum_ranking_backtest(
     }
 
 
+def run_multi_asset_backtest(
+    prices_by_asset: dict[str, list[dict[str, Any]]],
+    config: BacktestConfig | None = None,
+) -> dict[str, Any]:
+    """Run a single portfolio equity curve across multiple aligned assets.
+
+    Signals are still calculated per asset, then applied one bar later as
+    capital weights. This keeps the no-lookahead policy explicit while avoiding
+    the previous average-of-single-asset-results summary.
+    """
+
+    config = config or BacktestConfig()
+    series = {
+        asset.upper().strip(): sorted([row for row in rows if _price(row) is not None], key=lambda row: str(row.get("date") or ""))
+        for asset, rows in prices_by_asset.items()
+        if str(asset).strip()
+    }
+    series = {asset: rows for asset, rows in series.items() if len(rows) >= 2}
+    if not series:
+        return {
+            "status": "partial",
+            "reason": "not_enough_price_history",
+            "strategy": config.strategy,
+            "equity_curve": [],
+            "trades": [],
+            "metrics": performance_metrics([]),
+        }
+
+    common_dates = sorted(set.intersection(*(set(str(row.get("date") or "") for row in rows) for rows in series.values())))
+    if len(common_dates) < 2:
+        return {
+            "status": "partial",
+            "reason": "not_enough_common_history",
+            "strategy": config.strategy,
+            "equity_curve": [],
+            "trades": [],
+            "metrics": performance_metrics([]),
+        }
+
+    prices = {
+        asset: {str(row.get("date") or ""): _price(row) for row in rows}
+        for asset, rows in series.items()
+    }
+    signals = {}
+    for asset in prices:
+        asset_prices = [prices[asset][date] for date in common_dates]
+        signals[asset] = _signals(asset_prices, config)
+
+    cost = (float(config.transaction_cost_bps) + float(config.slippage_bps)) / 10000.0
+    equity = [float(config.initial_capital)]
+    trades: list[dict[str, Any]] = []
+    weights = {asset: 0.0 for asset in prices}
+    weights_history: list[dict[str, Any]] = []
+    exposure_history: list[float] = []
+
+    for idx in range(1, len(common_dates)):
+        date = common_dates[idx]
+        prev_date = common_dates[idx - 1]
+        next_weights = _portfolio_weights_from_signals({asset: signals[asset][idx - 1] for asset in prices})
+        turnover = sum(abs(next_weights[asset] - weights.get(asset, 0.0)) for asset in prices)
+        if turnover > 0:
+            trades.append({"date": date, "turnover": round(turnover, 8), "weights": {k: round(v, 8) for k, v in next_weights.items()}})
+        weights = next_weights
+        weights_history.append({"date": date, "weights": {k: round(v, 8) for k, v in weights.items()}})
+        exposure_history.append(sum(abs(weight) for weight in weights.values()))
+        daily_return = 0.0
+        for asset, weight in weights.items():
+            prev_price = prices[asset].get(prev_date)
+            current_price = prices[asset].get(date)
+            if not prev_price or current_price is None:
+                continue
+            daily_return += weight * (current_price / prev_price - 1.0)
+        equity.append(equity[-1] * (1.0 + daily_return - turnover * cost))
+
+    metrics = performance_metrics(equity)
+    metrics.update(
+        {
+            "turnover": round(sum(trade["turnover"] for trade in trades), 6),
+            "exposure": round(sum(exposure_history) / max(len(exposure_history), 1), 6),
+            "trade_count": len(trades),
+        }
+    )
+    return {
+        "status": "success",
+        "strategy": config.strategy,
+        "assumptions": {
+            "transaction_cost_bps": config.transaction_cost_bps,
+            "slippage_bps": config.slippage_bps,
+            "lookahead_policy": "asset signals are applied one bar after calculation",
+            "allocation_policy": "equal capital budget per asset signal; inactive signals remain in cash",
+        },
+        "date_range": {"start": common_dates[0], "end": common_dates[-1]},
+        "equity_curve": [{"date": date, "equity": round(value, 8)} for date, value in zip(common_dates, equity)],
+        "trades": trades,
+        "weights_history": weights_history,
+        "metrics": metrics,
+    }
+
+
+def _portfolio_weights_from_signals(signals: dict[str, float]) -> dict[str, float]:
+    if not signals:
+        return {}
+    n_assets = len(signals)
+    weights: dict[str, float] = {}
+    for asset, signal in signals.items():
+        try:
+            value = float(signal)
+        except (TypeError, ValueError):
+            value = 0.0
+        weights[asset] = max(value, 0.0) / n_assets
+    return weights
+
+
 def _stdev(values: list[float]) -> float:
     if len(values) < 2:
         return 0.0

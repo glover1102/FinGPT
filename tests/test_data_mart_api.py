@@ -90,6 +90,8 @@ def test_backtest_endpoint_accepts_multiple_tickers_with_request_range(tmp_path,
     body = resp.json()
     assert body["status"] == "success"
     assert set(body["asset_results"]) == {"SPY", "TLT"}
+    assert body["summary_policy"] == "reported metrics come from one aligned multi-asset portfolio equity curve"
+    assert body["equity_curve"]
     assert body["requested_range"]["start"] == "2026-01-02"
     assert body["price_counts"] == {"SPY": 2, "TLT": 2}
 
