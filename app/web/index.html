@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FinGPT Local Research Assistant</title>
-  <link rel="stylesheet" href="styles.css?v=20260503-risk-reduction" />
+  <link rel="stylesheet" href="styles.css?v=20260504-quant-lab-tabs2" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='48' font-size='48'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E" />
 </head>
 <body>
@@ -239,8 +239,16 @@
             <span>qwen2.5:7b 로컬 추론</span>
           </div>
         </div>
-        <div class="home-grid">
-          <section class="home-card home-chart-card">
+        <div class="home-dashboard-tabs" id="homeDashboardTabs" role="tablist" aria-label="Dashboard sections">
+          <button id="marketDashboardTab" type="button" class="dashboard-tab active" data-dashboard-tab="market" role="tab" aria-selected="true">
+            시장 대시보드
+          </button>
+          <button id="quantLabTab" type="button" class="dashboard-tab" data-dashboard-tab="quant" role="tab" aria-selected="false">
+            Quant Lab
+          </button>
+        </div>
+        <div id="homeSurfaceGrid" class="home-grid dashboard-surface-grid" data-dashboard-tab="market">
+          <section class="home-card home-chart-card market-surface">
             <div class="home-card-head">
               <h3>TradingView 단일 차트</h3>
               <span>SPY · Daily</span>
@@ -250,7 +258,7 @@
             </div>
             <div id="tvOverviewFallback" class="tv-fallback hidden">TradingView 단일 차트를 불러오는 중입니다.</div>
           </section>
-          <section class="home-card home-heatmap-card">
+          <section class="home-card home-heatmap-card market-surface">
             <div class="home-card-head">
               <h3>미국 주식 5분봉 히트맵</h3>
               <span id="homeHeatmapMeta" class="home-heatmap-meta-bar">Yahoo/yfinance · 최신/지연 데이터만 표시</span>
@@ -261,7 +269,7 @@
             <div id="tvHeatmapWidgetDisabled" class="hidden" aria-hidden="true"></div>
             <div id="tvHeatmapFallback" class="tv-fallback hidden">TradingView 히트맵은 공개 임베드에서 EOD로 표시될 수 있어 의사결정용 표시에서 제외했습니다.</div>
           </section>
-          <section class="home-card home-market-panel">
+          <section class="home-card home-market-panel market-surface">
             <div class="home-card-head">
               <h3>내부 시장 스냅샷</h3>
               <span>Yahoo/yfinance · 기준일 포함</span>
@@ -270,7 +278,7 @@
               <div class="home-news-empty">시장 데이터를 불러오는 중입니다.</div>
             </div>
           </section>
-          <section class="home-card data-mart-card">
+          <section class="home-card data-mart-card market-surface">
             <div class="home-card-head">
               <h3>데이터 마트 상태</h3>
               <button type="button" id="dataHealthRefresh" class="linkish">새로고침</button>
@@ -279,7 +287,7 @@
               <div class="home-news-empty">가격·거시·뉴스·공시 업데이트 상태를 불러오는 중입니다.</div>
             </div>
           </section>
-          <section class="home-card asset-detail-card">
+          <section class="home-card asset-detail-card quant-surface">
             <div class="home-card-head">
               <h3>자산 상세</h3>
               <span>가격 · 수익률 · 리스크</span>
@@ -292,7 +300,7 @@
               <div class="home-news-empty">티커를 입력하면 저장된 가격, 수익률, 변동성, 낙폭, 최신 데이터 기준일을 확인합니다.</div>
             </div>
           </section>
-          <section class="home-card backtest-card">
+          <section class="home-card backtest-card quant-surface">
             <div class="home-card-head">
               <h3>백테스트</h3>
               <span>다중 종목 · 기간 지정</span>
@@ -354,7 +362,7 @@
               <div class="home-news-empty">저장 가격 기준으로 CAGR, 변동성, Sharpe, Sortino, MDD, Calmar, 회전율을 계산합니다.</div>
             </div>
           </section>
-          <section class="home-card portfolio-card">
+          <section class="home-card portfolio-card quant-surface">
             <div class="home-card-head">
               <h3>포트폴리오</h3>
               <span>백테스트 조건 연동</span>
@@ -402,7 +410,7 @@
               <div class="home-news-empty">백테스트와 같은 유니버스/기간으로 최적화합니다. 누락 종목과 stale 데이터는 숨기지 않고 표시합니다.</div>
             </div>
           </section>
-          <section class="home-card">
+          <section class="home-card home-news-card market-surface">
             <div class="home-card-head">
               <h3>주요 뉴스</h3>
               <button type="button" id="homeNewsRefresh" class="linkish">새로고침</button>
@@ -579,6 +587,6 @@
     </section>
   </main>
 
-  <script src="app.js?v=20260503-risk-reduction"></script>
+  <script src="app.js?v=20260504-quant-lab-tabs2"></script>
 </body>
 </html>

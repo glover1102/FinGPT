@@ -158,6 +158,9 @@ const els = {
   homeNewsList: document.getElementById("homeNewsList"),
   homeNewsCategories: document.getElementById("homeNewsCategories"),
   homeNewsRefresh: document.getElementById("homeNewsRefresh"),
+  homeSurfaceGrid: document.getElementById("homeSurfaceGrid"),
+  marketDashboardTab: document.getElementById("marketDashboardTab"),
+  quantLabTab: document.getElementById("quantLabTab"),
   homeHeatmap: document.getElementById("homeHeatmap"),
   homeHeatmapMeta: document.getElementById("homeHeatmapMeta"),
   homeMarketList: document.getElementById("homeMarketList"),
@@ -218,6 +221,7 @@ const state = {
   tradingViewInitialized: false,
   dashboardNewsItems: [],
   dashboardNewsCategory: "all",
+  activeDashboardTab: "market",
   lastBacktestRequest: null,
   lastBacktestResult: null,
 };
@@ -819,6 +823,38 @@ function setFormNotice(message, level = "info") {
   els.formNotice.classList.add(level);
 }
 
+function setText(selector, text) {
+  const el = document.querySelector(selector);
+  if (el) el.textContent = text;
+}
+
+function setDashboardTab(tab = "market") {
+  const active = tab === "quant" ? "quant" : "market";
+  state.activeDashboardTab = active;
+  if (els.homeSurfaceGrid) {
+    els.homeSurfaceGrid.dataset.dashboardTab = active;
+  }
+  const buttons = [
+    { el: els.marketDashboardTab, tab: "market" },
+    { el: els.quantLabTab, tab: "quant" },
+  ];
+  buttons.forEach(({ el, tab: buttonTab }) => {
+    if (!el) return;
+    const isActive = buttonTab === active;
+    el.classList.toggle("active", isActive);
+    el.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+  const homeTitle = document.querySelector(".home-hero h2");
+  const homeCopy = document.querySelector(".home-hero p:not(.eyebrow)");
+  if (active === "quant") {
+    if (homeTitle) homeTitle.textContent = "Quant Lab";
+    if (homeCopy) homeCopy.textContent = "저장 가격 기반 리스크, 전략 검증, 포트폴리오 배분을 같은 조건으로 점검합니다.";
+  } else {
+    if (homeTitle) homeTitle.textContent = "시장 대시보드";
+    if (homeCopy) homeCopy.textContent = "티커를 입력하면 종목 분석으로, 비워두고 질문만 입력하면 금리·신용·FX·원자재·테마 topic 분석으로 라우팅합니다.";
+  }
+}
+
 function normalizeStaticLabels() {
   document.title = "FinGPT Local Research Assistant";
   if (els.tickerHint) els.tickerHint.textContent = "ticker 없이 질의 가능, ticker는 참고 힌트";
@@ -837,22 +873,18 @@ function normalizeStaticLabels() {
   if (qHint) qHint.textContent = "자유 질문 또는 프리셋 선택";
   const evidenceSearch = document.getElementById("evidenceSearch");
   if (evidenceSearch) evidenceSearch.placeholder = "검색: 제목, 내용, source, doc_id";
-  const homeTitle = document.querySelector(".home-hero h2");
-  if (homeTitle) homeTitle.textContent = "시장 대시보드";
-  const homeCopy = document.querySelector(".home-hero p:not(.eyebrow)");
-  if (homeCopy) homeCopy.textContent = "티커를 입력하면 종목 분석으로, 비워두고 질문만 입력하면 금리·신용·FX·원자재·테마 topic 분석으로 라우팅합니다.";
+  setDashboardTab(state.activeDashboardTab || "market");
   const homeStatus = document.querySelectorAll(".home-status span");
   if (homeStatus[0]) homeStatus[0].textContent = "OpenBB/Yahoo/FRED/SEC 중심";
   if (homeStatus[1]) homeStatus[1].textContent = "qwen2.5:7b 로컬 추론";
-  const tvTitles = document.querySelectorAll(".home-card-head h3");
-  if (tvTitles[0]) tvTitles[0].textContent = "TradingView 단일 차트";
-  if (tvTitles[1]) tvTitles[1].textContent = "미국 주식 5분봉 히트맵";
-  if (tvTitles[2]) tvTitles[2].textContent = "내부 시장 스냅샷";
-  if (tvTitles[3]) tvTitles[3].textContent = "데이터 마트 상태";
-  if (tvTitles[4]) tvTitles[4].textContent = "자산 상세";
-  if (tvTitles[5]) tvTitles[5].textContent = "백테스트";
-  if (tvTitles[6]) tvTitles[6].textContent = "포트폴리오";
-  if (tvTitles[7]) tvTitles[7].textContent = "주요 뉴스";
+  setText(".home-chart-card .home-card-head h3", "TradingView 단일 차트");
+  setText(".home-heatmap-card .home-card-head h3", "미국 주식 5분봉 히트맵");
+  setText(".home-market-panel .home-card-head h3", "내부 시장 스냅샷");
+  setText(".data-mart-card .home-card-head h3", "데이터 마트 상태");
+  setText(".asset-detail-card .home-card-head h3", "자산 상세");
+  setText(".backtest-card .home-card-head h3", "백테스트");
+  setText(".portfolio-card .home-card-head h3", "포트폴리오");
+  setText(".home-news-card .home-card-head h3", "주요 뉴스");
   const runMeta = document.querySelector(".meta-row");
   if (runMeta) runMeta.innerHTML = '<span class="kbd">Ctrl</span> + <span class="kbd">Enter</span> 실행';
 }
@@ -1051,6 +1083,36 @@ function sectorBreadth(items) {
   return { up, down, total: usable.length };
 }
 
+function heatmapWeight(item) {
+  const weight = Number(item?.weight);
+  return Number.isFinite(weight) && weight > 0 ? Math.max(weight, 0.2) : 1;
+}
+
+function heatmapSectorSpan(sectorWeight, totalWeight, sectorCount) {
+  if (sectorCount <= 1) return 12;
+  const share = totalWeight > 0 ? sectorWeight / totalWeight : 1 / Math.max(sectorCount, 1);
+  if (share >= 0.52) return 8;
+  if (share >= 0.32) return 6;
+  if (share >= 0.18) return 4;
+  return 3;
+}
+
+function heatmapTileSpan(itemWeight, sectorWeight, itemCount) {
+  if (itemCount <= 1) return 12;
+  if (itemCount === 2) return 6;
+  const share = sectorWeight > 0 ? itemWeight / sectorWeight : 1 / Math.max(itemCount, 1);
+  if (share >= 0.34) return 8;
+  if (share >= 0.22) return 6;
+  if (share >= 0.12) return 5;
+  return 4;
+}
+
+function heatmapTileRows(tileSpan, itemCount) {
+  if (itemCount <= 3 && tileSpan >= 5) return 2;
+  if (tileSpan >= 7) return 2;
+  return 1;
+}
+
 function fmtHeatmapAsOf(value) {
   if (!value) return "기준시각 미확인";
   try {
@@ -1087,6 +1149,7 @@ function renderHomeHeatmap(items, meta = {}) {
   if (!els.homeHeatmap) return;
   const usable = Array.isArray(items) ? items.filter(isDecisionUsableMarketItem) : [];
   if (!usable.length) {
+    els.homeHeatmap.classList.remove("finviz-treemap");
     els.homeHeatmap.innerHTML = `
       <div class="home-news-empty">
         장중 최신/지연 intraday 데이터가 없어 히트맵을 숨겼습니다.<br>
@@ -1121,30 +1184,36 @@ function renderHomeHeatmap(items, meta = {}) {
   const sectors = Array.from(bySector.entries())
     .map(([sector, sectorItems]) => [sector, sectorItems.sort((a, b) => (Number(b.weight) || 0) - (Number(a.weight) || 0))])
     .sort((a, b) => b[1].reduce((sum, row) => sum + (Number(row.weight) || 1), 0) - a[1].reduce((sum, row) => sum + (Number(row.weight) || 1), 0));
-  els.homeHeatmap.innerHTML = sectors.map(([sector, sectorItems]) => {
+  const sectorWeights = sectors.map(([, sectorItems]) => sectorItems.reduce((sum, item) => sum + heatmapWeight(item), 0));
+  const totalWeight = sectorWeights.reduce((sum, weight) => sum + weight, 0);
+  els.homeHeatmap.classList.add("finviz-treemap");
+  els.homeHeatmap.innerHTML = sectors.map(([sector, sectorItems], index) => {
+    const sectorWeight = sectorWeights[index] || sectorItems.length || 1;
+    const sectorSpan = heatmapSectorSpan(sectorWeight, totalWeight, sectors.length);
     const sectorChange = weightedSectorChange(sectorItems);
     const sectorCls = Number.isFinite(Number(sectorChange)) ? (Number(sectorChange) >= 0 ? "up" : "down") : "muted";
     const sectorChangeText = Number.isFinite(Number(sectorChange)) ? fmtPct(sectorChange) : "-";
     const breadth = sectorBreadth(sectorItems);
-    const movers = sectorItems.slice(0, 12);
-    const hiddenCount = Math.max(0, sectorItems.length - movers.length);
     return `
-    <section class="stock-heatmap-sector ${sectorCls}">
-      <div class="stock-sector-title">
+    <section class="finviz-sector stock-heatmap-sector ${sectorCls}" style="--sector-span:${sectorSpan}">
+      <div class="finviz-sector-title stock-sector-title">
         <div>
           <strong>${escapeHtml(sector)}</strong>
           <small>${breadth.up} 상승 · ${breadth.down} 하락</small>
         </div>
         <span class="${sectorCls}">${escapeHtml(sectorChangeText)}</span>
       </div>
-      <div class="stock-sector-movers dense">
-        ${movers.map((item) => {
+      <div class="finviz-sector-tiles">
+        ${sectorItems.map((item) => {
           const change = item.change_pct;
           const cls = Number(change) >= 0 ? "up" : "down";
           const freshness = item.freshness_status || "unknown";
+          const itemWeight = heatmapWeight(item);
+          const tileSpan = heatmapTileSpan(itemWeight, sectorWeight, sectorItems.length);
+          const tileRows = heatmapTileRows(tileSpan, sectorItems.length);
           const title = `${item.symbol} ${item.label || ""} ${fmtPct(change)} · ${fmtHeatmapAsOf(item.as_of)} ET · ${FRESHNESS_LABELS[freshness] || freshness}`;
           return `
-            <article class="stock-heatmap-tile ${cls} ${freshness}" style="--heat-bg:${heatColor(change)}" title="${escapeHtml(title)}">
+            <article class="finviz-heatmap-tile stock-heatmap-tile ${cls} ${freshness}" style="--heat-bg:${heatColor(change)}; --tile-span:${tileSpan}; --tile-rows:${tileRows}" title="${escapeHtml(title)}">
               <div class="stock-heatmap-main">
                 <span class="stock-heatmap-symbol">${escapeHtml(item.symbol || "")}</span>
                 <span class="stock-heatmap-change">${escapeHtml(fmtPct(change))}</span>
@@ -1153,7 +1222,6 @@ function renderHomeHeatmap(items, meta = {}) {
             </article>
           `;
         }).join("")}
-        ${hiddenCount ? `<div class="stock-heatmap-more">외 ${hiddenCount}개</div>` : ""}
       </div>
     </section>
   `;
@@ -1162,6 +1230,7 @@ function renderHomeHeatmap(items, meta = {}) {
 
 async function loadDashboardEquityHeatmap(force = false) {
   if (!els.homeHeatmap || (state.dashboardHeatmapLoaded && !force)) return;
+  els.homeHeatmap.classList.remove("finviz-treemap");
   els.homeHeatmap.innerHTML = '<div class="home-news-empty">intraday 히트맵 데이터를 불러오는 중입니다.</div>';
   if (els.homeHeatmapMeta) els.homeHeatmapMeta.textContent = "Yahoo/yfinance 5분봉 최신 가격을 확인하는 중입니다.";
   try {
@@ -4477,6 +4546,12 @@ function bindInputs() {
 
   els.loadLatestBtn.addEventListener("click", loadLatest);
   if (els.homeBtn) els.homeBtn.addEventListener("click", showHome);
+  if (els.marketDashboardTab) {
+    els.marketDashboardTab.addEventListener("click", () => setDashboardTab("market"));
+  }
+  if (els.quantLabTab) {
+    els.quantLabTab.addEventListener("click", () => setDashboardTab("quant"));
+  }
   if (els.homeNewsRefresh) els.homeNewsRefresh.addEventListener("click", () => {
     loadDashboardNews(true);
     loadDashboardMarket(true);
