@@ -36,7 +36,7 @@ from core.utils.eval_dashboard import load_eval_dashboard
 from core.utils.qdrant_admin import get_collection_info, purge_points
 from pipelines.collect.cache import get_cache as get_collection_cache
 from pipelines.collect.google_news_rss import collect_news_from_google_rss
-from pipelines.backtest.engine import BacktestConfig, run_backtest
+from pipelines.backtest.engine import BacktestConfig, run_backtest, run_momentum_ranking_backtest
 from pipelines.data_mart.storage.repository import data_health as data_mart_health, get_prices as data_mart_get_prices
 from pipelines.output.exporters import response_to_csv, response_to_jsonl
 from pipelines.orchestration.dispatch import dispatch_async
@@ -83,10 +83,15 @@ _NON_COMPANY_DIRECT_ASSET_CLASSES = {"bond_etf", "commodity_etf", "forex", "futu
 
 class BacktestRunRequest(BaseModel):
     ticker: str | None = Field(default=None)
+    tickers: list[str] = Field(default_factory=list)
     strategy: str = Field(default="buy_and_hold")
     lookback_days: int = Field(default=252, ge=2, le=5000)
+    start_date: str | None = Field(default=None)
+    end_date: str | None = Field(default=None)
     short_window: int = Field(default=20, ge=1, le=252)
     long_window: int = Field(default=50, ge=2, le=756)
+    top_n: int = Field(default=1, ge=1, le=50)
+    rebalance_every: int = Field(default=21, ge=1, le=252)
     transaction_cost_bps: float = Field(default=5.0, ge=0, le=1000)
     slippage_bps: float = Field(default=2.0, ge=0, le=1000)
     initial_capital: float = Field(default=1.0, gt=0)
@@ -98,34 +103,64 @@ class BacktestRunRequest(BaseModel):
         cleaned = str(value or "").strip().upper()
         return cleaned or None
 
+    @field_validator("tickers", mode="before")
+    @classmethod
+    def _clean_tickers(cls, value: Any) -> list[str]:
+        return _clean_ticker_list(value)
+
     @field_validator("strategy", mode="before")
     @classmethod
     def _clean_strategy(cls, value: Any) -> str:
         return str(value or "buy_and_hold").strip().lower()
+
+    @field_validator("start_date", "end_date", mode="before")
+    @classmethod
+    def _clean_date(cls, value: Any) -> str | None:
+        cleaned = str(value or "").strip()
+        return cleaned or None
 
 
 class PortfolioOptimizeRequest(BaseModel):
     tickers: list[str] = Field(default_factory=list)
     method: str = Field(default="equal_weight")
     lookback_days: int = Field(default=252, ge=2, le=5000)
+    start_date: str | None = Field(default=None)
+    end_date: str | None = Field(default=None)
     max_weight: float = Field(default=1.0, gt=0, le=1.0)
     returns_by_asset: dict[str, list[float]] | None = None
 
     @field_validator("tickers", mode="before")
     @classmethod
     def _clean_tickers(cls, value: Any) -> list[str]:
-        if value is None:
-            return []
-        if isinstance(value, str):
-            raw = value.replace(",", " ").split()
-        else:
-            raw = list(value)
-        return [str(item or "").strip().upper() for item in raw if str(item or "").strip()]
+        return _clean_ticker_list(value)
 
     @field_validator("method", mode="before")
     @classmethod
     def _clean_method(cls, value: Any) -> str:
         return str(value or "equal_weight").strip().lower()
+
+    @field_validator("start_date", "end_date", mode="before")
+    @classmethod
+    def _clean_date(cls, value: Any) -> str | None:
+        cleaned = str(value or "").strip()
+        return cleaned or None
+
+
+def _clean_ticker_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        raw = value.replace(",", " ").split()
+    else:
+        raw = list(value)
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in raw:
+        ticker = str(item or "").strip().upper()
+        if ticker and ticker not in seen:
+            out.append(ticker)
+            seen.add(ticker)
+    return out
 
 _EQUITY_HEATMAP_UNIVERSE: tuple[dict[str, Any], ...] = (
     {"symbol": "NVDA", "label": "NVIDIA", "sector": "전자 기술", "weight": 10.0},
@@ -439,9 +474,55 @@ async def backtest_run(request: BacktestRunRequest) -> Dict[str, Any]:
     rows = list(request.price_rows or [])
     data_status = "request_rows" if rows else "data_mart"
     if not rows:
-        if not request.ticker:
-            raise HTTPException(status_code=422, detail="ticker or price_rows is required")
-        rows = await asyncio.to_thread(data_mart_get_prices, request.ticker, limit=request.lookback_days)
+        tickers = request.tickers or ([request.ticker] if request.ticker else [])
+        if not tickers:
+            raise HTTPException(status_code=422, detail="ticker, tickers, or price_rows is required")
+        rows_by_asset: dict[str, list[dict[str, Any]]] = {}
+        missing: list[str] = []
+        for ticker in tickers:
+            asset_rows = await asyncio.to_thread(data_mart_get_prices, ticker, limit=request.lookback_days)
+            asset_rows = _filter_price_rows(asset_rows, start_date=request.start_date, end_date=request.end_date)
+            rows_by_asset[ticker] = asset_rows
+            if len(asset_rows) < 2:
+                missing.append(ticker)
+        config = BacktestConfig(
+            strategy=request.strategy,
+            short_window=request.short_window,
+            long_window=request.long_window,
+            transaction_cost_bps=request.transaction_cost_bps,
+            slippage_bps=request.slippage_bps,
+            initial_capital=request.initial_capital,
+        )
+        try:
+            if request.strategy == "momentum_ranking" and len(tickers) > 1:
+                result = await asyncio.to_thread(
+                    run_momentum_ranking_backtest,
+                    rows_by_asset,
+                    lookback=request.short_window,
+                    top_n=min(request.top_n, len(tickers)),
+                    rebalance_every=request.rebalance_every,
+                    config=config,
+                )
+                result["asset_results"] = {}
+            else:
+                asset_results = {
+                    ticker: await asyncio.to_thread(run_backtest, asset_rows, config)
+                    for ticker, asset_rows in rows_by_asset.items()
+                }
+                if len(asset_results) == 1:
+                    result = next(iter(asset_results.values()))
+                else:
+                    result = _summarize_backtest_results(asset_results, request.strategy)
+                result["asset_results"] = asset_results
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        result["ticker"] = request.ticker or (tickers[0] if len(tickers) == 1 else None)
+        result["tickers"] = tickers
+        result["missing_assets"] = missing
+        result["price_counts"] = {ticker: len(asset_rows) for ticker, asset_rows in rows_by_asset.items()}
+        result["data_status"] = "partial" if missing else data_status
+        result["requested_range"] = {"start": request.start_date, "end": request.end_date, "lookback_days": request.lookback_days}
+        return result
     config = BacktestConfig(
         strategy=request.strategy,
         short_window=request.short_window,
@@ -455,8 +536,10 @@ async def backtest_run(request: BacktestRunRequest) -> Dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     result["ticker"] = request.ticker
+    result["tickers"] = request.tickers or ([request.ticker] if request.ticker else [])
     result["price_count"] = len(rows)
     result["data_status"] = data_status if rows else "empty"
+    result["requested_range"] = {"start": request.start_date, "end": request.end_date, "lookback_days": request.lookback_days}
     return result
 
 
@@ -471,6 +554,7 @@ async def portfolio_optimize(request: PortfolioOptimizeRequest) -> Dict[str, Any
             raise HTTPException(status_code=422, detail="tickers or returns_by_asset is required")
         for ticker in request.tickers:
             rows = await asyncio.to_thread(data_mart_get_prices, ticker, limit=request.lookback_days)
+            rows = _filter_price_rows(rows, start_date=request.start_date, end_date=request.end_date)
             returns = _returns_from_price_rows(rows)
             if returns:
                 returns_by_asset[ticker] = returns
@@ -487,7 +571,56 @@ async def portfolio_optimize(request: PortfolioOptimizeRequest) -> Dict[str, Any
         raise HTTPException(status_code=422, detail=str(exc))
     result["missing_assets"] = missing
     result["data_status"] = "request_returns" if request.returns_by_asset else ("partial" if missing else "data_mart")
+    result["tickers"] = request.tickers
+    result["date_range"] = {"start": request.start_date, "end": request.end_date, "lookback_days": request.lookback_days}
+    result["return_counts"] = {ticker: len(returns) for ticker, returns in returns_by_asset.items()}
     return result
+
+
+def _filter_price_rows(
+    rows: list[dict[str, Any]],
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[dict[str, Any]]:
+    if not start_date and not end_date:
+        return rows
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        date = str(row.get("date") or "")
+        if start_date and date < start_date:
+            continue
+        if end_date and date > end_date:
+            continue
+        out.append(row)
+    return out
+
+
+def _summarize_backtest_results(asset_results: dict[str, dict[str, Any]], strategy: str) -> dict[str, Any]:
+    successes = {ticker: result for ticker, result in asset_results.items() if result.get("status") == "success"}
+    metrics: dict[str, float] = {}
+    metric_keys = ("cagr", "volatility", "sharpe", "sortino", "max_drawdown", "calmar", "turnover", "exposure", "trade_count")
+    for key in metric_keys:
+        values: list[float] = []
+        for result in successes.values():
+            value = (result.get("metrics") or {}).get(key)
+            try:
+                values.append(float(value))
+            except (TypeError, ValueError):
+                continue
+        metrics[key] = round(sum(values) / len(values), 6) if values else 0.0
+    starts = [str(result.get("date_range", {}).get("start") or "") for result in successes.values() if result.get("date_range")]
+    ends = [str(result.get("date_range", {}).get("end") or "") for result in successes.values() if result.get("date_range")]
+    return {
+        "status": "success" if successes else "partial",
+        "strategy": strategy,
+        "reason": "" if successes else "not_enough_price_history",
+        "date_range": {"start": min(starts) if starts else None, "end": max(ends) if ends else None},
+        "equity_curve": [],
+        "trades": [],
+        "metrics": metrics,
+        "summary_policy": "reported metrics are simple averages across successful asset-level backtests",
+    }
 
 
 def _returns_from_price_rows(rows: list[dict[str, Any]]) -> list[float]:

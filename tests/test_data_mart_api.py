@@ -59,6 +59,41 @@ def test_backtest_endpoint_accepts_request_price_rows() -> None:
     assert body["equity_curve"][-1]["equity"] == 1.21
 
 
+def test_backtest_endpoint_accepts_multiple_tickers_with_request_range(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "research_mart.db"
+    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
+    init_db(db_path)
+    repository.upsert_prices(
+        [
+            PriceBar(ticker="SPY", date="2026-01-02", close=100, adjusted_close=100, source="test"),
+            PriceBar(ticker="SPY", date="2026-01-03", close=110, adjusted_close=110, source="test"),
+            PriceBar(ticker="TLT", date="2026-01-02", close=50, adjusted_close=50, source="test"),
+            PriceBar(ticker="TLT", date="2026-01-03", close=49, adjusted_close=49, source="test"),
+        ],
+        db_path=db_path,
+    )
+
+    client = TestClient(app)
+    resp = client.post(
+        "/api/v1/backtest/run",
+        json={
+            "tickers": ["SPY", "TLT"],
+            "strategy": "buy_and_hold",
+            "start_date": "2026-01-02",
+            "end_date": "2026-01-03",
+            "transaction_cost_bps": 0,
+            "slippage_bps": 0,
+        },
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "success"
+    assert set(body["asset_results"]) == {"SPY", "TLT"}
+    assert body["requested_range"]["start"] == "2026-01-02"
+    assert body["price_counts"] == {"SPY": 2, "TLT": 2}
+
+
 def test_portfolio_optimize_endpoint_accepts_request_returns() -> None:
     client = TestClient(app)
     resp = client.post(
@@ -77,3 +112,23 @@ def test_portfolio_optimize_endpoint_accepts_request_returns() -> None:
     assert body["status"] == "success"
     assert body["data_status"] == "request_returns"
     assert body["weights"]["LOW"] > body["weights"]["HIGH"]
+
+
+def test_portfolio_optimize_endpoint_supports_advanced_methods() -> None:
+    client = TestClient(app)
+    resp = client.post(
+        "/api/v1/portfolio/optimize",
+        json={
+            "method": "momentum_tilt",
+            "max_weight": 0.8,
+            "returns_by_asset": {
+                "UP": [0.01, 0.02, 0.01],
+                "FLAT": [0.0, 0.0, 0.0],
+            },
+        },
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "success"
+    assert body["weights"]["UP"] > body["weights"]["FLAT"]

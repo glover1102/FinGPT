@@ -16,9 +16,24 @@ def optimize_portfolio(
     method = str(method or "equal_weight").lower()
     if method == "equal_weight":
         raw = {asset: 1.0 for asset in assets}
-    elif method in {"inverse_volatility", "risk_parity"}:
+    elif method in {"inverse_volatility", "risk_parity", "equal_risk_contribution"}:
         raw = {asset: 1.0 / max(_vol(list(returns_by_asset[asset])), 1e-9) for asset in assets}
-    elif method == "max_sharpe":
+    elif method in {"minimum_volatility", "min_volatility"}:
+        raw = {asset: 1.0 / max(_vol(list(returns_by_asset[asset])) ** 2, 1e-12) for asset in assets}
+    elif method == "momentum_tilt":
+        raw = {}
+        for asset in assets:
+            rows = list(returns_by_asset[asset])
+            cumulative = 1.0
+            for row in rows:
+                try:
+                    cumulative *= 1.0 + float(row)
+                except (TypeError, ValueError):
+                    continue
+            raw[asset] = max(cumulative - 1.0, 0.0)
+        if not any(raw.values()):
+            raw = {asset: 1.0 for asset in assets}
+    elif method in {"max_sharpe", "sharpe_tilt"}:
         raw = {}
         for asset in assets:
             rows = list(returns_by_asset[asset])

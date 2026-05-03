@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FinGPT Local Research Assistant</title>
-  <link rel="stylesheet" href="styles.css?v=20260502-heatmap-polish" />
+  <link rel="stylesheet" href="styles.css?v=20260503-decision-surfaces2" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='48' font-size='48'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E" />
 </head>
 <body>
@@ -272,61 +272,134 @@
           </section>
           <section class="home-card data-mart-card">
             <div class="home-card-head">
-              <h3>Data Health</h3>
-              <button type="button" id="dataHealthRefresh" class="linkish">Refresh</button>
+              <h3>데이터 마트 상태</h3>
+              <button type="button" id="dataHealthRefresh" class="linkish">새로고침</button>
             </div>
             <div id="homeDataHealth" class="decision-surface">
-              <div class="home-news-empty">Structured data mart health is loading.</div>
+              <div class="home-news-empty">가격·거시·뉴스·공시 업데이트 상태를 불러오는 중입니다.</div>
             </div>
           </section>
           <section class="home-card asset-detail-card">
             <div class="home-card-head">
-              <h3>Asset Detail</h3>
-              <span>data mart prices</span>
+              <h3>자산 상세</h3>
+              <span>가격 · 수익률 · 리스크</span>
             </div>
             <div class="decision-form compact-form">
               <input id="assetDetailTicker" type="text" value="SPY" maxlength="24" aria-label="Asset detail ticker" />
-              <button type="button" id="assetDetailLoad" class="ghost-btn">Load</button>
+              <button type="button" id="assetDetailLoad" class="ghost-btn">조회</button>
             </div>
             <div id="assetDetailSurface" class="decision-surface">
-              <div class="home-news-empty">Select a ticker to inspect stored prices.</div>
+              <div class="home-news-empty">티커를 입력하면 저장된 가격, 수익률, 변동성, 낙폭, 최신 데이터 기준일을 확인합니다.</div>
             </div>
           </section>
           <section class="home-card backtest-card">
             <div class="home-card-head">
-              <h3>Backtest</h3>
-              <span>buy & hold baseline</span>
+              <h3>백테스트</h3>
+              <span>다중 종목 · 기간 지정</span>
             </div>
-            <div class="decision-form compact-form">
-              <input id="backtestTicker" type="text" value="SPY" maxlength="24" aria-label="Backtest ticker" />
-              <select id="backtestStrategy" aria-label="Backtest strategy">
-                <option value="buy_and_hold">Buy & hold</option>
-                <option value="moving_average">Moving average</option>
-                <option value="volatility_targeting">Vol targeting</option>
-              </select>
-              <button type="button" id="backtestRun" class="ghost-btn">Run</button>
+            <div class="decision-form backtest-form">
+              <label>
+                <span>종목</span>
+                <input id="backtestTicker" type="text" value="SPY,TLT,GLD" maxlength="160" aria-label="Backtest tickers" />
+              </label>
+              <label>
+                <span>전략</span>
+                <select id="backtestStrategy" aria-label="Backtest strategy">
+                  <option value="buy_and_hold">Buy & hold</option>
+                  <option value="moving_average">Moving average trend</option>
+                  <option value="volatility_targeting">Vol targeting</option>
+                  <option value="momentum_ranking">Momentum ranking</option>
+                </select>
+              </label>
+              <label>
+                <span>시작일</span>
+                <input id="backtestStartDate" type="date" aria-label="Backtest start date" />
+              </label>
+              <label>
+                <span>종료일</span>
+                <input id="backtestEndDate" type="date" aria-label="Backtest end date" />
+              </label>
+              <label>
+                <span>Lookback</span>
+                <input id="backtestLookbackDays" type="number" value="756" min="2" max="5000" aria-label="Backtest lookback days" />
+              </label>
+              <label>
+                <span>단기/랭킹</span>
+                <input id="backtestShortWindow" type="number" value="20" min="1" max="252" aria-label="Backtest short window" />
+              </label>
+              <label>
+                <span>장기</span>
+                <input id="backtestLongWindow" type="number" value="50" min="2" max="756" aria-label="Backtest long window" />
+              </label>
+              <label>
+                <span>Top N</span>
+                <input id="backtestTopN" type="number" value="1" min="1" max="50" aria-label="Backtest top N" />
+              </label>
+              <label>
+                <span>리밸런싱</span>
+                <input id="backtestRebalanceEvery" type="number" value="21" min="1" max="252" aria-label="Backtest rebalance every" />
+              </label>
+              <label>
+                <span>비용 bps</span>
+                <input id="backtestCostBps" type="number" value="5" min="0" max="1000" step="0.5" aria-label="Backtest transaction cost basis points" />
+              </label>
+              <label>
+                <span>슬리피지 bps</span>
+                <input id="backtestSlippageBps" type="number" value="2" min="0" max="1000" step="0.5" aria-label="Backtest slippage basis points" />
+              </label>
+              <button type="button" id="backtestRun" class="ghost-btn">실행</button>
             </div>
+            <div class="decision-note">같은 종목/기간 조건을 포트폴리오 최적화에 바로 넘길 수 있습니다.</div>
             <div id="backtestSurface" class="decision-surface">
-              <div class="home-news-empty">Run a stored-price backtest. Empty data will be shown as partial, not success.</div>
+              <div class="home-news-empty">저장 가격 기준으로 CAGR, 변동성, Sharpe, Sortino, MDD, Calmar, 회전율을 계산합니다.</div>
             </div>
           </section>
           <section class="home-card portfolio-card">
             <div class="home-card-head">
-              <h3>Portfolio</h3>
-              <span>optimizer</span>
+              <h3>포트폴리오</h3>
+              <span>백테스트 조건 연동</span>
             </div>
-            <div class="decision-form compact-form">
-              <input id="portfolioTickers" type="text" value="SPY,TLT,GLD" maxlength="96" aria-label="Portfolio tickers" />
-              <select id="portfolioMethod" aria-label="Portfolio method">
-                <option value="equal_weight">Equal weight</option>
-                <option value="inverse_volatility">Inverse vol</option>
-                <option value="risk_parity">Risk parity</option>
-                <option value="max_sharpe">Max Sharpe</option>
-              </select>
-              <button type="button" id="portfolioOptimize" class="ghost-btn">Optimize</button>
+            <div class="decision-form portfolio-form">
+              <label>
+                <span>종목</span>
+                <input id="portfolioTickers" type="text" value="SPY,TLT,GLD" maxlength="160" aria-label="Portfolio tickers" />
+              </label>
+              <label>
+                <span>목적 함수</span>
+                <select id="portfolioMethod" aria-label="Portfolio method">
+                  <optgroup label="기본 배분">
+                    <option value="equal_weight">Equal weight</option>
+                    <option value="inverse_volatility">Inverse volatility</option>
+                  </optgroup>
+                  <optgroup label="리스크/성과">
+                    <option value="risk_parity">Risk parity proxy</option>
+                    <option value="minimum_volatility">Minimum volatility</option>
+                    <option value="max_sharpe">Max Sharpe proxy</option>
+                    <option value="momentum_tilt">Momentum tilt</option>
+                  </optgroup>
+                </select>
+              </label>
+              <label>
+                <span>시작일</span>
+                <input id="portfolioStartDate" type="date" aria-label="Portfolio start date" />
+              </label>
+              <label>
+                <span>종료일</span>
+                <input id="portfolioEndDate" type="date" aria-label="Portfolio end date" />
+              </label>
+              <label>
+                <span>Lookback</span>
+                <input id="portfolioLookbackDays" type="number" value="756" min="2" max="5000" aria-label="Portfolio lookback days" />
+              </label>
+              <label>
+                <span>최대 비중</span>
+                <input id="portfolioMaxWeight" type="number" value="0.60" min="0.01" max="1" step="0.01" aria-label="Portfolio max weight" />
+              </label>
+              <button type="button" id="portfolioSyncBacktest" class="ghost-btn">백테스트 조건 적용</button>
+              <button type="button" id="portfolioOptimize" class="ghost-btn">최적화</button>
             </div>
             <div id="portfolioSurface" class="decision-surface">
-              <div class="home-news-empty">Optimize with data-mart returns. Missing assets are reported explicitly.</div>
+              <div class="home-news-empty">백테스트와 같은 유니버스/기간으로 최적화합니다. 누락 종목과 stale 데이터는 숨기지 않고 표시합니다.</div>
             </div>
           </section>
           <section class="home-card">
@@ -506,6 +579,6 @@
     </section>
   </main>
 
-  <script src="app.js?v=20260502-heatmap-polish"></script>
+  <script src="app.js?v=20260503-decision-surfaces2"></script>
 </body>
 </html>

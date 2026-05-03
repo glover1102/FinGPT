@@ -168,10 +168,24 @@ const els = {
   assetDetailSurface: document.getElementById("assetDetailSurface"),
   backtestTicker: document.getElementById("backtestTicker"),
   backtestStrategy: document.getElementById("backtestStrategy"),
+  backtestStartDate: document.getElementById("backtestStartDate"),
+  backtestEndDate: document.getElementById("backtestEndDate"),
+  backtestLookbackDays: document.getElementById("backtestLookbackDays"),
+  backtestShortWindow: document.getElementById("backtestShortWindow"),
+  backtestLongWindow: document.getElementById("backtestLongWindow"),
+  backtestTopN: document.getElementById("backtestTopN"),
+  backtestRebalanceEvery: document.getElementById("backtestRebalanceEvery"),
+  backtestCostBps: document.getElementById("backtestCostBps"),
+  backtestSlippageBps: document.getElementById("backtestSlippageBps"),
   backtestRun: document.getElementById("backtestRun"),
   backtestSurface: document.getElementById("backtestSurface"),
   portfolioTickers: document.getElementById("portfolioTickers"),
   portfolioMethod: document.getElementById("portfolioMethod"),
+  portfolioStartDate: document.getElementById("portfolioStartDate"),
+  portfolioEndDate: document.getElementById("portfolioEndDate"),
+  portfolioLookbackDays: document.getElementById("portfolioLookbackDays"),
+  portfolioMaxWeight: document.getElementById("portfolioMaxWeight"),
+  portfolioSyncBacktest: document.getElementById("portfolioSyncBacktest"),
   portfolioOptimize: document.getElementById("portfolioOptimize"),
   portfolioSurface: document.getElementById("portfolioSurface"),
   tvOverviewWidget: document.getElementById("tvOverviewWidget"),
@@ -204,6 +218,8 @@ const state = {
   tradingViewInitialized: false,
   dashboardNewsItems: [],
   dashboardNewsCategory: "all",
+  lastBacktestRequest: null,
+  lastBacktestResult: null,
 };
 
 // ---------- Utilities ----------
@@ -832,7 +848,11 @@ function normalizeStaticLabels() {
   if (tvTitles[0]) tvTitles[0].textContent = "TradingView 단일 차트";
   if (tvTitles[1]) tvTitles[1].textContent = "미국 주식 5분봉 히트맵";
   if (tvTitles[2]) tvTitles[2].textContent = "내부 시장 스냅샷";
-  if (tvTitles[3]) tvTitles[3].textContent = "주요 뉴스";
+  if (tvTitles[3]) tvTitles[3].textContent = "데이터 마트 상태";
+  if (tvTitles[4]) tvTitles[4].textContent = "자산 상세";
+  if (tvTitles[5]) tvTitles[5].textContent = "백테스트";
+  if (tvTitles[6]) tvTitles[6].textContent = "포트폴리오";
+  if (tvTitles[7]) tvTitles[7].textContent = "주요 뉴스";
   const runMeta = document.querySelector(".meta-row");
   if (runMeta) runMeta.innerHTML = '<span class="kbd">Ctrl</span> + <span class="kbd">Enter</span> 실행';
 }
@@ -1106,7 +1126,7 @@ function renderHomeHeatmap(items, meta = {}) {
     const sectorCls = Number.isFinite(Number(sectorChange)) ? (Number(sectorChange) >= 0 ? "up" : "down") : "muted";
     const sectorChangeText = Number.isFinite(Number(sectorChange)) ? fmtPct(sectorChange) : "-";
     const breadth = sectorBreadth(sectorItems);
-    const movers = sectorItems.slice(0, 4);
+    const movers = sectorItems.slice(0, 12);
     const hiddenCount = Math.max(0, sectorItems.length - movers.length);
     return `
     <section class="stock-heatmap-sector ${sectorCls}">
@@ -1117,7 +1137,7 @@ function renderHomeHeatmap(items, meta = {}) {
         </div>
         <span class="${sectorCls}">${escapeHtml(sectorChangeText)}</span>
       </div>
-      <div class="stock-sector-movers">
+      <div class="stock-sector-movers dense">
         ${movers.map((item) => {
           const change = item.change_pct;
           const cls = Number(change) >= 0 ? "up" : "down";
@@ -1133,7 +1153,7 @@ function renderHomeHeatmap(items, meta = {}) {
             </article>
           `;
         }).join("")}
-        ${hiddenCount ? `<div class="stock-heatmap-more">+${hiddenCount}</div>` : ""}
+        ${hiddenCount ? `<div class="stock-heatmap-more">외 ${hiddenCount}개</div>` : ""}
       </div>
     </section>
   `;
@@ -1229,9 +1249,164 @@ function decisionMetric(label, value, status = "") {
   `;
 }
 
+function numberInputValue(el, fallback, { min = -Infinity, max = Infinity } = {}) {
+  const n = Number(el?.value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function textInputValue(el) {
+  return String(el?.value || "").trim() || null;
+}
+
+function priceValue(row) {
+  const value = row?.adjusted_close ?? row?.close;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function pctReturnFromRows(rows, periods) {
+  if (!Array.isArray(rows) || rows.length < periods + 1) return null;
+  const last = priceValue(rows[rows.length - 1]);
+  const prior = priceValue(rows[rows.length - 1 - periods]);
+  return last !== null && prior ? (last / prior - 1) * 100 : null;
+}
+
+function dailyReturnsFromRows(rows) {
+  const returns = [];
+  for (let i = 1; i < rows.length; i += 1) {
+    const prev = priceValue(rows[i - 1]);
+    const current = priceValue(rows[i]);
+    if (prev && current !== null) returns.push(current / prev - 1);
+  }
+  return returns;
+}
+
+function stdev(values) {
+  const clean = values.map(Number).filter(Number.isFinite);
+  if (clean.length < 2) return 0;
+  const mean = clean.reduce((sum, value) => sum + value, 0) / clean.length;
+  return Math.sqrt(clean.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (clean.length - 1));
+}
+
+function annualizedVol(rows, periods = 21) {
+  const returns = dailyReturnsFromRows(rows).slice(-periods);
+  if (returns.length < 2) return null;
+  return stdev(returns) * Math.sqrt(252) * 100;
+}
+
+function maxDrawdownPct(rows) {
+  let peak = -Infinity;
+  let maxDrawdown = 0;
+  rows.forEach((row) => {
+    const price = priceValue(row);
+    if (price === null) return;
+    peak = Math.max(peak, price);
+    if (peak > 0) maxDrawdown = Math.min(maxDrawdown, price / peak - 1);
+  });
+  return maxDrawdown * 100;
+}
+
+function fmtMetricRatio(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? fmtPct(n * 100) : "-";
+}
+
+function fmtDecimal(value, digits = 2) {
+  if (value === null || value === undefined || value === "") return "-";
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(digits) : "-";
+}
+
+function metricStatusForPct(value, inverse = false) {
+  if (value === null || value === undefined || value === "") return "warn";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "warn";
+  if (inverse) return n <= 0 ? "ok" : "warn";
+  return n >= 0 ? "ok" : "warn";
+}
+
+function renderMiniPriceBars(rows) {
+  const slice = rows.slice(-40);
+  const values = slice.map(priceValue).filter((value) => value !== null);
+  if (values.length < 2) return "";
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  return `
+    <div class="mini-price-bars" aria-label="recent price sparkline">
+      ${slice.map((row) => {
+        const value = priceValue(row);
+        if (value === null) return '<i style="height:2px"></i>';
+        const height = 18 + ((value - min) / range) * 52;
+        return `<i title="${escapeHtml(row.date || "")}: ${escapeHtml(fmtDecimal(value, 2))}" style="height:${height.toFixed(1)}%"></i>`;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderRecentPriceRows(rows) {
+  return `
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead><tr><th>일자</th><th>종가</th><th>거래량</th><th>소스</th></tr></thead>
+        <tbody>
+          ${rows.slice(-6).reverse().map((row) => `
+            <tr>
+              <td>${escapeHtml(row.date || "-")}</td>
+              <td>${escapeHtml(fmtDecimal(priceValue(row), 2))}</td>
+              <td>${escapeHtml(_fmtNumber(row.volume))}</td>
+              <td>${escapeHtml(row.source || "-")}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderMetricGrid(metrics, status = "ok") {
+  const rows = [
+    ["CAGR", fmtMetricRatio(metrics.cagr)],
+    ["Vol", fmtMetricRatio(metrics.volatility)],
+    ["Sharpe", fmtDecimal(metrics.sharpe, 2)],
+    ["Sortino", fmtDecimal(metrics.sortino, 2)],
+    ["MDD", fmtMetricRatio(metrics.max_drawdown)],
+    ["Calmar", fmtDecimal(metrics.calmar, 2)],
+    ["Turnover", fmtDecimal(metrics.turnover, 2)],
+    ["Trades", _fmtNumber(metrics.trade_count)],
+  ];
+  return `<div class="decision-metric-grid dense">${rows.map(([label, value]) => decisionMetric(label, value, status)).join("")}</div>`;
+}
+
+function backtestRequestFromControls() {
+  const tickers = parseTickerInput(els.backtestTicker?.value || "");
+  return {
+    tickers,
+    strategy: els.backtestStrategy?.value || "buy_and_hold",
+    start_date: textInputValue(els.backtestStartDate),
+    end_date: textInputValue(els.backtestEndDate),
+    lookback_days: numberInputValue(els.backtestLookbackDays, 756, { min: 2, max: 5000 }),
+    short_window: numberInputValue(els.backtestShortWindow, 20, { min: 1, max: 252 }),
+    long_window: numberInputValue(els.backtestLongWindow, 50, { min: 2, max: 756 }),
+    top_n: numberInputValue(els.backtestTopN, 1, { min: 1, max: 50 }),
+    rebalance_every: numberInputValue(els.backtestRebalanceEvery, 21, { min: 1, max: 252 }),
+    transaction_cost_bps: numberInputValue(els.backtestCostBps, 5, { min: 0, max: 1000 }),
+    slippage_bps: numberInputValue(els.backtestSlippageBps, 2, { min: 0, max: 1000 }),
+  };
+}
+
+function syncPortfolioFromBacktest() {
+  const request = state.lastBacktestRequest || backtestRequestFromControls();
+  if (els.portfolioTickers) els.portfolioTickers.value = (request.tickers || []).join(",");
+  if (els.portfolioStartDate) els.portfolioStartDate.value = request.start_date || "";
+  if (els.portfolioEndDate) els.portfolioEndDate.value = request.end_date || "";
+  if (els.portfolioLookbackDays) els.portfolioLookbackDays.value = String(request.lookback_days || 756);
+}
+
 async function loadDataHealth(force = false) {
   if (!els.homeDataHealth || (state.dataHealthLoaded && !force)) return;
-  els.homeDataHealth.innerHTML = decisionEmpty("Structured data mart health is loading.");
+  els.homeDataHealth.innerHTML = decisionEmpty("가격·거시·뉴스·공시 업데이트 상태를 확인하는 중입니다.");
   try {
     const res = await fetch(API.dataHealth);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1240,31 +1415,41 @@ async function loadDataHealth(force = false) {
     const status = summary.decision_status || data.status || "unknown";
     const counts = data.table_counts || {};
     const latest = data.latest_run || {};
-    const providerRows = Array.isArray(data.recent_provider_status) ? data.recent_provider_status.slice(0, 4) : [];
-    const qualityRows = Array.isArray(data.recent_quality_checks) ? data.recent_quality_checks.slice(0, 4) : [];
+    const providerRows = Array.isArray(data.recent_provider_status) ? data.recent_provider_status.slice(0, 6) : [];
+    const qualityRows = Array.isArray(data.recent_quality_checks) ? data.recent_quality_checks.slice(0, 6) : [];
+    const failedCount = Number(summary.failed_provider_rows || 0);
+    const staleCount = Number(summary.stale_or_failed_quality_rows || 0);
+    const runRows = Number(latest.rows_inserted || 0) + Number(latest.rows_updated || 0);
     els.homeDataHealth.innerHTML = `
       <div class="decision-status-row">
         <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
-        <span>${escapeHtml(latest.finished_at || latest.started_at || "No update run recorded")}</span>
+        <span>${escapeHtml(latest.finished_at || latest.started_at || "업데이트 실행 이력 없음")} · ${escapeHtml(latest.market || "all")}</span>
+      </div>
+      <div class="decision-summary ${escapeHtml(decisionStatusClass(status))}">
+        ${failedCount || staleCount
+          ? `주의 필요: provider 실패 ${failedCount}건, 품질 경고 ${staleCount}건`
+          : `업데이트 ${escapeHtml(latest.status || "ok")} · 이번 실행 반영 ${escapeHtml(_fmtNumber(runRows))} rows`}
       </div>
       <div class="decision-metric-grid">
-        ${decisionMetric("Prices", _fmtNumber(counts.prices_daily), status)}
-        ${decisionMetric("Macro", _fmtNumber(counts.macro_observations), status)}
-        ${decisionMetric("News", _fmtNumber(counts.news_articles), status)}
-        ${decisionMetric("Failures", _fmtNumber(summary.failed_provider_rows), summary.failed_provider_rows ? "failed" : "ok")}
+        ${decisionMetric("가격 행", _fmtNumber(counts.prices_daily), status)}
+        ${decisionMetric("거시 관측치", _fmtNumber(counts.macro_observations), status)}
+        ${decisionMetric("뉴스 evidence", _fmtNumber(counts.news_articles), counts.news_articles ? "ok" : "warn")}
+        ${decisionMetric("공시 evidence", _fmtNumber(counts.filings), counts.filings ? "ok" : "warn")}
       </div>
+      <div class="decision-section-title">최근 공급자 상태</div>
       <div class="decision-list">
         ${providerRows.length ? providerRows.map((row) => `
           <div class="decision-list-row">
-            <span>${escapeHtml(row.provider || "provider")}</span>
+            <span>${escapeHtml(row.provider || "provider")}${row.ticker ? ` · ${escapeHtml(row.ticker)}` : ""}</span>
             <strong class="${escapeHtml(decisionStatusClass(row.status))}">${escapeHtml(row.status || "unknown")}</strong>
           </div>
         `).join("") : '<div class="muted small">No provider status rows yet.</div>'}
       </div>
+      <div class="decision-section-title">최근 품질 점검</div>
       <div class="decision-list compact">
         ${qualityRows.length ? qualityRows.map((row) => `
           <div class="decision-list-row">
-            <span>${escapeHtml(row.check_name || "quality")}</span>
+            <span>${escapeHtml(row.check_name || "quality")}${row.entity_id ? ` · ${escapeHtml(row.entity_id)}` : ""}</span>
             <strong class="${escapeHtml(decisionStatusClass(row.status))}">${escapeHtml(row.status || "unknown")}</strong>
           </div>
         `).join("") : '<div class="muted small">No quality checks recorded yet.</div>'}
@@ -1280,38 +1465,53 @@ async function loadAssetDetail() {
   if (!els.assetDetailSurface || !els.assetDetailTicker) return;
   const ticker = normalizeTickerToken(els.assetDetailTicker.value || "");
   if (!ticker) {
-    els.assetDetailSurface.innerHTML = decisionEmpty("Ticker is required.");
+    els.assetDetailSurface.innerHTML = decisionEmpty("티커를 입력해야 합니다.");
     return;
   }
-  els.assetDetailSurface.innerHTML = decisionEmpty(`${ticker} prices are loading.`);
+  els.assetDetailSurface.innerHTML = decisionEmpty(`${ticker} 저장 가격과 리스크 지표를 계산하는 중입니다.`);
   try {
-    const res = await fetch(API.dataPrices(ticker, 260));
+    const res = await fetch(API.dataPrices(ticker, 756));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const latest = data.latest || {};
     if (!data.count) {
-      els.assetDetailSurface.innerHTML = decisionEmpty(`${ticker} has no stored prices. Run daily_update first.`);
+      els.assetDetailSurface.innerHTML = decisionEmpty(`${ticker} 저장 가격이 없습니다. daily_update를 먼저 실행해야 합니다.`);
       return;
     }
     const rows = Array.isArray(data.items) ? data.items : [];
-    const first = rows[0] || {};
-    const last = rows[rows.length - 1] || {};
-    const firstPrice = Number(first.adjusted_close ?? first.close);
-    const lastPrice = Number(last.adjusted_close ?? last.close);
-    const periodReturn = Number.isFinite(firstPrice) && firstPrice > 0 && Number.isFinite(lastPrice)
-      ? (lastPrice / firstPrice - 1) * 100
-      : null;
+    const lastPrice = priceValue(rows[rows.length - 1] || latest);
+    const returns = {
+      "1D": pctReturnFromRows(rows, 1),
+      "1W": pctReturnFromRows(rows, 5),
+      "1M": pctReturnFromRows(rows, 21),
+      "3M": pctReturnFromRows(rows, 63),
+      "6M": pctReturnFromRows(rows, 126),
+      "1Y": pctReturnFromRows(rows, 252),
+    };
+    const vol20 = annualizedVol(rows, 21);
+    const vol60 = annualizedVol(rows, 63);
+    const mdd = maxDrawdownPct(rows);
+    const values = rows.map(priceValue).filter((value) => value !== null);
+    const high = values.length ? Math.max(...values.slice(-252)) : null;
+    const low = values.length ? Math.min(...values.slice(-252)) : null;
+    const latestDate = latest.date || rows[rows.length - 1]?.date || "-";
     els.assetDetailSurface.innerHTML = `
       <div class="decision-status-row">
         <span class="decision-badge ok">ok</span>
-        <span>${escapeHtml(String(data.count))} rows · ${escapeHtml(latest.source || "source unknown")}</span>
+        <span>${escapeHtml(String(data.count))} rows · ${escapeHtml(latest.source || "source unknown")} · collected ${escapeHtml(latest.collected_at || "-")}</span>
       </div>
-      <div class="decision-metric-grid">
-        ${decisionMetric("Latest date", latest.date || "-", "ok")}
-        ${decisionMetric("Close", latest.adjusted_close ?? latest.close ?? "-", "ok")}
-        ${decisionMetric("Volume", _fmtNumber(latest.volume), "ok")}
-        ${decisionMetric("Period return", periodReturn === null ? "-" : fmtPct(periodReturn), periodReturn === null ? "warn" : "ok")}
+      <div class="decision-metric-grid dense">
+        ${decisionMetric("기준일", latestDate, "ok")}
+        ${decisionMetric("종가", fmtDecimal(lastPrice, 2), "ok")}
+        ${decisionMetric("거래량", _fmtNumber(latest.volume), "ok")}
+        ${decisionMetric("52W 범위", `${fmtDecimal(low, 2)} / ${fmtDecimal(high, 2)}`, high ? "ok" : "warn")}
+        ${Object.entries(returns).map(([label, value]) => decisionMetric(label, value === null ? "-" : fmtPct(value), metricStatusForPct(value))).join("")}
+        ${decisionMetric("20D Vol", vol20 === null ? "-" : fmtPct(vol20), vol20 === null ? "warn" : "ok")}
+        ${decisionMetric("60D Vol", vol60 === null ? "-" : fmtPct(vol60), vol60 === null ? "warn" : "ok")}
+        ${decisionMetric("MDD", fmtPct(mdd), metricStatusForPct(mdd, true))}
       </div>
+      ${renderMiniPriceBars(rows)}
+      ${renderRecentPriceRows(rows)}
     `;
   } catch (err) {
     els.assetDetailSurface.innerHTML = decisionEmpty(`Asset detail failed: ${err.message || err}`);
@@ -1320,38 +1520,70 @@ async function loadAssetDetail() {
 
 async function runHomeBacktest() {
   if (!els.backtestSurface || !els.backtestTicker) return;
-  const ticker = normalizeTickerToken(els.backtestTicker.value || "");
-  if (!ticker) {
-    els.backtestSurface.innerHTML = decisionEmpty("Ticker is required.");
+  const request = backtestRequestFromControls();
+  if (!request.tickers.length) {
+    els.backtestSurface.innerHTML = decisionEmpty("백테스트할 티커를 하나 이상 입력해야 합니다.");
     return;
   }
-  els.backtestSurface.innerHTML = decisionEmpty(`${ticker} backtest is running.`);
+  state.lastBacktestRequest = request;
+  els.backtestSurface.innerHTML = decisionEmpty(`${request.tickers.join(", ")} 백테스트를 실행 중입니다.`);
   try {
     const res = await fetch(API.backtestRun, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ticker,
-        strategy: els.backtestStrategy?.value || "buy_and_hold",
-        lookback_days: 756,
-      }),
+      body: JSON.stringify(request),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    state.lastBacktestResult = data;
     const metrics = data.metrics || {};
     const status = data.status || "unknown";
+    const assetResults = data.asset_results || {};
+    const assetEntries = Object.entries(assetResults);
+    const missing = Array.isArray(data.missing_assets) ? data.missing_assets : [];
+    syncPortfolioFromBacktest();
     els.backtestSurface.innerHTML = `
       <div class="decision-status-row">
         <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
-        <span>${escapeHtml(data.date_range?.start || "-")} -> ${escapeHtml(data.date_range?.end || "-")} · ${escapeHtml(data.data_status || "")}</span>
+        <span>${escapeHtml(data.date_range?.start || request.start_date || "-")} -> ${escapeHtml(data.date_range?.end || request.end_date || "-")} · ${escapeHtml(data.data_status || "")}</span>
       </div>
-      <div class="decision-metric-grid">
-        ${decisionMetric("CAGR", fmtPct(Number(metrics.cagr || 0) * 100), status)}
-        ${decisionMetric("Sharpe", metrics.sharpe ?? "-", status)}
-        ${decisionMetric("MDD", fmtPct(Number(metrics.max_drawdown || 0) * 100), status)}
-        ${decisionMetric("Trades", _fmtNumber(metrics.trade_count), status)}
+      ${renderMetricGrid(metrics, status)}
+      <div class="decision-assumption">
+        비용 ${escapeHtml(String(request.transaction_cost_bps))}bps · 슬리피지 ${escapeHtml(String(request.slippage_bps))}bps · ${escapeHtml(data.assumptions?.lookahead_policy || "signals applied after calculation")}
       </div>
-      ${status === "success" ? "" : decisionEmpty(data.reason || "Backtest did not have enough stored data.")}
+      ${assetEntries.length > 1 ? `
+        <div class="decision-section-title">종목별 결과</div>
+        <div class="decision-table-wrap">
+          <table class="decision-table">
+            <thead><tr><th>티커</th><th>상태</th><th>CAGR</th><th>Sharpe</th><th>MDD</th><th>거래</th></tr></thead>
+            <tbody>
+              ${assetEntries.map(([asset, result]) => {
+                const rowStatus = result.status || "unknown";
+                const rowMetrics = result.metrics || {};
+                return `
+                  <tr>
+                    <td>${escapeHtml(asset)}</td>
+                    <td><span class="table-status ${escapeHtml(decisionStatusClass(rowStatus))}">${escapeHtml(rowStatus)}</span></td>
+                    <td>${escapeHtml(fmtMetricRatio(rowMetrics.cagr))}</td>
+                    <td>${escapeHtml(fmtDecimal(rowMetrics.sharpe, 2))}</td>
+                    <td>${escapeHtml(fmtMetricRatio(rowMetrics.max_drawdown))}</td>
+                    <td>${escapeHtml(_fmtNumber(rowMetrics.trade_count))}</td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      ` : ""}
+      ${(data.selected_history || []).length ? `
+        <div class="decision-section-title">최근 랭킹 선택</div>
+        <div class="decision-chip-row">
+          ${data.selected_history.slice(-5).map((row) => `<span>${escapeHtml(row.date || "")}: ${escapeHtml((row.selected || []).join(", "))}</span>`).join("")}
+        </div>
+      ` : ""}
+      ${missing.length ? `<div class="decision-warning">가격 데이터 부족: ${escapeHtml(missing.join(", "))}</div>` : ""}
+      <button type="button" class="linkish decision-inline-action" data-action="sync-backtest-portfolio">이 조건을 포트폴리오에 적용</button>
+      ${status === "success" ? "" : decisionEmpty(data.reason || "저장 가격이 부족해 일부 결과만 표시됩니다.")}
     `;
   } catch (err) {
     els.backtestSurface.innerHTML = decisionEmpty(`Backtest failed: ${err.message || err}`);
@@ -1362,10 +1594,14 @@ async function runPortfolioOptimize() {
   if (!els.portfolioSurface || !els.portfolioTickers) return;
   const tickers = parseTickerInput(els.portfolioTickers.value || "");
   if (!tickers.length) {
-    els.portfolioSurface.innerHTML = decisionEmpty("At least one ticker is required.");
+    els.portfolioSurface.innerHTML = decisionEmpty("최적화할 티커를 하나 이상 입력해야 합니다.");
     return;
   }
-  els.portfolioSurface.innerHTML = decisionEmpty("Portfolio optimization is running.");
+  const startDate = textInputValue(els.portfolioStartDate);
+  const endDate = textInputValue(els.portfolioEndDate);
+  const lookbackDays = numberInputValue(els.portfolioLookbackDays, 756, { min: 2, max: 5000 });
+  const maxWeight = numberInputValue(els.portfolioMaxWeight, 0.6, { min: 0.01, max: 1 });
+  els.portfolioSurface.innerHTML = decisionEmpty(`${tickers.join(", ")} 포트폴리오 최적화를 실행 중입니다.`);
   try {
     const res = await fetch(API.portfolioOptimize, {
       method: "POST",
@@ -1373,8 +1609,10 @@ async function runPortfolioOptimize() {
       body: JSON.stringify({
         tickers,
         method: els.portfolioMethod?.value || "equal_weight",
-        lookback_days: 756,
-        max_weight: 0.6,
+        start_date: startDate,
+        end_date: endDate,
+        lookback_days: lookbackDays,
+        max_weight: maxWeight,
       }),
     });
     const data = await res.json();
@@ -1382,10 +1620,15 @@ async function runPortfolioOptimize() {
     const weights = data.weights || {};
     const entries = Object.entries(weights).sort((a, b) => Number(b[1]) - Number(a[1]));
     const status = data.status || "unknown";
+    const diagnostics = data.diagnostics || {};
+    const returnCounts = data.return_counts || {};
     els.portfolioSurface.innerHTML = `
       <div class="decision-status-row">
         <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
-        <span>${escapeHtml(data.method || "")} · sum ${escapeHtml(String(data.sum_weights ?? "-"))}</span>
+        <span>${escapeHtml(data.method || "")} · sum ${escapeHtml(String(data.sum_weights ?? "-"))} · max ${escapeHtml(fmtPct(Number(data.max_weight || maxWeight) * 100))}</span>
+      </div>
+      <div class="decision-summary ok">
+        ${escapeHtml(tickers.join(", "))} · ${escapeHtml(startDate || "lookback")} -> ${escapeHtml(endDate || "latest")} · ${escapeHtml(String(lookbackDays))}일 가격 기준
       </div>
       <div class="portfolio-weight-list">
         ${entries.length ? entries.map(([ticker, weight]) => `
@@ -1396,6 +1639,18 @@ async function runPortfolioOptimize() {
           </div>
         `).join("") : '<div class="muted small">No weights available.</div>'}
       </div>
+      <div class="decision-metric-grid dense">
+        ${decisionMetric("자산 수", _fmtNumber(diagnostics.asset_count || entries.length), status)}
+        ${decisionMetric("최대 비중", fmtPct(Number(data.max_weight || maxWeight) * 100), status)}
+        ${decisionMetric("최소 비중", entries.length ? fmtPct(Math.min(...entries.map(([, weight]) => Number(weight))) * 100) : "-", status)}
+        ${decisionMetric("수익률 샘플", _fmtNumber(Object.values(returnCounts).reduce((sum, value) => sum + Number(value || 0), 0)), status)}
+      </div>
+      ${Object.keys(returnCounts).length ? `
+        <div class="decision-section-title">데이터 사용량</div>
+        <div class="decision-chip-row">
+          ${Object.entries(returnCounts).map(([ticker, count]) => `<span>${escapeHtml(ticker)} ${escapeHtml(_fmtNumber(count))} returns</span>`).join("")}
+        </div>
+      ` : ""}
       ${(data.missing_assets || []).length ? `<div class="decision-warning">Missing data: ${escapeHtml(data.missing_assets.join(", "))}</div>` : ""}
       ${(data.warnings || []).length ? `<div class="decision-warning">${escapeHtml(data.warnings.join(" "))}</div>` : ""}
     `;
@@ -4219,6 +4474,17 @@ function bindInputs() {
   if (els.dataHealthRefresh) els.dataHealthRefresh.addEventListener("click", () => loadDataHealth(true));
   if (els.assetDetailLoad) els.assetDetailLoad.addEventListener("click", loadAssetDetail);
   if (els.backtestRun) els.backtestRun.addEventListener("click", runHomeBacktest);
+  if (els.backtestSurface) {
+    els.backtestSurface.addEventListener("click", (event) => {
+      const target = event.target;
+      if (target && target.dataset && target.dataset.action === "sync-backtest-portfolio") {
+        syncPortfolioFromBacktest();
+      }
+    });
+  }
+  if (els.portfolioSyncBacktest) {
+    els.portfolioSyncBacktest.addEventListener("click", syncPortfolioFromBacktest);
+  }
   if (els.portfolioOptimize) els.portfolioOptimize.addEventListener("click", runPortfolioOptimize);
   if (els.historyToggleBtn) {
     els.historyToggleBtn.addEventListener("click", () => {

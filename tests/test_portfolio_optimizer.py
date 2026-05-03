@@ -35,3 +35,27 @@ def test_infeasible_max_weight_is_reported_and_adjusted() -> None:
     assert result["warnings"]
     assert result["max_weight"] == 0.5
     assert all(weight <= result["max_weight"] for weight in result["weights"].values())
+
+
+def test_momentum_tilt_prefers_positive_cumulative_return() -> None:
+    result = optimize_portfolio(
+        {"UP": [0.01, 0.02, 0.01], "DOWN": [-0.01, -0.02, 0.0]},
+        method="momentum_tilt",
+        max_weight=0.8,
+    )
+
+    assert result["status"] == "success"
+    assert result["weights"]["UP"] > result["weights"]["DOWN"]
+
+
+def test_minimum_volatility_alias_is_supported() -> None:
+    result = optimize_portfolio(
+        {
+            "LOW": [0.001, 0.002, 0.001, 0.002],
+            "HIGH": [0.05, -0.04, 0.03, -0.02],
+        },
+        method="minimum_volatility",
+    )
+
+    assert result["status"] == "success"
+    assert result["weights"]["LOW"] > result["weights"]["HIGH"]
