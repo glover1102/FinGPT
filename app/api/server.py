@@ -13,6 +13,10 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Red
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
+from app.api.heatmap_universe import (
+    HEATMAP_UNIVERSE_VERSION,
+    US_EQUITY_HEATMAP_UNIVERSE,
+)
 from app.api.openbb_agent import router as openbb_agent_router
 from core.schemas.request import (
     COMPARE_MAX_CONCURRENCY,
@@ -162,45 +166,8 @@ def _clean_ticker_list(value: Any) -> list[str]:
             seen.add(ticker)
     return out
 
-_EQUITY_HEATMAP_UNIVERSE: tuple[dict[str, Any], ...] = (
-    {"symbol": "NVDA", "label": "NVIDIA", "sector": "전자 기술", "weight": 10.0},
-    {"symbol": "AAPL", "label": "Apple", "sector": "전자 기술", "weight": 9.5},
-    {"symbol": "AVGO", "label": "Broadcom", "sector": "전자 기술", "weight": 4.3},
-    {"symbol": "AMD", "label": "AMD", "sector": "전자 기술", "weight": 2.3},
-    {"symbol": "MU", "label": "Micron", "sector": "전자 기술", "weight": 1.2},
-    {"symbol": "QCOM", "label": "Qualcomm", "sector": "전자 기술", "weight": 1.5},
-    {"symbol": "CSCO", "label": "Cisco", "sector": "전자 기술", "weight": 1.0},
-    {"symbol": "GOOGL", "label": "Alphabet", "sector": "테크놀로지 서비스", "weight": 7.0},
-    {"symbol": "MSFT", "label": "Microsoft", "sector": "테크놀로지 서비스", "weight": 8.5},
-    {"symbol": "META", "label": "Meta", "sector": "테크놀로지 서비스", "weight": 4.5},
-    {"symbol": "NFLX", "label": "Netflix", "sector": "테크놀로지 서비스", "weight": 1.3},
-    {"symbol": "CRM", "label": "Salesforce", "sector": "테크놀로지 서비스", "weight": 1.0},
-    {"symbol": "ORCL", "label": "Oracle", "sector": "테크놀로지 서비스", "weight": 1.2},
-    {"symbol": "AMZN", "label": "Amazon", "sector": "리테일 트레이드", "weight": 6.5},
-    {"symbol": "WMT", "label": "Walmart", "sector": "리테일 트레이드", "weight": 2.1},
-    {"symbol": "COST", "label": "Costco", "sector": "리테일 트레이드", "weight": 1.6},
-    {"symbol": "HD", "label": "Home Depot", "sector": "리테일 트레이드", "weight": 1.4},
-    {"symbol": "TSLA", "label": "Tesla", "sector": "소비자 내구재", "weight": 3.4},
-    {"symbol": "MCD", "label": "McDonald's", "sector": "컨슈머 서비스", "weight": 1.0},
-    {"symbol": "BKNG", "label": "Booking", "sector": "컨슈머 서비스", "weight": 1.0},
-    {"symbol": "BRK-B", "label": "Berkshire", "sector": "금융", "weight": 4.5},
-    {"symbol": "JPM", "label": "JPMorgan", "sector": "금융", "weight": 2.4},
-    {"symbol": "V", "label": "Visa", "sector": "금융", "weight": 2.0},
-    {"symbol": "MA", "label": "Mastercard", "sector": "금융", "weight": 1.6},
-    {"symbol": "BAC", "label": "Bank of America", "sector": "금융", "weight": 1.0},
-    {"symbol": "LLY", "label": "Eli Lilly", "sector": "의료 기술", "weight": 3.2},
-    {"symbol": "JNJ", "label": "Johnson & Johnson", "sector": "의료 기술", "weight": 1.6},
-    {"symbol": "UNH", "label": "UnitedHealth", "sector": "헬스 서비스", "weight": 1.7},
-    {"symbol": "ABBV", "label": "AbbVie", "sector": "의료 기술", "weight": 1.1},
-    {"symbol": "XOM", "label": "Exxon Mobil", "sector": "에너지 미네랄", "weight": 1.7},
-    {"symbol": "CVX", "label": "Chevron", "sector": "에너지 미네랄", "weight": 1.0},
-    {"symbol": "CAT", "label": "Caterpillar", "sector": "제조업", "weight": 1.0},
-    {"symbol": "GE", "label": "GE Aerospace", "sector": "제조업", "weight": 1.0},
-    {"symbol": "RTX", "label": "RTX", "sector": "제조업", "weight": 0.9},
-    {"symbol": "PG", "label": "Procter & Gamble", "sector": "컨슈머 논-듀러블즈", "weight": 1.6},
-    {"symbol": "KO", "label": "Coca-Cola", "sector": "컨슈머 논-듀러블즈", "weight": 1.1},
-    {"symbol": "PEP", "label": "PepsiCo", "sector": "컨슈머 논-듀러블즈", "weight": 1.0},
-)
+_EQUITY_HEATMAP_UNIVERSE = US_EQUITY_HEATMAP_UNIVERSE
+_EQUITY_HEATMAP_BATCH_SIZE = 60
 
 
 def _validation_422(message: str, code: str) -> HTTPException:
@@ -1318,31 +1285,64 @@ def _tile_span(weight: float) -> dict[str, int]:
     return {"col": 1, "row": 1}
 
 
+def _batched_symbols(symbols: list[str], batch_size: int) -> list[list[str]]:
+    size = max(1, int(batch_size or 1))
+    return [symbols[idx:idx + size] for idx in range(0, len(symbols), size)]
+
+
+def _extract_yfinance_symbol_frame(raw: Any, pd: Any, symbol: str) -> Any:
+    if raw is None or getattr(raw, "empty", False):
+        raise RuntimeError("empty intraday download")
+    if isinstance(raw.columns, pd.MultiIndex):
+        level0 = list(raw.columns.get_level_values(0))
+        if symbol in level0:
+            return raw[symbol]
+        return raw.xs(symbol, axis=1, level=0)
+    return raw
+
+
+def _download_equity_heatmap_frames(yf: Any, pd: Any, symbols: list[str]) -> tuple[dict[str, Any], dict[str, str]]:
+    frames: dict[str, Any] = {}
+    errors: dict[str, str] = {}
+    for batch in _batched_symbols(symbols, _EQUITY_HEATMAP_BATCH_SIZE):
+        try:
+            raw = yf.download(
+                tickers=batch,
+                period="5d",
+                interval="5m",
+                auto_adjust=False,
+                prepost=False,
+                group_by="ticker",
+                threads=True,
+                progress=False,
+            )
+        except Exception as exc:  # noqa: BLE001
+            for symbol in batch:
+                errors[symbol] = f"batch download failed: {exc}"
+            continue
+        for symbol in batch:
+            try:
+                frames[symbol] = _extract_yfinance_symbol_frame(raw, pd, symbol)
+            except Exception as exc:  # noqa: BLE001
+                errors[symbol] = str(exc)
+    return frames, errors
+
+
 def _collect_equity_heatmap_snapshot() -> Dict[str, Any]:
     import pandas as pd
     import yfinance as yf
 
     symbols = [item["symbol"] for item in _EQUITY_HEATMAP_UNIVERSE]
-    raw = yf.download(
-        tickers=symbols,
-        period="5d",
-        interval="5m",
-        auto_adjust=False,
-        prepost=False,
-        group_by="ticker",
-        threads=True,
-        progress=False,
-    )
+    frames_by_symbol, download_errors = _download_equity_heatmap_frames(yf, pd, symbols)
     now_utc = datetime.now(timezone.utc)
     items: list[dict[str, Any]] = []
 
     for meta in _EQUITY_HEATMAP_UNIVERSE:
         symbol = str(meta["symbol"])
         try:
-            if isinstance(raw.columns, pd.MultiIndex):
-                frame = raw[symbol] if symbol in raw.columns.get_level_values(0) else raw.xs(symbol, axis=1, level=0)
-            else:
-                frame = raw
+            if symbol in download_errors:
+                raise RuntimeError(download_errors[symbol])
+            frame = frames_by_symbol.get(symbol)
             if frame is None or frame.empty or "Close" not in frame:
                 raise RuntimeError("no intraday close data")
             close = frame["Close"].dropna()
@@ -1411,6 +1411,9 @@ def _collect_equity_heatmap_snapshot() -> Dict[str, Any]:
         "generated_at": now_utc.isoformat(),
         "provider": "yfinance",
         "interval": "5m",
+        "universe_version": HEATMAP_UNIVERSE_VERSION,
+        "universe_size": len(_EQUITY_HEATMAP_UNIVERSE),
+        "batch_size": _EQUITY_HEATMAP_BATCH_SIZE,
         "ok_count": len(usable_items),
         "decision_usable_count": len(usable_items),
         "stale_or_unavailable_count": stale_count,

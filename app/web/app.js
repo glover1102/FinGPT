@@ -1105,29 +1105,8 @@ function heatmapWeight(item) {
   return Number.isFinite(weight) && weight > 0 ? Math.max(weight, 0.2) : 1;
 }
 
-function heatmapSectorSpan(sectorWeight, totalWeight, sectorCount) {
-  if (sectorCount <= 1) return 12;
-  const share = totalWeight > 0 ? sectorWeight / totalWeight : 1 / Math.max(sectorCount, 1);
-  if (share >= 0.52) return 8;
-  if (share >= 0.32) return 6;
-  if (share >= 0.18) return 4;
-  return 3;
-}
-
-function heatmapTileSpan(itemWeight, sectorWeight, itemCount) {
-  if (itemCount <= 1) return 12;
-  if (itemCount === 2) return 6;
-  const share = sectorWeight > 0 ? itemWeight / sectorWeight : 1 / Math.max(itemCount, 1);
-  if (share >= 0.34) return 8;
-  if (share >= 0.22) return 6;
-  if (share >= 0.12) return 5;
-  return 4;
-}
-
-function heatmapTileRows(tileSpan, itemCount) {
-  if (itemCount <= 3 && tileSpan >= 5) return 2;
-  if (tileSpan >= 7) return 2;
-  return 1;
+function heatmapLayoutWeight(item) {
+  return Math.pow(Math.max(heatmapWeight(item), 0.45), 0.82);
 }
 
 function heatmapTicker(item) {
@@ -1136,29 +1115,36 @@ function heatmapTicker(item) {
 
 function fallbackHeatmapClassification(item) {
   const rawSector = String(item?.sector || "").toUpperCase();
+  const rawIndustry = String(item?.industry || "").toUpperCase();
+  if (HEATMAP_SECTOR_ORDER.includes(rawSector)) {
+    return { sector: rawSector, industry: rawIndustry || rawSector };
+  }
   if (rawSector.includes("TECH") || rawSector.includes("전자") || rawSector.includes("테크")) {
-    return { sector: "TECHNOLOGY", industry: "INFORMATION TECHNOLOGY" };
+    return { sector: "TECHNOLOGY", industry: rawIndustry || "INFORMATION TECHNOLOGY" };
   }
   if (rawSector.includes("FIN") || rawSector.includes("금융")) {
-    return { sector: "FINANCIAL", industry: "FINANCIAL SERVICES" };
+    return { sector: "FINANCIAL", industry: rawIndustry || "FINANCIAL SERVICES" };
   }
   if (rawSector.includes("HEALTH") || rawSector.includes("의료") || rawSector.includes("헬스")) {
-    return { sector: "HEALTHCARE", industry: "HEALTHCARE" };
+    return { sector: "HEALTHCARE", industry: rawIndustry || "HEALTHCARE" };
   }
   if (rawSector.includes("ENERGY") || rawSector.includes("에너지")) {
-    return { sector: "ENERGY", industry: "ENERGY" };
+    return { sector: "ENERGY", industry: rawIndustry || "ENERGY" };
   }
   if (rawSector.includes("INDUSTR") || rawSector.includes("제조")) {
-    return { sector: "INDUSTRIALS", industry: "INDUSTRIALS" };
+    return { sector: "INDUSTRIALS", industry: rawIndustry || "INDUSTRIALS" };
   }
   if (rawSector.includes("CONSUMER") || rawSector.includes("소비")) {
-    return { sector: "CONSUMER CYCLICAL", industry: "CONSUMER SERVICES" };
+    return { sector: "CONSUMER CYCLICAL", industry: rawIndustry || "CONSUMER SERVICES" };
   }
-  return { sector: "OTHER", industry: item?.sector ? String(item.sector).toUpperCase() : "UNCATEGORIZED" };
+  return { sector: "OTHER", industry: rawIndustry || (item?.sector ? String(item.sector).toUpperCase() : "UNCATEGORIZED") };
 }
 
 function heatmapProfile(item) {
-  return HEATMAP_CLASSIFICATION[heatmapTicker(item)] || fallbackHeatmapClassification(item);
+  const backendProfile = fallbackHeatmapClassification(item);
+  const staticProfile = HEATMAP_CLASSIFICATION[heatmapTicker(item)];
+  if (HEATMAP_SECTOR_ORDER.includes(backendProfile.sector) && item?.industry) return backendProfile;
+  return staticProfile || backendProfile;
 }
 
 function heatmapSectorRank(sector) {
@@ -1166,38 +1152,114 @@ function heatmapSectorRank(sector) {
   return idx >= 0 ? idx : HEATMAP_SECTOR_ORDER.length;
 }
 
-function heatmapLayoutForSector(sector, sectorWeight, totalWeight, sectorCount) {
-  const fixed = HEATMAP_SECTOR_LAYOUT[sector];
-  if (fixed) return fixed;
-  return {
-    cols: heatmapSectorSpan(sectorWeight, totalWeight, sectorCount),
-    rows: sectorWeight > 2 ? 2 : 1,
-  };
+function heatmapRectStyle(rect) {
+  return [
+    `left:${Math.max(0, rect.x).toFixed(4)}%`,
+    `top:${Math.max(0, rect.y).toFixed(4)}%`,
+    `width:${Math.max(0, rect.w).toFixed(4)}%`,
+    `height:${Math.max(0, rect.h).toFixed(4)}%`,
+  ].join("; ");
 }
 
-function heatmapIndustrySpan(industryWeight, sectorWeight, groupCount) {
-  if (groupCount <= 1) return 12;
-  const share = sectorWeight > 0 ? industryWeight / sectorWeight : 1 / Math.max(groupCount, 1);
-  if (share >= 0.48) return 7;
-  if (share >= 0.30) return 6;
-  if (share >= 0.16) return 4;
-  return 3;
+function treemapWorst(row, side) {
+  if (!row.length || side <= 0) return Number.POSITIVE_INFINITY;
+  const areas = row.map((entry) => Math.max(0.0001, entry.area));
+  const sum = areas.reduce((total, area) => total + area, 0);
+  const min = Math.min(...areas);
+  const max = Math.max(...areas);
+  const sideSq = side * side;
+  return Math.max((sideSq * max) / (sum * sum), (sum * sum) / (sideSq * min));
 }
 
-function heatmapTileGeometry(itemWeight, peerCount = 1) {
-  if (peerCount <= 1) {
-    if (itemWeight >= 5) return { cols: 12, rows: 4, size: "mega" };
-    if (itemWeight >= 2) return { cols: 12, rows: 3, size: "lg" };
-    return { cols: 12, rows: 2, size: "md" };
+function layoutTreemapRow(row, rect, output) {
+  const rowArea = row.reduce((sum, entry) => sum + entry.area, 0);
+  if (rowArea <= 0 || rect.w <= 0 || rect.h <= 0) return rect;
+  if (rect.w >= rect.h) {
+    const rowHeight = Math.min(rect.h, rowArea / rect.w);
+    let x = rect.x;
+    row.forEach((entry, index) => {
+      const width = index === row.length - 1
+        ? rect.x + rect.w - x
+        : Math.min(rect.x + rect.w - x, entry.area / rowHeight);
+      output.push({ item: entry.item, x, y: rect.y, w: width, h: rowHeight });
+      x += width;
+    });
+    return { x: rect.x, y: rect.y + rowHeight, w: rect.w, h: Math.max(0, rect.h - rowHeight) };
   }
-  if (peerCount === 2 && itemWeight >= 3) return { cols: 6, rows: 4, size: "xl" };
-  if (peerCount === 2) return { cols: 6, rows: 2, size: "md" };
-  if (itemWeight >= 8) return { cols: 7, rows: 4, size: "mega" };
-  if (itemWeight >= 6) return { cols: 6, rows: 4, size: "xl" };
-  if (itemWeight >= 4) return { cols: 5, rows: 3, size: "lg" };
-  if (itemWeight >= 2) return { cols: 4, rows: 2, size: "md" };
-  if (itemWeight >= 1.3) return { cols: 3, rows: 2, size: "sm" };
-  return { cols: 2, rows: 1, size: "xs" };
+  const columnWidth = Math.min(rect.w, rowArea / rect.h);
+  let y = rect.y;
+  row.forEach((entry, index) => {
+    const height = index === row.length - 1
+      ? rect.y + rect.h - y
+      : Math.min(rect.y + rect.h - y, entry.area / columnWidth);
+    output.push({ item: entry.item, x: rect.x, y, w: columnWidth, h: height });
+    y += height;
+  });
+  return { x: rect.x + columnWidth, y: rect.y, w: Math.max(0, rect.w - columnWidth), h: rect.h };
+}
+
+function squarifyTreemap(entries, rect, valueFn) {
+  const totalValue = entries.reduce((sum, entry) => {
+    const value = Number(valueFn(entry));
+    return sum + (Number.isFinite(value) && value > 0 ? value : 0);
+  }, 0);
+  if (!entries.length || totalValue <= 0 || rect.w <= 0 || rect.h <= 0) return [];
+  const areaScale = (rect.w * rect.h) / totalValue;
+  const queue = entries
+    .map((entry) => {
+      const value = Math.max(0.0001, Number(valueFn(entry)) || 0.0001);
+      return { item: entry, area: value * areaScale };
+    })
+    .sort((a, b) => b.area - a.area);
+  const output = [];
+  let row = [];
+  let remaining = { ...rect };
+  while (queue.length) {
+    const next = queue[0];
+    const side = Math.min(remaining.w, remaining.h);
+    if (!row.length || treemapWorst([...row, next], side) <= treemapWorst(row, side)) {
+      row.push(next);
+      queue.shift();
+    } else {
+      remaining = layoutTreemapRow(row, remaining, output);
+      row = [];
+    }
+  }
+  if (row.length) layoutTreemapRow(row, remaining, output);
+  return output;
+}
+
+function squarifyTreemapPercent(entries, aspectRatio, valueFn) {
+  const aspect = Math.min(Math.max(Number(aspectRatio) || 1, 0.2), 6);
+  const layoutRect = aspect >= 1
+    ? { x: 0, y: 0, w: 100 * aspect, h: 100 }
+    : { x: 0, y: 0, w: 100, h: 100 / aspect };
+  return squarifyTreemap(entries, layoutRect, valueFn).map(({ item, x, y, w, h }) => ({
+    item,
+    x: (x / layoutRect.w) * 100,
+    y: (y / layoutRect.h) * 100,
+    w: (w / layoutRect.w) * 100,
+    h: (h / layoutRect.h) * 100,
+  }));
+}
+
+function heatmapCanvasAspect() {
+  const width = Number(els.homeHeatmap?.clientWidth || 0);
+  const height = Number(els.homeHeatmap?.clientHeight || 0);
+  if (width > 0 && height > 0) return width / height;
+  return 1.85;
+}
+
+function heatmapTileSize(rect, sectorRect, industryRect) {
+  const globalW = (sectorRect.w * industryRect.w * rect.w) / 10000;
+  const globalH = (sectorRect.h * industryRect.h * rect.h) / 10000;
+  const area = globalW * globalH;
+  if (globalW >= 10 && globalH >= 15 && area >= 180) return "mega";
+  if (globalW >= 7 && globalH >= 10 && area >= 80) return "xl";
+  if (globalW >= 4.2 && globalH >= 6 && area >= 34) return "lg";
+  if (globalW >= 2.6 && globalH >= 4 && area >= 14) return "md";
+  if (globalW >= 1.6 && globalH >= 2.5 && area >= 5) return "sm";
+  return "xs";
 }
 
 function fmtHeatmapAsOf(value) {
@@ -1240,19 +1302,19 @@ const HEATMAP_SECTOR_ORDER = [
   "OTHER",
 ];
 
-const HEATMAP_SECTOR_LAYOUT = {
-  TECHNOLOGY: { cols: 9, rows: 4 },
-  "COMMUNICATION SERVICES": { cols: 5, rows: 4 },
-  "CONSUMER CYCLICAL": { cols: 4, rows: 3 },
-  "CONSUMER DEFENSIVE": { cols: 4, rows: 3 },
-  FINANCIAL: { cols: 7, rows: 3 },
-  HEALTHCARE: { cols: 5, rows: 3 },
-  INDUSTRIALS: { cols: 4, rows: 3 },
-  ENERGY: { cols: 3, rows: 3 },
-  UTILITIES: { cols: 3, rows: 2 },
-  "REAL ESTATE": { cols: 3, rows: 2 },
-  "BASIC MATERIALS": { cols: 3, rows: 2 },
-  OTHER: { cols: 3, rows: 2 },
+const HEATMAP_SECTOR_ZONES = {
+  TECHNOLOGY: { x: 0, y: 0, w: 45, h: 70 },
+  FINANCIAL: { x: 0, y: 70, w: 45, h: 30 },
+  "CONSUMER CYCLICAL": { x: 45, y: 0, w: 35, h: 30 },
+  "COMMUNICATION SERVICES": { x: 45, y: 30, w: 35, h: 38 },
+  HEALTHCARE: { x: 45, y: 68, w: 35, h: 32 },
+  "CONSUMER DEFENSIVE": { x: 80, y: 0, w: 20, h: 30 },
+  INDUSTRIALS: { x: 80, y: 30, w: 20, h: 31 },
+  "REAL ESTATE": { x: 80, y: 61, w: 10, h: 18 },
+  UTILITIES: { x: 90, y: 61, w: 10, h: 18 },
+  ENERGY: { x: 80, y: 79, w: 12, h: 21 },
+  "BASIC MATERIALS": { x: 92, y: 79, w: 8, h: 21 },
+  OTHER: { x: 92, y: 61, w: 8, h: 18 },
 };
 
 const HEATMAP_CLASSIFICATION = {
@@ -1346,31 +1408,18 @@ function renderHomeHeatmap(items, meta = {}) {
       if (rankDiff) return rankDiff;
       return b[1].reduce((sum, row) => sum + heatmapWeight(row), 0) - a[1].reduce((sum, row) => sum + heatmapWeight(row), 0);
     });
-  const sectorWeights = sectors.map(([, sectorItems]) => sectorItems.reduce((sum, item) => sum + heatmapWeight(item), 0));
-  const totalWeight = sectorWeights.reduce((sum, weight) => sum + weight, 0);
   els.homeHeatmap.classList.add("finviz-treemap");
-  const sectorMarkup = sectors.map(([sector, sectorItems], index) => {
-    const sectorWeight = sectorWeights[index] || sectorItems.length || 1;
-    const sectorLayout = heatmapLayoutForSector(sector, sectorWeight, totalWeight, sectors.length);
+  const canvasAspect = heatmapCanvasAspect();
+  const sectorMarkup = sectors.map(([sector, sectorItems]) => {
+    const sectorRect = HEATMAP_SECTOR_ZONES[sector] || HEATMAP_SECTOR_ZONES.OTHER;
+    const sectorAspect = Math.max(0.2, (sectorRect.w * canvasAspect) / Math.max(sectorRect.h, 1));
     const sectorChange = weightedSectorChange(sectorItems);
     const sectorCls = Number.isFinite(Number(sectorChange)) ? (Number(sectorChange) >= 0 ? "up" : "down") : "muted";
     const sectorChangeText = Number.isFinite(Number(sectorChange)) ? fmtPct(sectorChange) : "-";
     const breadth = sectorBreadth(sectorItems);
-    const byIndustry = new Map();
-    sectorItems.forEach((item) => {
-      const key = item.heatmap_profile.industry || "UNCATEGORIZED";
-      if (!byIndustry.has(key)) byIndustry.set(key, []);
-      byIndustry.get(key).push(item);
-    });
-    const industryGroups = Array.from(byIndustry.entries())
-      .map(([industry, industryItems]) => [
-        industry,
-        industryItems.sort((a, b) => heatmapWeight(b) - heatmapWeight(a)),
-        industryItems.reduce((sum, item) => sum + heatmapWeight(item), 0),
-      ])
-      .sort((a, b) => b[2] - a[2]);
+    const itemRects = squarifyTreemapPercent(sectorItems, sectorAspect, heatmapLayoutWeight);
     return `
-    <section class="finviz-sector stock-heatmap-sector ${sectorCls}" style="--sector-span:${sectorLayout.cols}; --sector-rows:${sectorLayout.rows}">
+    <section class="finviz-sector stock-heatmap-sector ${sectorCls}" style="${heatmapRectStyle(sectorRect)}">
       <div class="finviz-sector-title stock-sector-title">
         <div>
           <strong>${escapeHtml(sector)}</strong>
@@ -1378,32 +1427,21 @@ function renderHomeHeatmap(items, meta = {}) {
         </div>
         <span class="${sectorCls}">${escapeHtml(sectorChangeText)}</span>
       </div>
-      <div class="finviz-sector-body">
-        ${industryGroups.map(([industry, industryItems, industryWeight]) => {
-          const industrySpan = heatmapIndustrySpan(industryWeight, sectorWeight, industryGroups.length);
+      <div class="finviz-sector-body finviz-sector-tiles">
+        ${itemRects.map(({ item, ...tileRect }) => {
+          const change = item.change_pct;
+          const cls = Number(change) >= 0 ? "up" : "down";
+          const freshness = item.freshness_status || "unknown";
+          const tileSize = heatmapTileSize(tileRect, sectorRect, { x: 0, y: 0, w: 100, h: 100 });
+          const industry = item.heatmap_profile?.industry || item.industry || "";
+          const title = `${item.symbol} ${item.label || ""} ${fmtPct(change)} · ${industry} · ${fmtHeatmapAsOf(item.as_of)} ET · ${FRESHNESS_LABELS[freshness] || freshness}`;
           return `
-            <section class="finviz-industry" style="--industry-span:${industrySpan}">
-              <div class="finviz-industry-title">${escapeHtml(industry)}</div>
-              <div class="finviz-industry-tiles">
-                ${industryItems.map((item) => {
-                  const change = item.change_pct;
-                  const cls = Number(change) >= 0 ? "up" : "down";
-                  const freshness = item.freshness_status || "unknown";
-                  const itemWeight = heatmapWeight(item);
-                  const tile = heatmapTileGeometry(itemWeight, industryItems.length);
-                  const title = `${item.symbol} ${item.label || ""} ${fmtPct(change)} · ${fmtHeatmapAsOf(item.as_of)} ET · ${FRESHNESS_LABELS[freshness] || freshness}`;
-                  return `
-                    <article class="finviz-heatmap-tile stock-heatmap-tile ${cls} ${freshness} size-${tile.size}" style="--heat-bg:${heatColor(change)}; --tile-span:${tile.cols}; --tile-rows:${tile.rows}" title="${escapeHtml(title)}">
-                      <div class="stock-heatmap-main">
-                        <span class="stock-heatmap-symbol">${escapeHtml(item.symbol || "")}</span>
-                        <span class="stock-heatmap-change">${escapeHtml(fmtPct(change))}</span>
-                      </div>
-                      <div class="stock-heatmap-name">${escapeHtml(item.label || "")}</div>
-                    </article>
-                  `;
-                }).join("")}
+            <article class="finviz-heatmap-tile stock-heatmap-tile ${cls} ${freshness} size-${tileSize}" style="${heatmapRectStyle(tileRect)}; --heat-bg:${heatColor(change)}" title="${escapeHtml(title)}">
+              <div class="stock-heatmap-main">
+                <span class="stock-heatmap-symbol">${escapeHtml(item.symbol || "")}</span>
+                <span class="stock-heatmap-change">${escapeHtml(fmtPct(change))}</span>
               </div>
-            </section>
+            </article>
           `;
         }).join("")}
       </div>
