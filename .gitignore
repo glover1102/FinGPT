@@ -149,6 +149,8 @@ data/raw/
 data/runs.db
 data/research_mart.db*
 data/research_mart.duckdb*
+data/quant_lab/backtests/
+data/quant_lab/strategies/
 data/watchlist.json
 reports/
 .playwright-cli/

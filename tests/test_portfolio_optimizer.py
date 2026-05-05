@@ -74,6 +74,9 @@ def test_covariance_optimizer_reports_portfolio_metrics() -> None:
     assert result["diagnostics"]["sample_count"] == 5
     assert result["portfolio_metrics"]["annualized_volatility"] >= 0
     assert math.isclose(sum(result["risk_contributions"].values()), 1.0, rel_tol=1e-5)
+    assert result["diagnostics"]["risk_contribution_sum"] == 1.0
+    assert result["diagnostics"]["effective_number_of_positions"] >= 1.0
+    assert result["correlation_matrix"]["LOW"]["LOW"] == 1.0
 
 
 def test_risk_parity_uses_covariance_and_keeps_weights_normalized() -> None:
@@ -90,3 +93,24 @@ def test_risk_parity_uses_covariance_and_keeps_weights_normalized() -> None:
     assert result["diagnostics"]["uses_covariance"] is True
     assert math.isclose(sum(result["weights"].values()), 1.0)
     assert all(weight <= 0.7 for weight in result["weights"].values())
+
+
+def test_diagonal_shrinkage_and_benchmark_relative_metrics_are_reported() -> None:
+    result = optimize_portfolio(
+        {
+            "SPY": [0.01, 0.02, -0.01, 0.005, 0.0],
+            "TLT": [0.002, 0.001, 0.003, -0.002, 0.001],
+            "GLD": [0.004, -0.003, 0.002, 0.001, 0.003],
+        },
+        method="minimum_volatility",
+        covariance_method="diagonal_shrinkage",
+        shrinkage_alpha=0.25,
+        benchmark="SPY",
+    )
+
+    assert result["status"] == "success"
+    assert result["diagnostics"]["covariance_method"] == "diagonal_shrinkage"
+    assert result["diagnostics"]["covariance_shrinkage_used"] is True
+    assert result["diagnostics"]["benchmark"] == "SPY"
+    assert result["portfolio_metrics"]["benchmark_sample_count"] == 5
+    assert "tracking_error" in result["portfolio_metrics"]

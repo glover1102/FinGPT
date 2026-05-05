@@ -30,8 +30,21 @@ REQUIRED_UI_MARKERS: dict[str, str] = {
     "intraday heatmap": 'id="homeHeatmap"',
     "data health": 'id="homeDataHealth"',
     "asset detail": 'id="assetDetailSurface"',
+    "quant feature preview": 'id="quantFeatureSurface"',
+    "quant signal matrix": 'id="quantSignalSurface"',
+    "strategy governance": 'id="quantStrategySurface"',
+    "strategy editor": 'id="strategyDefinitionJson"',
+    "strategy dry run": 'id="quantStrategyDryRun"',
     "backtest": 'id="backtestSurface"',
+    "freshness profile": 'id="backtestFreshnessProfile"',
+    "strict freshness toggle": 'id="backtestRequireFresh"',
+    "research score toggle": 'id="backtestUseResearchScore"',
+    "quant run history": 'id="quantRunHistorySurface"',
+    "quant export storage report": 'id="quantExportStorageReport"',
+    "quant cross-run cleanup preview": 'id="quantCrossRunCleanupPreview"',
     "portfolio optimizer": 'id="portfolioSurface"',
+    "portfolio benchmark": 'id="portfolioBenchmark"',
+    "portfolio covariance method": 'id="portfolioCovarianceMethod"',
 }
 
 

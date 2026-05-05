@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     # Set to "*" in .env only if you intentionally want to serve the UI to other hosts.
     web_cors_origins: str = Field(default="http://127.0.0.1:8000,http://localhost:8000,http://127.0.0.1:8010,http://localhost:8010")
 
+    # Optional Quant Lab adapters. Qlib stays disabled by default so the
+    # deterministic data-mart-backed engine remains the startup/runtime path.
+    quant_lab_qlib_enabled: bool = Field(default=False)
+    qlib_provider_uri: str = Field(default="")
+
     # Collection cache — small in-memory TTL cache to avoid re-hammering FMP / SEC /
     # Yahoo when the user re-runs the same (ticker, sources, lookback) within a
     # short window (e.g. retrying with a different question). Set TTL to 0 to

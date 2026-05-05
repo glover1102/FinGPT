@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FinGPT Local Research Assistant</title>
-  <link rel="stylesheet" href="styles.css?v=20260504-expanded-heatmap8" />
+  <link rel="stylesheet" href="styles.css?v=20260505-quant-lab-export-storage" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='48' font-size='48'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E" />
 </head>
 <body>
@@ -300,6 +300,49 @@
               <div class="home-news-empty">티커를 입력하면 저장된 가격, 수익률, 변동성, 낙폭, 최신 데이터 기준일을 확인합니다.</div>
             </div>
           </section>
+          <section class="home-card feature-card quant-surface">
+            <div class="home-card-head">
+              <h3>Feature Preview</h3>
+              <span>data mart factors</span>
+            </div>
+            <div class="decision-form quant-action-form">
+              <button type="button" id="quantFeatureRun" class="ghost-btn">Preview</button>
+            </div>
+            <div id="quantFeatureSurface" class="decision-surface">
+              <div class="home-news-empty">Use the current Quant Lab universe and date range to inspect deterministic factor values, freshness, and diagnostics.</div>
+            </div>
+          </section>
+          <section class="home-card signal-card quant-surface">
+            <div class="home-card-head">
+              <h3>Signal Matrix</h3>
+              <span>next-bar policy</span>
+            </div>
+            <div class="decision-form quant-action-form">
+              <button type="button" id="quantSignalRun" class="ghost-btn">Generate</button>
+            </div>
+            <div id="quantSignalSurface" class="decision-surface">
+              <div class="home-news-empty">Signals are derived from deterministic factors and explicitly mark next-bar execution assumptions.</div>
+            </div>
+          </section>
+          <section class="home-card strategy-governance-card quant-surface">
+            <div class="home-card-head">
+              <h3>Strategy Governance</h3>
+              <button type="button" id="quantStrategyRefresh" class="linkish">refresh</button>
+            </div>
+            <div class="decision-form strategy-governance-form">
+              <button type="button" id="quantStrategyNewDraft" class="ghost-btn">New draft</button>
+              <button type="button" id="quantStrategyDryRun" class="ghost-btn">Dry-run</button>
+              <button type="button" id="quantStrategySave" class="ghost-btn">Save</button>
+              <button type="button" id="quantStrategyDelete" class="ghost-btn danger">Delete saved</button>
+            </div>
+            <textarea id="strategyDefinitionJson" class="strategy-json-editor" spellcheck="false" aria-label="Strategy definition JSON"></textarea>
+            <div id="quantStrategyResultSurface" class="decision-surface compact-surface">
+              <div class="home-news-empty">Load or draft a strategy, then dry-run it before saving.</div>
+            </div>
+            <div id="quantStrategySurface" class="decision-surface">
+              <div class="home-news-empty">Strategy registry entries will appear here with version, source, and execution policy checks.</div>
+            </div>
+          </section>
           <section class="home-card backtest-card quant-surface">
             <div class="home-card-head">
               <h3>백테스트</h3>
@@ -348,6 +391,22 @@
                 <input id="backtestRebalanceEvery" type="number" value="21" min="1" max="252" aria-label="Backtest rebalance every" />
               </label>
               <label>
+                <span>Fresh profile</span>
+                <select id="backtestFreshnessProfile" aria-label="Quant Lab freshness profile">
+                  <option value="research_default">Research default</option>
+                  <option value="decision_review">Decision review</option>
+                  <option value="historical_lab">Historical lab</option>
+                </select>
+              </label>
+              <label>
+                <span>Fresh strict</span>
+                <input id="backtestRequireFresh" type="checkbox" aria-label="Require fresh prices for Quant Lab backtests" />
+              </label>
+              <label>
+                <span>Research score</span>
+                <input id="backtestUseResearchScore" type="checkbox" aria-label="Use fresh research score as confirmation metadata" />
+              </label>
+              <label>
                 <span>비용 bps</span>
                 <input id="backtestCostBps" type="number" value="5" min="0" max="1000" step="0.5" aria-label="Backtest transaction cost basis points" />
               </label>
@@ -360,6 +419,19 @@
             <div class="decision-note">같은 종목/기간 조건을 포트폴리오 최적화에 바로 넘길 수 있습니다.</div>
             <div id="backtestSurface" class="decision-surface">
               <div class="home-news-empty">저장 가격 기준으로 CAGR, 변동성, Sharpe, Sortino, MDD, Calmar, 회전율을 계산합니다.</div>
+            </div>
+          </section>
+          <section class="home-card quant-run-history-card quant-surface">
+            <div class="home-card-head">
+              <h3>Run History</h3>
+              <div class="block-actions">
+                <button type="button" id="quantExportStorageReport" class="linkish">storage report</button>
+                <button type="button" id="quantCrossRunCleanupPreview" class="linkish">cleanup preview</button>
+                <button type="button" id="quantRunHistoryRefresh" class="linkish">refresh</button>
+              </div>
+            </div>
+            <div id="quantRunHistorySurface" class="decision-surface">
+              <div class="home-news-empty">Artifact-backed Quant Lab runs will appear here after a backtest completes.</div>
             </div>
           </section>
           <section class="home-card portfolio-card quant-surface">
@@ -386,6 +458,21 @@
                     <option value="momentum_tilt">Momentum tilt</option>
                   </optgroup>
                 </select>
+              </label>
+              <label>
+                <span>Benchmark</span>
+                <input id="portfolioBenchmark" type="text" value="SPY" maxlength="24" aria-label="Portfolio benchmark" />
+              </label>
+              <label>
+                <span>Covariance</span>
+                <select id="portfolioCovarianceMethod" aria-label="Portfolio covariance method">
+                  <option value="sample">Sample</option>
+                  <option value="diagonal_shrinkage">Diagonal shrinkage</option>
+                </select>
+              </label>
+              <label>
+                <span>Shrinkage</span>
+                <input id="portfolioShrinkageAlpha" type="number" value="0.10" min="0" max="1" step="0.05" aria-label="Portfolio covariance shrinkage alpha" />
               </label>
               <label>
                 <span>시작일</span>
@@ -587,6 +674,6 @@
     </section>
   </main>
 
-  <script src="app.js?v=20260504-expanded-heatmap8"></script>
+  <script src="app.js?v=20260505-quant-lab-export-storage"></script>
 </body>
 </html>

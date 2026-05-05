@@ -19,6 +19,7 @@ def test_buy_and_hold_metrics_include_cost_assumptions() -> None:
     assert result["status"] == "success"
     assert result["equity_curve"][-1]["equity"] == 1.21
     assert result["assumptions"]["lookahead_policy"]
+    assert result["metrics"]["total_return"] == 0.21
     assert result["metrics"]["max_drawdown"] == 0.0
     assert result["metrics"]["turnover"] == 1.0
 
@@ -51,6 +52,12 @@ def test_momentum_ranking_uses_prior_history_and_records_turnover() -> None:
     assert result["selected_history"][0]["selected"] == ["AAA"]
     assert result["metrics"]["trade_count"] >= 1
     assert result["assumptions"]["lookahead_policy"]
+    first_trade = result["trades"][0]
+    assert first_trade["signal_date"] < first_trade["execution_date"]
+    assert first_trade["ticker"] in {"AAA", "BBB"}
+    assert "target_weight" in first_trade
+    assert result["rebalance_snapshots"][0]["selected"] == ["AAA"]
+    assert result["rebalance_snapshots"][0]["rejected"] == ["BBB"]
 
 
 def test_multi_asset_buy_and_hold_builds_single_portfolio_curve() -> None:
@@ -65,7 +72,10 @@ def test_multi_asset_buy_and_hold_builds_single_portfolio_curve() -> None:
     assert result["status"] == "success"
     assert result["equity_curve"][-1]["equity"] == 1.1025
     assert result["weights_history"][0]["weights"] == {"AAA": 0.5, "BBB": 0.5}
+    assert result["metrics"]["total_return"] == 0.1025
     assert result["metrics"]["turnover"] == 1.0
+    assert {trade["ticker"] for trade in result["trades"]} == {"AAA", "BBB"}
+    assert all(trade["signal_date"] < trade["execution_date"] for trade in result["trades"])
 
 
 def test_multi_asset_moving_average_keeps_no_lookahead_cash_for_inactive_signals() -> None:

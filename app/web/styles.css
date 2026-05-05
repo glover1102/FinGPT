@@ -732,6 +732,13 @@ input[type="range"]::-moz-range-thumb {
 .dashboard-surface-grid[data-dashboard-tab="quant"] .portfolio-card {
   grid-column: 1 / -1;
 }
+.dashboard-surface-grid[data-dashboard-tab="quant"] .quant-run-history-card {
+  min-height: 300px;
+}
+.dashboard-surface-grid[data-dashboard-tab="quant"] .feature-card,
+.dashboard-surface-grid[data-dashboard-tab="quant"] .signal-card {
+  min-height: 320px;
+}
 .heatmap-focus-mode {
   overflow: hidden;
 }
@@ -828,8 +835,47 @@ input[type="range"]::-moz-range-thumb {
   font-size: 12px;
 }
 .backtest-card .decision-form,
-.portfolio-card .decision-form {
+.portfolio-card .decision-form,
+.feature-card .decision-form,
+.signal-card .decision-form {
   grid-template-columns: minmax(76px, 1fr) minmax(120px, auto) auto;
+}
+.feature-card .decision-form.quant-action-form,
+.signal-card .decision-form.quant-action-form {
+  grid-template-columns: minmax(0, 1fr);
+}
+.feature-card .decision-form.quant-action-form .ghost-btn,
+.signal-card .decision-form.quant-action-form .ghost-btn {
+  justify-self: start;
+  min-height: 32px;
+}
+.strategy-governance-card {
+  grid-column: span 2;
+}
+.strategy-governance-form {
+  grid-template-columns: repeat(4, minmax(0, auto));
+  justify-content: start;
+  margin-bottom: 10px;
+}
+.strategy-json-editor {
+  width: 100%;
+  min-height: 180px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  margin-bottom: 10px;
+  white-space: pre;
+}
+.compact-surface {
+  margin-bottom: 10px;
+  min-height: 0;
+}
+.ghost-btn.danger {
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+}
+.ghost-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.08);
 }
 .backtest-card .decision-form.backtest-form,
 .portfolio-card .decision-form.portfolio-form {
@@ -979,6 +1025,19 @@ input[type="range"]::-moz-range-thumb {
   font-family: var(--font-mono);
   font-size: 10px;
 }
+.decision-inline-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.decision-inline-select select {
+  min-height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text-main);
+  font-size: 11px;
+}
 .decision-table-wrap {
   overflow: auto;
   border: 1px solid var(--border);
@@ -1012,6 +1071,44 @@ input[type="range"]::-moz-range-thumb {
 .table-status.ok { color: var(--bull); }
 .table-status.warn { color: var(--warn); }
 .table-status.fail { color: var(--bear); }
+.decision-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.decision-chart {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(15,23,42,0.58);
+  padding: 8px;
+  min-width: 0;
+  color: var(--accent);
+}
+.decision-chart-head,
+.decision-chart-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.decision-chart-head span,
+.decision-chart-foot {
+  color: var(--text-mute);
+}
+.decision-chart-head strong {
+  color: var(--text);
+}
+.decision-chart-head strong.ok { color: var(--bull); }
+.decision-chart-head strong.warn { color: var(--warn); }
+.decision-chart-head strong.fail { color: var(--bear); }
+.decision-chart svg {
+  display: block;
+  width: 100%;
+  height: 88px;
+  margin: 4px 0;
+}
 .mini-price-bars {
   height: 72px;
   display: flex;
@@ -2500,6 +2597,7 @@ input[type="range"]::-moz-range-thumb {
   .dashboard-surface-grid[data-dashboard-tab="quant"] { grid-template-columns: 1fr; }
   .dashboard-surface-grid[data-dashboard-tab="market"] .home-chart-card { min-height: 560px; }
   .dashboard-surface-grid[data-dashboard-tab="market"] .tv-overview { height: 500px; }
+  .decision-chart-grid { grid-template-columns: 1fr; }
   .finviz-sector.stock-heatmap-sector { grid-column: 1 / -1; }
   .home-heatmap-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stock-sector-movers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2511,6 +2609,8 @@ input[type="range"]::-moz-range-thumb {
   }
   .decision-metric-grid.dense { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .home-card-wide { grid-row: auto; }
+  .strategy-governance-card { grid-column: auto; }
+  .strategy-governance-form { grid-template-columns: repeat(2, minmax(0, auto)); }
   .home-hero { align-items: flex-start; flex-direction: column; }
   .home-status { align-items: flex-start; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
@@ -2552,6 +2652,8 @@ input[type="range"]::-moz-range-thumb {
   .home-market-grid { grid-template-columns: 1fr; }
   .backtest-card .decision-form.backtest-form,
   .portfolio-card .decision-form.portfolio-form,
+  .strategy-governance-form,
+  .decision-chart-grid,
   .decision-metric-grid.dense {
     grid-template-columns: 1fr;
   }

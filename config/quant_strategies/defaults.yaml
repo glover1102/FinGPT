@@ -1,0 +1,33 @@
+[
+  {
+    "strategy_id": "momentum_ranking_v1",
+    "name": "Momentum Ranking",
+    "universe": ["SPY", "QQQ", "TLT", "GLD"],
+    "benchmark": "SPY",
+    "frequency": "daily",
+    "features": {
+      "momentum_63d": {"id": "momentum_63d", "lookback": 63},
+      "realized_vol_21d": {"id": "realized_vol_21d", "lookback": 21}
+    },
+    "signal": {"type": "rank_top_n", "top_n": 2},
+    "portfolio": {"method": "equal_weight", "max_weight": 0.5},
+    "execution": {"trade_at": "next_bar_close", "transaction_cost_bps": 5, "slippage_bps": 2},
+    "diagnostics": {"require_fresh_prices": true, "require_no_lookahead": true}
+  },
+  {
+    "strategy_id": "research_confirmed_momentum_v1",
+    "name": "Research Confirmed Momentum",
+    "universe": ["SPY", "QQQ", "TLT"],
+    "benchmark": "SPY",
+    "frequency": "daily",
+    "features": {
+      "momentum_63d": {"id": "momentum_63d", "lookback": 63},
+      "realized_vol_21d": {"id": "realized_vol_21d", "lookback": 21},
+      "research_score": {"id": "research_score", "max_age_days": 7}
+    },
+    "signal": {"type": "score_threshold", "long_threshold": 0.6, "exit_threshold": 0.3},
+    "portfolio": {"method": "equal_weight", "max_weight": 0.35},
+    "execution": {"trade_at": "next_bar_close", "transaction_cost_bps": 5, "slippage_bps": 2},
+    "diagnostics": {"require_fresh_prices": true, "require_no_lookahead": true}
+  }
+]

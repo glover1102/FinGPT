@@ -59,6 +59,40 @@ def test_backtest_endpoint_accepts_request_price_rows() -> None:
     assert body["equity_curve"][-1]["equity"] == 1.21
 
 
+def test_backtest_endpoint_serializes_single_ticker_data_mart_result(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "research_mart.db"
+    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
+    init_db(db_path)
+    repository.upsert_prices(
+        [
+            PriceBar(ticker="SPY", date="2026-01-02", close=100, adjusted_close=100, source="test"),
+            PriceBar(ticker="SPY", date="2026-01-03", close=110, adjusted_close=110, source="test"),
+            PriceBar(ticker="SPY", date="2026-01-04", close=121, adjusted_close=121, source="test"),
+        ],
+        db_path=db_path,
+    )
+
+    client = TestClient(app)
+    resp = client.post(
+        "/api/v1/backtest/run",
+        json={
+            "ticker": "SPY",
+            "strategy": "buy_and_hold",
+            "start_date": "2026-01-02",
+            "end_date": "2026-01-04",
+            "transaction_cost_bps": 0,
+            "slippage_bps": 0,
+        },
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "success"
+    assert body["data_status"] == "data_mart"
+    assert body["asset_results"]["SPY"]["status"] == "success"
+    assert body["equity_curve"][-1]["equity"] == 1.21
+
+
 def test_backtest_endpoint_accepts_multiple_tickers_with_request_range(tmp_path, monkeypatch) -> None:
     db_path = tmp_path / "research_mart.db"
     monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))

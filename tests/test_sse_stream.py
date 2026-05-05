@@ -8,6 +8,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.api import server as api_server
+from app.api.routers import research as research_router
 from core.schemas.response import AnalysisResponse, ExecutionMeta
 from core.schemas.topic import TopicResponse
 
@@ -48,7 +49,7 @@ class StreamEndpointTests(unittest.TestCase):
                 conclusion="ok",
             )
 
-        with patch.object(api_server, "run_pipeline_async", side_effect=fake_pipeline):
+        with patch.object(research_router, "run_pipeline_async", side_effect=fake_pipeline):
             client = TestClient(api_server.app)
             body = {
                 "ticker": "AAPL",
@@ -111,7 +112,7 @@ class StreamEndpointTests(unittest.TestCase):
                 execution_meta=ExecutionMeta(extras={"phase": "final"}),
             )
 
-        with patch.object(api_server, "dispatch_async", side_effect=fake_dispatch):
+        with patch.object(research_router, "dispatch_async", side_effect=fake_dispatch):
             client = TestClient(api_server.app)
             body = {
                 "ticker": "TLT",
@@ -141,7 +142,7 @@ class StreamEndpointTests(unittest.TestCase):
         async def failing_pipeline(request, *, event_sink=None):
             raise RuntimeError("boom")
 
-        with patch.object(api_server, "run_pipeline_async", side_effect=failing_pipeline):
+        with patch.object(research_router, "run_pipeline_async", side_effect=failing_pipeline):
             client = TestClient(api_server.app)
             body = {
                 "ticker": "AAPL",

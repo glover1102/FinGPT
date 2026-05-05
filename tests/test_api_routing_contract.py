@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from app.api import server as api_server
+from app.api.routers import research as research_router
 from core.schemas.response import AnalysisResponse
 from core.schemas.topic import TopicResponse
 
@@ -34,7 +35,7 @@ def _parse_sse(raw: str) -> list[dict]:
 class ApiRoutingContractTests(unittest.TestCase):
     def test_direct_analyze_rejects_missing_ticker_before_pipeline(self):
         client = TestClient(api_server.app)
-        with patch.object(api_server, "run_pipeline_async", new=AsyncMock()) as run_pipeline:
+        with patch.object(research_router, "run_pipeline_async", new=AsyncMock()) as run_pipeline:
             resp = client.post(
                 "/api/v1/research/analyze",
                 json={"question": "금리와 장기채 매력도 분석", "model": "qwen"},
@@ -54,7 +55,7 @@ class ApiRoutingContractTests(unittest.TestCase):
             conclusion="ok",
         )
         client = TestClient(api_server.app)
-        with patch.object(api_server, "run_pipeline_async", new=AsyncMock(return_value=response)) as run_pipeline:
+        with patch.object(research_router, "run_pipeline_async", new=AsyncMock(return_value=response)) as run_pipeline:
             resp = client.post(
                 "/api/v1/research",
                 json={"ticker": "MSFT", "question": "AI capex risk", "model": "qwen"},
@@ -68,7 +69,7 @@ class ApiRoutingContractTests(unittest.TestCase):
 
     def test_direct_stream_rejects_missing_ticker_before_pipeline(self):
         client = TestClient(api_server.app)
-        with patch.object(api_server, "run_pipeline_async", new=AsyncMock()) as run_pipeline:
+        with patch.object(research_router, "run_pipeline_async", new=AsyncMock()) as run_pipeline:
             resp = client.post(
                 "/api/v1/research/stream",
                 json={"question": "금리와 장기채 매력도 분석", "model": "qwen"},
@@ -80,7 +81,7 @@ class ApiRoutingContractTests(unittest.TestCase):
 
     def test_direct_analyze_returns_guidance_for_non_company_proxy(self):
         client = TestClient(api_server.app)
-        with patch.object(api_server, "run_pipeline_async", new=AsyncMock()) as run_pipeline:
+        with patch.object(research_router, "run_pipeline_async", new=AsyncMock()) as run_pipeline:
             resp = client.post(
                 "/api/v1/research/analyze",
                 json={
@@ -98,7 +99,7 @@ class ApiRoutingContractTests(unittest.TestCase):
 
     def test_universal_stream_rejects_ticker_mode_without_ticker(self):
         client = TestClient(api_server.app)
-        with patch.object(api_server, "dispatch_async", new=AsyncMock()) as dispatch:
+        with patch.object(research_router, "dispatch_async", new=AsyncMock()) as dispatch:
             resp = client.post(
                 "/api/v1/research/universal/stream",
                 json={"question": "MSFT 리스크 분석", "mode_hint": "ticker", "model": "qwen"},
@@ -118,7 +119,7 @@ class ApiRoutingContractTests(unittest.TestCase):
             conclusion="ok",
         )
         client = TestClient(api_server.app)
-        with patch.object(api_server, "dispatch_async", new=AsyncMock(return_value=response)) as dispatch:
+        with patch.object(research_router, "dispatch_async", new=AsyncMock(return_value=response)) as dispatch:
             with client.stream(
                 "POST",
                 "/api/v1/research/universal/stream",
@@ -148,7 +149,7 @@ class ApiRoutingContractTests(unittest.TestCase):
             core_thesis="TLT는 topic playbook으로 분석해야 합니다.",
         )
         client = TestClient(api_server.app)
-        with patch.object(api_server, "dispatch_async", new=AsyncMock(return_value=response)) as dispatch:
+        with patch.object(research_router, "dispatch_async", new=AsyncMock(return_value=response)) as dispatch:
             with client.stream(
                 "POST",
                 "/api/v1/research/universal/stream",

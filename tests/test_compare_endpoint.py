@@ -13,6 +13,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.api import server as api_server
+from app.api.routers import research as research_router
 from core.schemas.response import AnalysisResponse
 
 
@@ -34,7 +35,7 @@ class CompareEndpointTests(unittest.TestCase):
             await asyncio.sleep(0)
             return _mk_response(request.ticker)
 
-        with patch.object(api_server, "run_pipeline_async", side_effect=fake):
+        with patch.object(research_router, "run_pipeline_async", side_effect=fake):
             client = TestClient(api_server.app)
             resp = client.post(
                 "/api/v1/research/compare",
@@ -67,7 +68,7 @@ class CompareEndpointTests(unittest.TestCase):
                 raise RuntimeError("simulated ollama timeout")
             return _mk_response(request.ticker)
 
-        with patch.object(api_server, "run_pipeline_async", side_effect=fake):
+        with patch.object(research_router, "run_pipeline_async", side_effect=fake):
             client = TestClient(api_server.app)
             resp = client.post(
                 "/api/v1/research/compare",

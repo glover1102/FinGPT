@@ -11,6 +11,7 @@ import pandas as pd
 from fastapi.testclient import TestClient
 
 from app.api import server as api_server
+from app.api.routers import dashboard as dashboard_router
 
 
 class _FakeTicker:
@@ -84,7 +85,7 @@ class DashboardApiTests(unittest.TestCase):
         def fake_collect(symbol: str, *args, **kwargs):
             return symbol, docs if symbol == "TLT" else []
 
-        with patch.object(api_server, "collect_news_from_google_rss", side_effect=fake_collect):
+        with patch.object(dashboard_router, "collect_news_from_google_rss", side_effect=fake_collect):
             resp = client.get("/api/v1/dashboard/news?limit=3")
 
         self.assertEqual(resp.status_code, 200)

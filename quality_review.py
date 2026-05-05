@@ -620,34 +620,70 @@ def _select_cases(suite: str) -> list[dict[str, Any]]:
     return list(ANALYSIS_CASES) + list(TOPIC_CASES)
 
 
-async def run_quality_review(
-    suite: str = "all",
-    output_path: str | None = None,
+def _case_key(case: dict[str, Any]) -> str:
+    return "::".join(
+        [
+            str(case.get("suite") or ""),
+            str(case.get("category") or ""),
+            str(case.get("desc") or ""),
+            str(case.get("ticker") or case.get("theme") or ""),
+            str(case.get("question") or ""),
+        ]
+    )
+
+
+def _case_window(cases: list[dict[str, Any]], *, case_offset: int = 0, case_limit: int | None = None) -> list[dict[str, Any]]:
+    offset = max(0, int(case_offset or 0))
+    selected = cases[offset:]
+    if case_limit is None:
+        return selected
+    return selected[: max(0, int(case_limit))]
+
+
+def _load_resume_results(resume_from: str | None) -> list[dict[str, Any]]:
+    if not resume_from:
+        return []
+    path = Path(resume_from)
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    cases = payload.get("cases") if isinstance(payload, dict) else None
+    return [dict(item) for item in cases if isinstance(item, dict)] if isinstance(cases, list) else []
+
+
+def _result_key(result: dict[str, Any]) -> str:
+    return "::".join(
+        [
+            str(result.get("suite") or ""),
+            str(result.get("category") or ""),
+            str(result.get("desc") or ""),
+            str(result.get("ticker") or result.get("theme") or ""),
+            str(result.get("question") or ""),
+        ]
+    )
+
+
+def _write_report(report: dict[str, Any], output_path: str | None) -> None:
+    primary_output, legacy_output = _output_paths(output_path)
+    primary_output.parent.mkdir(parents=True, exist_ok=True)
+    primary_output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    if legacy_output.resolve() != primary_output.resolve():
+        legacy_output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _build_report(
     *,
-    measure_latency: bool = False,
+    suite: str,
+    measure_latency: bool,
+    preflight: dict[str, Any],
+    results: list[dict[str, Any]],
+    selected_case_count: int,
+    skipped_resume: int,
+    partial: bool = False,
 ) -> dict[str, Any]:
-    suite = (suite or "all").strip().lower()
-    if suite not in {"analysis", "topic", "all"}:
-        raise ValueError("suite must be one of: analysis, topic, all")
-
-    preflight = run_preflight()
-    cases = _select_cases(suite)
-    results: list[dict[str, Any]] = []
-
-    for case in cases:
-        print(f"[{case['suite']}] {case['category']} :: {case['desc']}", flush=True)
-        if case["suite"] == "analysis":
-            result = await _run_analysis_case(case)
-        else:
-            result = await _run_topic_case(case, measure_latency=measure_latency)
-        results.append(result)
-        tag = str(result["status"]).upper().ljust(7)
-        print(
-            f"  -> {tag} mode={result['mode']} model={result['model_used']} "
-            f"lang={result['language_ok']} gate={result['gate_pass']} elapsed={result['elapsed_s']}s",
-            flush=True,
-        )
-
     status_counts: dict[str, int] = {}
     suite_counts: dict[str, int] = {}
     gate_failures = 0
@@ -678,36 +714,94 @@ async def run_quality_review(
             },
         }
 
-    report = {
+    return {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "suite": suite,
         "measure_latency": measure_latency,
+        "partial": partial,
         "preflight": preflight,
         "summary": {
             "total": len(results),
+            "selected_case_count": selected_case_count,
+            "skipped_resume": skipped_resume,
             "status_counts": status_counts,
             "suite_counts": suite_counts,
             "gate_failures": gate_failures,
-            "gate_passed": gate_failures == 0 and bool(preflight.get("passed")),
+            "gate_passed": gate_failures == 0 and bool(preflight.get("passed")) and not partial,
             "latency": latency_summary,
         },
         "cases": results,
     }
 
-    primary_output, legacy_output = _output_paths(output_path)
-    primary_output.parent.mkdir(parents=True, exist_ok=True)
-    primary_output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    if legacy_output.resolve() != primary_output.resolve():
-        legacy_output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+
+async def run_quality_review(
+    suite: str = "all",
+    output_path: str | None = None,
+    *,
+    measure_latency: bool = False,
+    case_limit: int | None = None,
+    case_offset: int = 0,
+    resume_from: str | None = None,
+) -> dict[str, Any]:
+    suite = (suite or "all").strip().lower()
+    if suite not in {"analysis", "topic", "all"}:
+        raise ValueError("suite must be one of: analysis, topic, all")
+
+    preflight = run_preflight()
+    cases = _case_window(_select_cases(suite), case_offset=case_offset, case_limit=case_limit)
+    resume_results = _load_resume_results(resume_from)
+    completed_keys = {_result_key(item) for item in resume_results}
+    results: list[dict[str, Any]] = list(resume_results)
+    skipped_resume = 0
+
+    for case in cases:
+        if _case_key(case) in completed_keys:
+            skipped_resume += 1
+            continue
+        print(f"[{case['suite']}] {case['category']} :: {case['desc']}", flush=True)
+        if case["suite"] == "analysis":
+            result = await _run_analysis_case(case)
+        else:
+            result = await _run_topic_case(case, measure_latency=measure_latency)
+        results.append(result)
+        completed_keys.add(_result_key(result))
+        tag = str(result["status"]).upper().ljust(7)
+        print(
+            f"  -> {tag} mode={result['mode']} model={result['model_used']} "
+            f"lang={result['language_ok']} gate={result['gate_pass']} elapsed={result['elapsed_s']}s",
+            flush=True,
+        )
+        partial_report = _build_report(
+            suite=suite,
+            measure_latency=measure_latency,
+            preflight=preflight,
+            results=results,
+            selected_case_count=len(cases),
+            skipped_resume=skipped_resume,
+            partial=True,
+        )
+        _write_report(partial_report, output_path)
+
+    report = _build_report(
+        suite=suite,
+        measure_latency=measure_latency,
+        preflight=preflight,
+        results=results,
+        selected_case_count=len(cases),
+        skipped_resume=skipped_resume,
+        partial=False,
+    )
+    _write_report(report, output_path)
 
     print("\n============================================================", flush=True)
     print("QUALITY REVIEW SUMMARY", flush=True)
     print("============================================================", flush=True)
     print(f"suite: {suite}", flush=True)
     print(f"preflight passed: {preflight['passed']}", flush=True)
-    print(f"status counts: {status_counts}", flush=True)
-    print(f"gate failures: {gate_failures}", flush=True)
-    print(f"results: {primary_output}", flush=True)
+    print(f"status counts: {report['summary']['status_counts']}", flush=True)
+    print(f"gate failures: {report['summary']['gate_failures']}", flush=True)
+    print(f"selected cases: {len(cases)} skipped by resume: {skipped_resume}", flush=True)
+    print(f"results: {_output_paths(output_path)[0]}", flush=True)
     print("============================================================", flush=True)
     return report
 
@@ -730,6 +824,23 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Capture partial/final stage latency diagnostics for topic cases.",
     )
+    parser.add_argument(
+        "--case-limit",
+        type=int,
+        default=None,
+        help="Run at most this many selected cases for bounded automation shards.",
+    )
+    parser.add_argument(
+        "--case-offset",
+        type=int,
+        default=0,
+        help="Skip this many selected cases before running the shard.",
+    )
+    parser.add_argument(
+        "--resume-from",
+        default=None,
+        help="Reuse completed cases from an existing quality review JSON and skip matching cases.",
+    )
     return parser.parse_args()
 
 
@@ -745,6 +856,9 @@ def main() -> int:
                 suite=args.suite,
                 output_path=args.output,
                 measure_latency=bool(args.measure_latency),
+                case_limit=args.case_limit,
+                case_offset=args.case_offset,
+                resume_from=args.resume_from,
             )
         )
     finally:

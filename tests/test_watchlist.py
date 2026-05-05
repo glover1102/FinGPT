@@ -12,6 +12,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.api import server as api_server
+from app.api.routers import watchlist as watchlist_router
 from core.schemas.response import AnalysisResponse
 from pipelines.watchlist import store as wl_store
 from pipelines.watchlist import scheduler as wl_scheduler
@@ -105,7 +106,7 @@ class WatchlistEndpointTests(_TmpDataDirMixin, unittest.TestCase):
                 conclusion="ok",
             )
 
-        with patch.object(api_server, "run_pipeline_async", side_effect=fake_pipeline):
+        with patch.object(watchlist_router, "run_pipeline_async", side_effect=fake_pipeline):
             # Create
             resp = client.post(
                 "/api/v1/watchlist",

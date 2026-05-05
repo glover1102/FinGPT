@@ -140,6 +140,67 @@ class QualityReviewTests(unittest.TestCase):
         self.assertFalse(topic_case_payload["latency"]["deep_pass_skipped"])
         self.assertIsNotNone(topic_case_payload["latency"]["partial_result_s"])
 
+    def test_run_quality_review_supports_case_window_and_resume(self) -> None:
+        cases = [
+            {"suite": "analysis", "category": "A", "desc": "case 1", "ticker": "MSFT", "question": "q1"},
+            {"suite": "analysis", "category": "A", "desc": "case 2", "ticker": "AAPL", "question": "q2"},
+        ]
+
+        async def fake_result(case):
+            return {
+                "suite": case["suite"],
+                "category": case["category"],
+                "desc": case["desc"],
+                "ticker": case["ticker"],
+                "question": case["question"],
+                "mode": "single_ticker",
+                "status": "success",
+                "language_ok": True,
+                "model_used": "test",
+                "elapsed_s": 0.01,
+                "gate_pass": True,
+                "gate_reason": "ok",
+            }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_path = Path(tmp) / "quality_review_results.json"
+            with patch.object(quality_review, "ANALYSIS_CASES", cases), \
+                 patch.object(quality_review, "TOPIC_CASES", []), \
+                 patch.object(quality_review, "run_preflight", return_value={"passed": True, "checks": []}), \
+                 patch.object(quality_review, "_run_analysis_case", side_effect=fake_result) as runner:
+                report = asyncio.run(
+                    quality_review.run_quality_review(
+                        suite="analysis",
+                        output_path=str(output_path),
+                        case_offset=1,
+                        case_limit=1,
+                    )
+                )
+
+            self.assertEqual(runner.call_count, 1)
+            self.assertEqual(report["summary"]["selected_case_count"], 1)
+            self.assertEqual(report["cases"][0]["desc"], "case 2")
+            self.assertTrue(json.loads(output_path.read_text(encoding="utf-8"))["summary"]["gate_passed"])
+
+            resume_path = Path(tmp) / "resume.json"
+            resume_path.write_text(json.dumps({"cases": [report["cases"][0]]}), encoding="utf-8")
+            resumed_output = Path(tmp) / "resumed.json"
+            with patch.object(quality_review, "ANALYSIS_CASES", cases), \
+                 patch.object(quality_review, "TOPIC_CASES", []), \
+                 patch.object(quality_review, "run_preflight", return_value={"passed": True, "checks": []}), \
+                 patch.object(quality_review, "_run_analysis_case", side_effect=fake_result) as resumed_runner:
+                resumed = asyncio.run(
+                    quality_review.run_quality_review(
+                        suite="analysis",
+                        output_path=str(resumed_output),
+                        resume_from=str(resume_path),
+                    )
+                )
+
+            self.assertEqual(resumed_runner.call_count, 1)
+            self.assertEqual(resumed["summary"]["skipped_resume"], 1)
+            self.assertEqual(len(resumed["cases"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

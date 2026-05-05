@@ -10,6 +10,7 @@ def performance_metrics(equity_curve: Iterable[float], *, periods_per_year: int 
     curve = [float(x) for x in equity_curve if x is not None]
     if len(curve) < 2 or curve[0] <= 0:
         return {
+            "total_return": 0.0,
             "cagr": 0.0,
             "volatility": 0.0,
             "sharpe": 0.0,
@@ -18,6 +19,7 @@ def performance_metrics(equity_curve: Iterable[float], *, periods_per_year: int 
             "calmar": 0.0,
         }
     returns = [curve[idx] / curve[idx - 1] - 1.0 for idx in range(1, len(curve)) if curve[idx - 1] != 0]
+    total_return = curve[-1] / curve[0] - 1.0
     years = max((len(curve) - 1) / periods_per_year, 1 / periods_per_year)
     cagr = (curve[-1] / curve[0]) ** (1 / years) - 1.0
     vol = _stdev(returns) * math.sqrt(periods_per_year) if returns else 0.0
@@ -28,6 +30,7 @@ def performance_metrics(equity_curve: Iterable[float], *, periods_per_year: int 
     max_dd = min(drawdown_series(curve), default=0.0)
     calmar = cagr / abs(max_dd) if max_dd else 0.0
     return {
+        "total_return": round(total_return, 6),
         "cagr": round(cagr, 6),
         "volatility": round(vol, 6),
         "sharpe": round(sharpe, 6),

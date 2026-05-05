@@ -1,0 +1,273 @@
+from __future__ import annotations
+
+from datetime import date, timedelta
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+from app.api.server import app
+from pipelines.data_mart.models import PriceBar
+from pipelines.data_mart.storage import repository
+from pipelines.data_mart.storage.db import init_db
+from pipelines.orchestration import quant_lab_pipeline
+
+
+def _seed_prices(db_path) -> None:
+    init_db(db_path)
+    rows = []
+    for idx in range(90):
+        day = (date(2026, 1, 1) + timedelta(days=idx)).isoformat()
+        rows.extend(
+            [
+                PriceBar(ticker="SPY", date=day, close=100 + idx, adjusted_close=100 + idx, source="test"),
+                PriceBar(ticker="QQQ", date=day, close=100 + idx * 1.3, adjusted_close=100 + idx * 1.3, source="test"),
+                PriceBar(ticker="TLT", date=day, close=100 - idx * 0.2, adjusted_close=100 - idx * 0.2, source="test"),
+            ]
+        )
+    repository.upsert_prices(rows, db_path=db_path)
+
+
+def test_quant_config_and_feature_preview_endpoint(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "research_mart.db"
+    _seed_prices(db_path)
+    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
+    client = TestClient(app)
+
+    config = client.get("/api/v1/quant/config")
+    preview = client.post("/api/v1/quant/features/preview", json={"tickers": ["SPY", "QQQ"], "benchmark": "SPY"})
+
+    assert config.status_code == 200
+    assert any(item["factor_id"] == "momentum_63d" for item in config.json()["factors"])
+    assert preview.status_code == 200
+    assert preview.json()["status"] == "success"
+    assert preview.json()["diagnostics"]["freshness_policy"]["policy_id"] == "daily_price_t_plus_3_market_days"
+
+
+def test_qlib_status_is_disabled_by_default() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/v1/quant/qlib/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "disabled"
+    assert body["startup_required"] is False
+
+
+def test_qlib_export_preview_is_disabled_by_default() -> None:
+    client = TestClient(app)
+
+    response = client.post("/api/v1/quant/qlib/export", json={"tickers": ["SPY"], "start_date": "2024-01-01"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "disabled"
+    assert body["export_ready"] is False
+    assert body["requested"]["tickers"] == ["SPY"]
+
+
+def test_quant_backtest_endpoint_persists_manifest(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "research_mart.db"
+    _seed_prices(db_path)
+    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
+    monkeypatch.setattr(quant_lab_pipeline, "ARTIFACT_ROOT", tmp_path / "artifacts")
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/quant/backtest",
+        json={"tickers": ["SPY", "QQQ", "TLT"], "benchmark": "SPY", "lookback": 21, "top_n": 2},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["diagnostics"]["lookahead_safe"] is True
+    assert "weights" in body
+    runs = client.get("/api/v1/quant/backtests?limit=5")
+    assert runs.status_code == 200
+    assert any(item["run_id"] == body["run_id"] for item in runs.json()["items"])
+    bundle = client.get(f"/api/v1/quant/backtest/{body['run_id']}/bundle")
+    assert bundle.status_code == 200
+    assert bundle.json()["manifest"]["run_id"] == body["run_id"]
+    assert bundle.json()["manifest"]["schema_version"] == "quant_lab_artifact_v1"
+    assert bundle.json()["manifest"]["data_snapshot"]["price_counts"]["SPY"] == 90
+    metrics = client.get(f"/api/v1/quant/backtest/{body['run_id']}/metrics")
+    assert metrics.status_code == 200
+    assert "sharpe" in metrics.json()
+    diagnostics = client.get(f"/api/v1/quant/backtest/{body['run_id']}/diagnostics")
+    assert diagnostics.status_code == 200
+    assert diagnostics.json()["lookahead_safe"] is True
+    equity_curve = client.get(f"/api/v1/quant/backtest/{body['run_id']}/equity-curve")
+    assert equity_curve.status_code == 200
+    assert equity_curve.json()
+    bundle = client.get(f"/api/v1/quant/backtest/{body['run_id']}/bundle")
+    assert bundle.status_code == 200
+    assert bundle.json()["config"]["tickers"] == ["SPY", "QQQ", "TLT"]
+    replay = client.post(f"/api/v1/quant/backtest/{body['run_id']}/replay")
+    assert replay.status_code == 200
+    replay_body = replay.json()
+    assert replay_body["status"] == "success"
+    assert replay_body["config_hash_match"] is True
+    assert replay_body["metric_deltas"]["total_return"] == 0
+    assert replay_body["tolerance_passed"] is True
+    assert replay_body["report_path"]
+    assert replay_body["report_history"]["count"] == 1
+    bundle_after_replay = client.get(f"/api/v1/quant/backtest/{body['run_id']}/bundle")
+    assert bundle_after_replay.status_code == 200
+    assert bundle_after_replay.json()["replay_report"]["schema_version"] == "quant_lab_replay_report_v1"
+    assert bundle_after_replay.json()["replay_reports"]["count"] == 1
+    replay_reports = client.get(f"/api/v1/quant/backtest/{body['run_id']}/replay-reports")
+    assert replay_reports.status_code == 200
+    assert replay_reports.json()["items"][0]["tolerance_passed"] is True
+    jsonl_export = client.post(
+        f"/api/v1/quant/backtest/{body['run_id']}/export",
+        json={"format": "jsonl", "keep_last_exports": 2},
+    )
+    csv_export = client.post(f"/api/v1/quant/backtest/{body['run_id']}/export", json={"format": "csv"})
+    parquet_export = client.post(f"/api/v1/quant/backtest/{body['run_id']}/export", json={"format": "parquet"})
+    bad_export = client.post(f"/api/v1/quant/backtest/{body['run_id']}/export", json={"format": "xlsx"})
+    assert jsonl_export.status_code == 200
+    assert jsonl_export.json()["files"]["jsonl"].endswith("artifact_bundle.jsonl")
+    assert len(jsonl_export.json()["integrity"]["files"]["jsonl"]["sha256"]) == 64
+    assert jsonl_export.json()["retention"]["keep_last_exports"] == 2
+    assert csv_export.status_code == 200
+    assert "metrics" in csv_export.json()["files"]
+    exports = client.get(f"/api/v1/quant/backtest/{body['run_id']}/exports")
+    assert exports.status_code == 200
+    assert exports.json()["count"] >= 2
+    assert exports.json()["items"][0]["integrity_available"] is True
+    verify_latest = client.post(f"/api/v1/quant/backtest/{body['run_id']}/export/verify", json={})
+    assert verify_latest.status_code == 200
+    assert verify_latest.json()["status"] == "success"
+    assert verify_latest.json()["files_failed"] == 0
+    jsonl_manifest = jsonl_export.json()["files"]["manifest"]
+    verify_jsonl = client.post(
+        f"/api/v1/quant/backtest/{body['run_id']}/export/verify",
+        json={"export_manifest_path": jsonl_manifest},
+    )
+    assert verify_jsonl.status_code == 200
+    assert verify_jsonl.json()["status"] == "success"
+    Path(jsonl_export.json()["files"]["jsonl"]).write_text("tampered\n", encoding="utf-8")
+    verify_tampered = client.post(
+        f"/api/v1/quant/backtest/{body['run_id']}/export/verify",
+        json={"export_manifest_path": jsonl_manifest},
+    )
+    assert verify_tampered.status_code == 200
+    assert verify_tampered.json()["status"] == "partial"
+    assert verify_tampered.json()["files_failed"] == 1
+    assert parquet_export.status_code == 200
+    assert parquet_export.json()["status"] in {"success", "dependency_missing"}
+    if parquet_export.json()["status"] == "success":
+        assert parquet_export.json()["files"]["metrics"].endswith(".parquet")
+    else:
+        assert parquet_export.json()["export_written"] is False
+    assert bad_export.status_code == 400
+
+
+def test_export_cleanup_preview_and_apply_endpoint(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "research_mart.db"
+    _seed_prices(db_path)
+    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
+    monkeypatch.setattr(quant_lab_pipeline, "ARTIFACT_ROOT", tmp_path / "artifacts")
+    client = TestClient(app)
+
+    backtest = client.post(
+        "/api/v1/quant/backtest",
+        json={"tickers": ["SPY", "QQQ", "TLT"], "benchmark": "SPY", "lookback": 21, "top_n": 2},
+    )
+    assert backtest.status_code == 200
+    run_id = backtest.json()["run_id"]
+    for export_format in ["jsonl", "csv", "jsonl"]:
+        response = client.post(f"/api/v1/quant/backtest/{run_id}/export", json={"format": export_format})
+        assert response.status_code == 200
+
+    preview = client.get(f"/api/v1/quant/backtest/{run_id}/exports/cleanup-preview?keep_last_exports=1")
+
+    assert preview.status_code == 200
+    preview_body = preview.json()
+    assert preview_body["cleanup_applied"] is False
+    assert preview_body["export_count"] == 3
+    assert preview_body["prune_export_count"] == 2
+    storage = client.get("/api/v1/quant/exports/storage?limit=5&stale_after_days=0")
+    assert storage.status_code == 200
+    storage_body = storage.json()
+    assert storage_body["status"] == "success"
+    assert storage_body["schema_version"] == "quant_lab_export_storage_report_v1"
+    assert storage_body["runs_with_exports"] >= 1
+    assert storage_body["export_directory_count"] == 3
+    assert storage_body["total_bytes"] > 0
+    cross_preview = client.get("/api/v1/quant/exports/cleanup-preview?keep_last_exports=1&stale_after_days=0&limit=10")
+    assert cross_preview.status_code == 200
+    cross_preview_body = cross_preview.json()
+    assert cross_preview_body["schema_version"] == "quant_lab_cross_run_export_cleanup_v1"
+    assert cross_preview_body["cleanup_applied"] is False
+    assert cross_preview_body["candidate_count"] == 2
+    bad_cross_cleanup = client.post(
+        "/api/v1/quant/exports/cleanup",
+        json={
+            "preview_id": "stale-preview",
+            "candidate_ids": cross_preview_body["candidate_ids"],
+            "keep_last_exports": 1,
+            "stale_after_days": 0,
+            "limit": 10,
+        },
+    )
+    assert bad_cross_cleanup.status_code == 400
+    exports_before = client.get(f"/api/v1/quant/backtest/{run_id}/exports")
+    assert exports_before.status_code == 200
+    assert exports_before.json()["count"] == 3
+
+    cleanup = client.post(
+        "/api/v1/quant/exports/cleanup",
+        json={
+            "preview_id": cross_preview_body["preview_id"],
+            "candidate_ids": cross_preview_body["candidate_ids"],
+            "keep_last_exports": 1,
+            "stale_after_days": 0,
+            "limit": 10,
+        },
+    )
+
+    assert cleanup.status_code == 200
+    cleanup_body = cleanup.json()
+    assert cleanup_body["cleanup_applied"] is True
+    assert cleanup_body["pruned_export_count"] == 2
+    exports_after = client.get(f"/api/v1/quant/backtest/{run_id}/exports")
+    assert exports_after.status_code == 200
+    assert exports_after.json()["count"] == 1
+
+
+def test_strategy_dry_run_validates_no_lookahead_policy() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/quant/strategy/dry-run",
+        json={
+            "strategy_id": "bad_execution_v1",
+            "features": {"momentum_63d": {"id": "momentum_63d"}},
+            "execution": {"trade_at": "same_bar_close"},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
+    assert response.json()["valid"] is False
+
+
+def test_strategy_migration_endpoint_normalizes_legacy_payload() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/quant/strategy/migrate",
+        json={
+            "strategy_id": "legacy_momentum",
+            "schema_version": "quant_strategy_v0",
+            "execution": {"trade_at": "next_bar_close"},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["strategy"]["schema_version"] == "quant_strategy_v1"
+    assert body["migrations"][0]["from_schema_version"] == "quant_strategy_v0"

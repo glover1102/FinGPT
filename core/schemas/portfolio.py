@@ -79,3 +79,64 @@ class PortfolioRiskResponse(BaseModel):
     stress_table: list[PortfolioStressRow] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     execution_meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class PortfolioOptimizeV2Request(BaseModel):
+    tickers: list[str] = Field(default_factory=list)
+    method: str = "equal_weight"
+    benchmark: str = "SPY"
+    lookback_days: int = Field(default=252, ge=2, le=5000)
+    start_date: str | None = None
+    end_date: str | None = None
+    max_weight: float = Field(default=1.0, gt=0, le=1.0)
+    covariance_method: str = "sample"
+    shrinkage_alpha: float = Field(default=0.1, ge=0.0, le=1.0)
+    returns_by_asset: dict[str, list[float]] | None = None
+
+    @field_validator("tickers", mode="before")
+    @classmethod
+    def _clean_tickers(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+        raw = value.replace(",", " ").split() if isinstance(value, str) else list(value)
+        seen: set[str] = set()
+        tickers: list[str] = []
+        for item in raw:
+            ticker = str(item or "").strip().upper()
+            if ticker and ticker not in seen:
+                tickers.append(ticker)
+                seen.add(ticker)
+        return tickers
+
+    @field_validator("method", mode="before")
+    @classmethod
+    def _clean_method(cls, value: Any) -> str:
+        return str(value or "equal_weight").strip().lower() or "equal_weight"
+
+    @field_validator("benchmark", mode="before")
+    @classmethod
+    def _clean_benchmark(cls, value: Any) -> str:
+        return str(value or "SPY").strip().upper() or "SPY"
+
+    @field_validator("covariance_method", mode="before")
+    @classmethod
+    def _clean_covariance_method(cls, value: Any) -> str:
+        return str(value or "sample").strip().lower() or "sample"
+
+
+class PortfolioOptimizeV2Response(BaseModel):
+    status: Literal["success", "partial", "failed"] = "failed"
+    method: str = "equal_weight"
+    weights: dict[str, float] = Field(default_factory=dict)
+    sum_weights: float = 0.0
+    missing_assets: list[str] = Field(default_factory=list)
+    capped_assets: list[str] = Field(default_factory=list)
+    risk_contributions: dict[str, float] = Field(default_factory=dict)
+    expected_annual_return: float = 0.0
+    annualized_volatility: float = 0.0
+    sharpe: float = 0.0
+    correlation_matrix: dict[str, dict[str, float]] = Field(default_factory=dict)
+    data_range: dict[str, str] = Field(default_factory=dict)
+    return_counts: dict[str, int] = Field(default_factory=dict)
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)

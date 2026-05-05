@@ -43,7 +43,20 @@ def run_backtest(price_rows: list[dict[str, Any]], config: BacktestConfig | None
         daily_return = prices[idx] / prices[idx - 1] - 1.0 if prices[idx - 1] else 0.0
         turnover = abs(position - prev_position)
         if turnover > 0:
-            trades.append({"date": dates[idx], "from": prev_position, "to": position, "turnover": turnover})
+            trades.append(
+                _trade_event(
+                    signal_date=dates[idx - 1],
+                    execution_date=dates[idx],
+                    ticker="PORTFOLIO",
+                    previous_weight=prev_position,
+                    target_weight=position,
+                    price=prices[idx],
+                    cost_rate=cost,
+                    transaction_cost_bps=config.transaction_cost_bps,
+                    slippage_bps=config.slippage_bps,
+                    reason=f"{config.strategy}_signal_change",
+                )
+            )
         equity.append(equity[-1] * (1.0 + position * daily_return - turnover * cost))
         prev_position = position
 
@@ -156,11 +169,13 @@ def run_momentum_ranking_backtest(
     weights = {asset: 0.0 for asset in prices}
     trades: list[dict[str, Any]] = []
     selected_history: list[dict[str, Any]] = []
+    rebalance_snapshots: list[dict[str, Any]] = []
     exposure_history: list[float] = []
 
     for idx in range(1, len(common_dates)):
         date = common_dates[idx]
         prev_date = common_dates[idx - 1]
+        rebalance_turnover = 0.0
         if idx > lookback and (idx - lookback - 1) % rebalance_every == 0:
             scores: list[tuple[str, float]] = []
             for asset in prices:
@@ -168,13 +183,47 @@ def run_momentum_ranking_backtest(
                 score = momentum_return(history, lookback=lookback)
                 if score is not None:
                     scores.append((asset, score))
-            selected = [asset for asset, _ in sorted(scores, key=lambda item: item[1], reverse=True)[:top_n]]
+            ranked = sorted(scores, key=lambda item: item[1], reverse=True)
+            selected = [asset for asset, _ in ranked[:top_n]]
+            score_map = {asset: score for asset, score in ranked}
             next_weights = {asset: (1.0 / len(selected) if asset in selected and selected else 0.0) for asset in prices}
             turnover = sum(abs(next_weights[asset] - weights.get(asset, 0.0)) for asset in prices)
             if turnover:
-                trades.append({"date": date, "turnover": round(turnover, 8), "selected": selected})
+                for asset in prices:
+                    previous_weight = weights.get(asset, 0.0)
+                    target_weight = next_weights[asset]
+                    if abs(target_weight - previous_weight) <= 1e-12:
+                        continue
+                    trades.append(
+                        _trade_event(
+                            signal_date=prev_date,
+                            execution_date=date,
+                            ticker=asset,
+                            previous_weight=previous_weight,
+                            target_weight=target_weight,
+                            price=prices[asset].get(date),
+                            cost_rate=cost,
+                            transaction_cost_bps=config.transaction_cost_bps,
+                            slippage_bps=config.slippage_bps,
+                            reason="momentum_ranking_rebalance",
+                            selected=asset in selected,
+                            score=score_map.get(asset),
+                        )
+                    )
+                rebalance_turnover = turnover
             weights = next_weights
             selected_history.append({"date": date, "selected": selected})
+            rebalance_snapshots.append(
+                {
+                    "signal_date": prev_date,
+                    "execution_date": date,
+                    "selected": selected,
+                    "rejected": [asset for asset, _ in ranked[top_n:]],
+                    "scores": {asset: round(score, 8) for asset, score in ranked},
+                    "target_weights": {asset: round(weight, 8) for asset, weight in weights.items()},
+                    "turnover": round(turnover, 8),
+                }
+            )
         exposure_history.append(sum(abs(weight) for weight in weights.values()))
         daily_return = 0.0
         for asset, weight in weights.items():
@@ -183,7 +232,7 @@ def run_momentum_ranking_backtest(
             if not prev_price or current_price is None:
                 continue
             daily_return += weight * (current_price / prev_price - 1.0)
-        turnover_cost = trades[-1]["turnover"] * cost if trades and trades[-1]["date"] == date else 0.0
+        turnover_cost = rebalance_turnover * cost
         equity.append(equity[-1] * (1.0 + daily_return - turnover_cost))
 
     metrics = performance_metrics(equity)
@@ -209,6 +258,7 @@ def run_momentum_ranking_backtest(
         "equity_curve": [{"date": date, "equity": round(value, 8)} for date, value in zip(common_dates, equity)],
         "trades": trades,
         "selected_history": selected_history,
+        "rebalance_snapshots": rebalance_snapshots,
         "metrics": metrics,
     }
 
@@ -274,7 +324,26 @@ def run_multi_asset_backtest(
         next_weights = _portfolio_weights_from_signals({asset: signals[asset][idx - 1] for asset in prices})
         turnover = sum(abs(next_weights[asset] - weights.get(asset, 0.0)) for asset in prices)
         if turnover > 0:
-            trades.append({"date": date, "turnover": round(turnover, 8), "weights": {k: round(v, 8) for k, v in next_weights.items()}})
+            for asset in prices:
+                previous_weight = weights.get(asset, 0.0)
+                target_weight = next_weights[asset]
+                if abs(target_weight - previous_weight) <= 1e-12:
+                    continue
+                trades.append(
+                    _trade_event(
+                        signal_date=prev_date,
+                        execution_date=date,
+                        ticker=asset,
+                        previous_weight=previous_weight,
+                        target_weight=target_weight,
+                        price=prices[asset].get(date),
+                        cost_rate=cost,
+                        transaction_cost_bps=config.transaction_cost_bps,
+                        slippage_bps=config.slippage_bps,
+                        reason=f"{config.strategy}_portfolio_signal",
+                        selected=target_weight > 0,
+                    )
+                )
         weights = next_weights
         weights_history.append({"date": date, "weights": {k: round(v, 8) for k, v in weights.items()}})
         exposure_history.append(sum(abs(weight) for weight in weights.values()))
@@ -324,6 +393,50 @@ def _portfolio_weights_from_signals(signals: dict[str, float]) -> dict[str, floa
             value = 0.0
         weights[asset] = max(value, 0.0) / n_assets
     return weights
+
+
+def _trade_event(
+    *,
+    signal_date: str,
+    execution_date: str,
+    ticker: str,
+    previous_weight: float,
+    target_weight: float,
+    price: float | None,
+    cost_rate: float,
+    transaction_cost_bps: float,
+    slippage_bps: float,
+    reason: str,
+    selected: bool | None = None,
+    score: float | None = None,
+) -> dict[str, Any]:
+    delta = float(target_weight) - float(previous_weight)
+    turnover = abs(delta)
+    action = "increase" if delta > 0 else "decrease"
+    if previous_weight <= 0 and target_weight > 0:
+        action = "enter"
+    elif previous_weight > 0 and target_weight <= 0:
+        action = "exit"
+    return {
+        "date": execution_date,
+        "signal_date": signal_date,
+        "execution_date": execution_date,
+        "ticker": ticker,
+        "action": action,
+        "previous_weight": round(float(previous_weight), 8),
+        "target_weight": round(float(target_weight), 8),
+        "weight": round(float(target_weight), 8),
+        "delta_weight": round(delta, 8),
+        "turnover": round(turnover, 8),
+        "price": round(float(price), 8) if price is not None else None,
+        "cost": round(turnover * cost_rate, 10),
+        "transaction_cost_bps": float(transaction_cost_bps),
+        "slippage_bps": float(slippage_bps),
+        "reason": reason,
+        "selected": selected,
+        "score": round(float(score), 8) if score is not None else None,
+        "diagnostics": ["signal_uses_prior_close", "execution_next_bar_close"],
+    }
 
 
 def _stdev(values: list[float]) -> float:

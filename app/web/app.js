@@ -29,6 +29,25 @@ const API = {
   dataHealth: "/api/v1/data/health",
   dataPrices: (ticker, limit = 252) => `/api/v1/data/prices/${encodeURIComponent(ticker)}?limit=${encodeURIComponent(limit)}`,
   backtestRun: "/api/v1/backtest/run",
+  quantFeatures: "/api/v1/quant/features/preview",
+  quantSignals: "/api/v1/quant/signals/generate",
+  quantBacktest: "/api/v1/quant/backtest",
+  quantBacktests: "/api/v1/quant/backtests",
+  quantBacktestBundle: (runId) => `/api/v1/quant/backtest/${encodeURIComponent(runId)}/bundle`,
+  quantBacktestReplay: (runId) => `/api/v1/quant/backtest/${encodeURIComponent(runId)}/replay`,
+  quantBacktestReplayReports: (runId) => `/api/v1/quant/backtest/${encodeURIComponent(runId)}/replay-reports`,
+  quantBacktestExport: (runId) => `/api/v1/quant/backtest/${encodeURIComponent(runId)}/export`,
+  quantBacktestExports: (runId) => `/api/v1/quant/backtest/${encodeURIComponent(runId)}/exports`,
+  quantBacktestExportCleanupPreview: (runId) => `/api/v1/quant/backtest/${encodeURIComponent(runId)}/exports/cleanup-preview`,
+  quantBacktestExportCleanup: (runId) => `/api/v1/quant/backtest/${encodeURIComponent(runId)}/exports/cleanup`,
+  quantBacktestExportVerify: (runId) => `/api/v1/quant/backtest/${encodeURIComponent(runId)}/export/verify`,
+  quantExportStorage: "/api/v1/quant/exports/storage",
+  quantExportCleanupPreview: "/api/v1/quant/exports/cleanup-preview",
+  quantExportCleanup: "/api/v1/quant/exports/cleanup",
+  quantStrategies: "/api/v1/quant/strategy/list",
+  quantStrategy: (strategyId) => `/api/v1/quant/strategy/${encodeURIComponent(strategyId)}`,
+  quantStrategyDryRun: "/api/v1/quant/strategy/dry-run",
+  quantStrategySave: "/api/v1/quant/strategy/save",
   portfolioOptimize: "/api/v1/portfolio/optimize",
 };
 
@@ -178,12 +197,34 @@ const els = {
   backtestLongWindow: document.getElementById("backtestLongWindow"),
   backtestTopN: document.getElementById("backtestTopN"),
   backtestRebalanceEvery: document.getElementById("backtestRebalanceEvery"),
+  backtestFreshnessProfile: document.getElementById("backtestFreshnessProfile"),
+  backtestRequireFresh: document.getElementById("backtestRequireFresh"),
+  backtestUseResearchScore: document.getElementById("backtestUseResearchScore"),
   backtestCostBps: document.getElementById("backtestCostBps"),
   backtestSlippageBps: document.getElementById("backtestSlippageBps"),
   backtestRun: document.getElementById("backtestRun"),
   backtestSurface: document.getElementById("backtestSurface"),
+  quantFeatureRun: document.getElementById("quantFeatureRun"),
+  quantFeatureSurface: document.getElementById("quantFeatureSurface"),
+  quantSignalRun: document.getElementById("quantSignalRun"),
+  quantSignalSurface: document.getElementById("quantSignalSurface"),
+  quantStrategyRefresh: document.getElementById("quantStrategyRefresh"),
+  quantStrategyNewDraft: document.getElementById("quantStrategyNewDraft"),
+  quantStrategyDryRun: document.getElementById("quantStrategyDryRun"),
+  quantStrategySave: document.getElementById("quantStrategySave"),
+  quantStrategyDelete: document.getElementById("quantStrategyDelete"),
+  strategyDefinitionJson: document.getElementById("strategyDefinitionJson"),
+  quantStrategySurface: document.getElementById("quantStrategySurface"),
+  quantStrategyResultSurface: document.getElementById("quantStrategyResultSurface"),
+  quantRunHistoryRefresh: document.getElementById("quantRunHistoryRefresh"),
+  quantExportStorageReport: document.getElementById("quantExportStorageReport"),
+  quantCrossRunCleanupPreview: document.getElementById("quantCrossRunCleanupPreview"),
+  quantRunHistorySurface: document.getElementById("quantRunHistorySurface"),
   portfolioTickers: document.getElementById("portfolioTickers"),
   portfolioMethod: document.getElementById("portfolioMethod"),
+  portfolioBenchmark: document.getElementById("portfolioBenchmark"),
+  portfolioCovarianceMethod: document.getElementById("portfolioCovarianceMethod"),
+  portfolioShrinkageAlpha: document.getElementById("portfolioShrinkageAlpha"),
   portfolioStartDate: document.getElementById("portfolioStartDate"),
   portfolioEndDate: document.getElementById("portfolioEndDate"),
   portfolioLookbackDays: document.getElementById("portfolioLookbackDays"),
@@ -223,7 +264,15 @@ const state = {
   dashboardNewsCategory: "all",
   activeDashboardTab: "market",
   lastBacktestRequest: null,
+  lastQuantBacktestRequest: null,
   lastBacktestResult: null,
+  lastFeatureResult: null,
+  lastSignalResult: null,
+  quantStrategiesLoaded: false,
+  quantStrategyItems: [],
+  activeStrategyId: "",
+  quantRunHistoryLoaded: false,
+  lastCrossRunExportCleanupPreview: null,
 };
 
 // ---------- Utilities ----------
@@ -849,6 +898,8 @@ function setDashboardTab(tab = "market") {
   if (active === "quant") {
     if (homeTitle) homeTitle.textContent = "Quant Lab";
     if (homeCopy) homeCopy.textContent = "저장 가격 기반 리스크, 전략 검증, 포트폴리오 배분을 같은 조건으로 점검합니다.";
+    loadQuantRunHistory(false);
+    loadQuantStrategies(false);
   } else {
     if (homeTitle) homeTitle.textContent = "시장 대시보드";
     if (homeCopy) homeCopy.textContent = "티커를 입력하면 종목 분석으로, 비워두고 질문만 입력하면 금리·신용·FX·원자재·테마 topic 분석으로 라우팅합니다.";
@@ -1535,7 +1586,7 @@ function decisionStatusClass(status) {
   const key = String(status || "").toLowerCase();
   if (["ok", "success"].includes(key)) return "ok";
   if (["failed", "fail", "error"].includes(key)) return "fail";
-  if (["partial", "warn", "stale", "empty", "credentials_missing"].includes(key)) return "warn";
+  if (["partial", "warn", "stale", "empty", "credentials_missing", "dependency_missing"].includes(key)) return "warn";
   return "muted";
 }
 
@@ -1665,11 +1716,13 @@ function renderRecentPriceRows(rows) {
         </tbody>
       </table>
     </div>
+    ${renderQuantExportControls(data.run_id)}
   `;
 }
 
 function renderMetricGrid(metrics, status = "ok") {
   const rows = [
+    ["Total", fmtMetricRatio(metrics.total_return)],
     ["CAGR", fmtMetricRatio(metrics.cagr)],
     ["Vol", fmtMetricRatio(metrics.volatility)],
     ["Sharpe", fmtDecimal(metrics.sharpe, 2)],
@@ -1677,9 +1730,23 @@ function renderMetricGrid(metrics, status = "ok") {
     ["MDD", fmtMetricRatio(metrics.max_drawdown)],
     ["Calmar", fmtDecimal(metrics.calmar, 2)],
     ["Turnover", fmtDecimal(metrics.turnover, 2)],
+    ["Exposure", fmtMetricRatio(metrics.exposure)],
     ["Trades", _fmtNumber(metrics.trade_count)],
   ];
   return `<div class="decision-metric-grid dense">${rows.map(([label, value]) => decisionMetric(label, value, status)).join("")}</div>`;
+}
+
+function backtestMetricsWithDerivedTotals(metrics, equityCurve) {
+  const out = { ...(metrics || {}) };
+  if (out.total_return === undefined || out.total_return === null) {
+    const points = Array.isArray(equityCurve) ? equityCurve : [];
+    const first = Number(points[0]?.equity);
+    const last = Number(points[points.length - 1]?.equity);
+    if (Number.isFinite(first) && first !== 0 && Number.isFinite(last)) {
+      out.total_return = last / first - 1;
+    }
+  }
+  return out;
 }
 
 function backtestRequestFromControls() {
@@ -1694,6 +1761,8 @@ function backtestRequestFromControls() {
     long_window: numberInputValue(els.backtestLongWindow, 50, { min: 2, max: 756 }),
     top_n: numberInputValue(els.backtestTopN, 1, { min: 1, max: 50 }),
     rebalance_every: numberInputValue(els.backtestRebalanceEvery, 21, { min: 1, max: 252 }),
+    require_fresh_prices: !!els.backtestRequireFresh?.checked,
+    use_research_score: !!els.backtestUseResearchScore?.checked,
     transaction_cost_bps: numberInputValue(els.backtestCostBps, 5, { min: 0, max: 1000 }),
     slippage_bps: numberInputValue(els.backtestSlippageBps, 2, { min: 0, max: 1000 }),
   };
@@ -1705,6 +1774,7 @@ function syncPortfolioFromBacktest() {
   if (els.portfolioStartDate) els.portfolioStartDate.value = request.start_date || "";
   if (els.portfolioEndDate) els.portfolioEndDate.value = request.end_date || "";
   if (els.portfolioLookbackDays) els.portfolioLookbackDays.value = String(request.lookback_days || 756);
+  if (els.portfolioBenchmark) els.portfolioBenchmark.value = request.benchmark || (request.tickers || [])[0] || "SPY";
 }
 
 async function loadDataHealth(force = false) {
@@ -1821,17 +1891,1168 @@ async function loadAssetDetail() {
   }
 }
 
+function quantFeatureRequestFromControls() {
+  const request = backtestRequestFromControls();
+  const payload = {
+    tickers: request.tickers,
+    benchmark: request.tickers[0] || "SPY",
+    start_date: request.start_date,
+    end_date: request.end_date,
+    freshness_profile: els.backtestFreshnessProfile?.value || "research_default",
+    features: [
+      { id: "momentum_63d" },
+      { id: "realized_vol_21d" },
+      { id: "drawdown_current" },
+      { id: "ma_ratio_20_50" },
+      { id: "relative_strength_spy_63d" },
+    ],
+  };
+  if (els.backtestRequireFresh?.checked) payload.require_fresh_prices = true;
+  return payload;
+}
+
+function quantSignalTemplateFromStrategy(strategy) {
+  const clean = String(strategy || "").toLowerCase();
+  if (clean === "momentum_ranking") return "momentum_ranking";
+  if (clean === "moving_average") return "moving_average_trend";
+  if (clean === "volatility_targeting") return "volatility_targeting";
+  if (clean === "buy_and_hold") return "buy_and_hold";
+  return "momentum_ranking";
+}
+
+function quantBacktestRequestFromControls() {
+  const request = backtestRequestFromControls();
+  const payload = {
+    tickers: request.tickers,
+    benchmark: request.tickers[0] || "SPY",
+    template: quantSignalTemplateFromStrategy(request.strategy),
+    start_date: request.start_date,
+    end_date: request.end_date,
+    freshness_profile: els.backtestFreshnessProfile?.value || "research_default",
+    rebalance_every: request.rebalance_every,
+    lookback: request.short_window,
+    top_n: request.top_n,
+    portfolio_method: els.portfolioMethod?.value || "equal_weight",
+    transaction_cost_bps: request.transaction_cost_bps,
+    slippage_bps: request.slippage_bps,
+    use_research_score: request.use_research_score,
+  };
+  if (els.backtestRequireFresh?.checked) payload.require_fresh_prices = true;
+  return payload;
+}
+
+function formatQuantValue(value) {
+  if (value === null || value === undefined || value === "") return "-";
+  const num = Number(value);
+  if (!Number.isFinite(num)) return String(value);
+  if (Math.abs(num) <= 1.5) return fmtMetricRatio(num);
+  return fmtDecimal(num, 2);
+}
+
+function renderDiagnosticsChips(values) {
+  const items = Array.isArray(values) ? values : [];
+  if (!items.length) return '<span>no diagnostics</span>';
+  return items.slice(0, 6).map((item) => `<span>${escapeHtml(String(item))}</span>`).join("");
+}
+
+function renderResearchProvenancePanel(provenance) {
+  const entries = Object.entries(provenance || {});
+  if (!entries.length) return "";
+  return `
+    <div class="decision-section-title">Research confirmation</div>
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead><tr><th>Ticker</th><th>Status</th><th>Score</th><th>Run</th><th>Evidence</th><th>Expiry</th></tr></thead>
+        <tbody>
+          ${entries.map(([ticker, item]) => `
+            <tr>
+              <td>${escapeHtml(ticker)}</td>
+              <td><span class="table-status ${escapeHtml(decisionStatusClass(item.status))}">${escapeHtml(item.status || "unknown")}</span></td>
+              <td>${escapeHtml(formatQuantValue(item.score))}</td>
+              <td>${escapeHtml(item.run_id || "-")}</td>
+              <td>${escapeHtml(_fmtNumber((item.evidence_ids || []).length))}</td>
+              <td>${escapeHtml(item.expires_at || "-")}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderFreshnessAuditPanel(diagnostics) {
+  const policy = diagnostics?.freshness_policy || {};
+  const audits = Object.entries(diagnostics?.asset_freshness || {});
+  if (!Object.keys(policy).length && !audits.length) return "";
+  return `
+    <div class="decision-section-title">Freshness policy</div>
+    <div class="decision-chip-row">
+      <span>${escapeHtml(policy.policy_id || "daily_price_policy")}</span>
+      <span>expected ${escapeHtml(diagnostics.expected_latest_date || policy.expected_latest_date || "unknown")}</span>
+      <span>max lag ${escapeHtml(String(policy.max_market_calendar_lag_days ?? "-"))}</span>
+      <span>strict ${policy.require_fresh_prices ? "on" : "off"}</span>
+    </div>
+    ${audits.length ? `
+      <div class="decision-table-wrap">
+        <table class="decision-table">
+          <thead><tr><th>Ticker</th><th>Status</th><th>Latest</th><th>Lag</th><th>Reason</th></tr></thead>
+          <tbody>
+            ${audits.map(([ticker, audit]) => `
+              <tr>
+                <td>${escapeHtml(ticker)}</td>
+                <td><span class="table-status ${escapeHtml(decisionStatusClass(audit.freshness_status))}">${escapeHtml(audit.freshness_status || "unknown")}</span></td>
+                <td>${escapeHtml(audit.latest_price_date || "unknown")}</td>
+                <td>${escapeHtml(String(audit.market_calendar_lag_days ?? "-"))}</td>
+                <td>${escapeHtml(audit.missing_reason || "")}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    ` : ""}
+  `;
+}
+
+function renderRebalanceSnapshots(weights) {
+  const snapshots = (Array.isArray(weights) ? weights : [])
+    .filter((row) => row && (row.selected || row.target_weights || row.weights))
+    .slice(-5);
+  if (!snapshots.length) return "";
+  return `
+    <div class="decision-section-title">Rebalance attribution</div>
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead><tr><th>Signal</th><th>Execution</th><th>Selected</th><th>Rejected</th><th>Turnover</th></tr></thead>
+        <tbody>
+          ${snapshots.map((row) => {
+            const selected = Array.isArray(row.selected)
+              ? row.selected.join(",")
+              : Object.entries(row.weights || row.target_weights || {}).filter(([, weight]) => Number(weight) > 0).map(([ticker]) => ticker).join(",");
+            const rejected = Array.isArray(row.rejected) ? row.rejected.join(",") : "";
+            return `
+              <tr>
+                <td>${escapeHtml(row.signal_date || row.date || "")}</td>
+                <td>${escapeHtml(row.execution_date || row.date || "")}</td>
+                <td>${escapeHtml(selected || "-")}</td>
+                <td>${escapeHtml(rejected || "-")}</td>
+                <td>${escapeHtml(formatQuantValue(row.turnover ?? ""))}</td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderRiskContributionBars(contributions) {
+  const entries = Object.entries(contributions || {}).sort((a, b) => Number(b[1]) - Number(a[1]));
+  if (!entries.length) return "";
+  return `
+    <div class="portfolio-weight-list">
+      ${entries.map(([ticker, contribution]) => `
+        <div class="portfolio-weight-row">
+          <span>${escapeHtml(ticker)}</span>
+          <div><i style="width:${Math.max(2, Math.min(100, Number(contribution) * 100))}%"></i></div>
+          <strong>${escapeHtml(fmtPct(Number(contribution) * 100))}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderCorrelationPreview(matrix) {
+  const assets = Object.keys(matrix || {}).slice(0, 5);
+  if (!assets.length) return "";
+  return `
+    <div class="decision-section-title">Correlation matrix</div>
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead><tr><th></th>${assets.map((asset) => `<th>${escapeHtml(asset)}</th>`).join("")}</tr></thead>
+        <tbody>
+          ${assets.map((rowAsset) => `
+            <tr>
+              <td>${escapeHtml(rowAsset)}</td>
+              ${assets.map((colAsset) => `<td>${escapeHtml(fmtDecimal(matrix[rowAsset]?.[colAsset], 2))}</td>`).join("")}
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function compactArtifactPath(path) {
+  const raw = String(path || "");
+  if (!raw) return "-";
+  const parts = raw.replace(/\\/g, "/").split("/");
+  return parts.slice(-4).join("/");
+}
+
+function renderQuantExportControls(runId) {
+  if (!runId) return "";
+  const safeRunId = escapeHtml(runId);
+  return `
+    <div class="decision-chip-row">
+      <button type="button" class="linkish decision-inline-action" data-action="export-backtest" data-format="jsonl" data-run-id="${safeRunId}">export JSONL</button>
+      <button type="button" class="linkish decision-inline-action" data-action="export-backtest" data-format="csv" data-run-id="${safeRunId}">export CSV</button>
+      <button type="button" class="linkish decision-inline-action" data-action="export-backtest" data-format="parquet" data-run-id="${safeRunId}">export Parquet</button>
+      <label class="decision-inline-select">
+        <span>retention</span>
+        <select data-action="export-retention" aria-label="Quant export retention">
+          <option value="0">No cleanup</option>
+          <option value="3">Keep last 3</option>
+          <option value="5">Keep last 5</option>
+          <option value="10">Keep last 10</option>
+        </select>
+      </label>
+      <button type="button" class="linkish decision-inline-action" data-action="export-history" data-run-id="${safeRunId}">export history</button>
+      <button type="button" class="linkish decision-inline-action" data-action="export-cleanup-preview" data-run-id="${safeRunId}">cleanup preview</button>
+      <button type="button" class="linkish decision-inline-action" data-action="verify-export" data-run-id="${safeRunId}">verify latest export</button>
+    </div>
+  `;
+}
+
+function renderDecisionLineChart(rows, key, label, status = "ok") {
+  const values = (Array.isArray(rows) ? rows : [])
+    .map((row) => ({ date: row.date || "", value: Number(row[key]) }))
+    .filter((row) => Number.isFinite(row.value));
+  if (values.length < 2) return "";
+  const width = 320;
+  const height = 88;
+  const pad = 8;
+  const nums = values.map((row) => row.value);
+  const min = Math.min(...nums);
+  const max = Math.max(...nums);
+  const span = max - min || 1;
+  const points = values.map((row, idx) => {
+    const x = pad + (idx / Math.max(1, values.length - 1)) * (width - pad * 2);
+    const y = height - pad - ((row.value - min) / span) * (height - pad * 2);
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(" ");
+  const latest = values[values.length - 1];
+  const latestValue = key === "equity" ? fmtDecimal(latest.value, 3) : formatQuantValue(latest.value);
+  return `
+    <div class="decision-chart">
+      <div class="decision-chart-head">
+        <span>${escapeHtml(label)}</span>
+        <strong class="${escapeHtml(decisionStatusClass(status))}">${escapeHtml(latestValue)}</strong>
+      </div>
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(label)} curve">
+        <polyline points="${points}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"></polyline>
+      </svg>
+      <div class="decision-chart-foot">
+        <span>${escapeHtml(values[0].date)}</span>
+        <span>${escapeHtml(latest.date)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderQuantDiagnosticsPanel(data) {
+  const diagnostics = data.diagnostics || {};
+  const artifacts = data.artifacts || {};
+  const priceCounts = diagnostics.price_counts || {};
+  const chips = [
+    `lookahead ${diagnostics.lookahead_safe ? "safe" : "unsafe"}`,
+    `shift ${diagnostics.signal_shift_bars ?? 1}`,
+    diagnostics.execution_assumption || "next_bar_close",
+    diagnostics.data_source || "data_mart",
+    ...Object.entries(priceCounts).map(([ticker, count]) => `${ticker} ${_fmtNumber(count)} rows`),
+  ];
+  return `
+    <div class="decision-section-title">Diagnostics</div>
+    <div class="decision-chip-row">${chips.map((chip) => `<span>${escapeHtml(chip)}</span>`).join("")}</div>
+    ${(diagnostics.missing_assets || []).length ? `<div class="decision-warning">Missing assets: ${escapeHtml(diagnostics.missing_assets.join(", "))}</div>` : ""}
+    ${(diagnostics.stale_assets || []).length ? `<div class="decision-warning">Stale assets: ${escapeHtml(diagnostics.stale_assets.join(", "))}</div>` : ""}
+    ${(diagnostics.warnings || []).length ? `<div class="decision-warning">${escapeHtml(diagnostics.warnings.join(" "))}</div>` : ""}
+    ${renderFreshnessAuditPanel(diagnostics)}
+    <div class="decision-section-title">Artifacts</div>
+    <div class="decision-list compact">
+      ${["manifest", "config", "metrics", "diagnostics", "equity_curve", "drawdown_curve", "trades", "signals", "weights", "replay_report"].map((name) => `
+        <div class="decision-list-row">
+          <span>${escapeHtml(name)}</span>
+          <strong>${escapeHtml(compactArtifactPath(artifacts[name]))}</strong>
+        </div>
+      `).join("")}
+    </div>
+    ${renderQuantExportControls(data.run_id)}
+  `;
+}
+
+function renderQuantBacktestTables(data) {
+  const trades = Array.isArray(data.trades) ? data.trades.slice(-8) : [];
+  const signals = Array.isArray(data.signals) ? data.signals.slice(0, 8) : [];
+  const weights = Array.isArray(data.weights) ? data.weights : [];
+  return `
+    ${signals.length ? `
+      <div class="decision-section-title">Latest signals</div>
+      <div class="decision-table-wrap">
+        <table class="decision-table">
+          <thead><tr><th>Ticker</th><th>Date</th><th>Score</th><th>Signal</th><th>Exec date</th></tr></thead>
+          <tbody>
+            ${signals.map((row) => `
+              <tr>
+                <td>${escapeHtml(row.ticker || "")}</td>
+                <td>${escapeHtml(row.date || "")}</td>
+                <td>${escapeHtml(fmtDecimal(row.final_score, 3))}</td>
+                <td><span class="table-status ${Number(row.signal || 0) > 0 ? "ok" : "warn"}">${escapeHtml(fmtDecimal(row.signal, 2))}</span></td>
+                <td>${escapeHtml(row.execution_date || "")}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    ` : ""}
+    ${trades.length ? `
+      <div class="decision-section-title">Recent trades</div>
+      <div class="decision-table-wrap">
+        <table class="decision-table">
+          <thead><tr><th>Date</th><th>Ticker</th><th>Action</th><th>Weight</th><th>Cost</th></tr></thead>
+          <tbody>
+            ${trades.map((row) => {
+              const assetText = row.ticker || row.asset || (Array.isArray(row.selected) ? row.selected.join(",") : "") || "portfolio";
+              const actionText = row.action || row.side || row.type || (row.turnover !== undefined ? "rebalance" : "");
+              const weightValue = row.weight ?? row.target_weight ?? row.quantity ?? row.turnover;
+              return `
+                <tr>
+                  <td>${escapeHtml(row.date || row.execution_date || "")}</td>
+                  <td>${escapeHtml(assetText)}</td>
+                  <td>${escapeHtml(actionText)}</td>
+                  <td>${escapeHtml(formatQuantValue(weightValue))}</td>
+                  <td>${escapeHtml(formatQuantValue(row.cost ?? row.transaction_cost ?? ""))}</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+    ` : ""}
+    ${renderRebalanceSnapshots(weights)}
+  `;
+}
+
+function renderQuantBacktestResult(data, request = {}) {
+  if (!els.backtestSurface) return;
+  const metrics = backtestMetricsWithDerivedTotals(data.metrics || {}, data.equity_curve);
+  const status = data.status || "unknown";
+  els.backtestSurface.innerHTML = `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
+      <span>${escapeHtml(data.run_id || "run pending")} · ${escapeHtml(data.date_range?.start || request.start_date || "-")} -> ${escapeHtml(data.date_range?.end || request.end_date || "-")}</span>
+    </div>
+    ${renderMetricGrid(metrics, status)}
+    <div class="decision-chart-grid">
+      ${renderDecisionLineChart(data.equity_curve, "equity", "Equity curve", status)}
+      ${renderDecisionLineChart(data.drawdown_curve, "drawdown", "Drawdown", Number(metrics.max_drawdown || 0) < -0.2 ? "warn" : status)}
+    </div>
+    <div class="decision-assumption">
+      template ${escapeHtml(data.template || request.template || "unknown")} · benchmark ${escapeHtml(data.benchmark || request.benchmark || "-")} · cost ${escapeHtml(String(request.transaction_cost_bps ?? data.config?.transaction_cost_bps ?? "-"))}bps · slippage ${escapeHtml(String(request.slippage_bps ?? data.config?.slippage_bps ?? "-"))}bps
+    </div>
+    ${renderQuantBacktestTables(data)}
+    ${renderQuantDiagnosticsPanel(data)}
+    <button type="button" class="linkish decision-inline-action" data-action="sync-backtest-portfolio">이 조건을 포트폴리오에 적용</button>
+    ${data.run_id ? `<button type="button" class="linkish decision-inline-action" data-action="replay-backtest" data-run-id="${escapeHtml(data.run_id)}">replay compare</button>` : ""}
+    ${data.run_id ? `<button type="button" class="linkish decision-inline-action" data-action="replay-reports" data-run-id="${escapeHtml(data.run_id)}">replay history</button>` : ""}
+    ${status === "success" ? "" : decisionEmpty(data.reason || "저장 가격이 부족해 일부 결과만 표시됩니다.")}
+  `;
+}
+
+function renderReplayReportHistoryTable(history) {
+  const items = Array.isArray(history?.items) ? history.items : [];
+  if (!items.length) return '<div class="decision-empty">No persisted replay reports yet.</div>';
+  const metricKeys = ["total_return", "sharpe", "max_drawdown"].filter((key) =>
+    items.some((item) => item.metric_deltas && item.metric_deltas[key] !== undefined)
+  );
+  return `
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead>
+          <tr><th>Generated</th><th>Status</th><th>Config</th><th>Tolerance</th>${metricKeys.map((key) => `<th>${escapeHtml(key)}</th>`).join("")}<th>Report</th></tr>
+        </thead>
+        <tbody>
+          ${items.map((item) => `
+            <tr>
+              <td>${escapeHtml(fmtDate(item.generated_at) || "-")}</td>
+              <td><span class="table-status ${escapeHtml(decisionStatusClass(item.status))}">${escapeHtml(item.status || "unknown")}</span></td>
+              <td>${item.config_hash_match ? "match" : "changed"}</td>
+              <td><span class="table-status ${item.tolerance_passed ? "ok" : "warn"}">${item.tolerance_passed ? "passed" : `fail ${escapeHtml(String(item.tolerance_failure_count || 0))}`}</span></td>
+              ${metricKeys.map((key) => `<td>${escapeHtml(formatQuantValue(item.metric_deltas?.[key] ?? 0))}</td>`).join("")}
+              <td>${escapeHtml(compactArtifactPath(item.report_path))}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderArtifactExportSummary(data) {
+  const files = data.files || {};
+  const counts = data.row_counts || {};
+  const dependency = data.dependency || {};
+  const integrityFiles = data.integrity?.files || {};
+  const retention = data.retention || {};
+  const dependencyMessage = data.status === "dependency_missing"
+    ? `<div class="decision-warning">${escapeHtml(dependency.message || "Optional export dependency is missing.")}</div>`
+    : "";
+  const retentionMessage = retention.retention_applied
+    ? `<div class="decision-warning">Retention kept last ${escapeHtml(String(retention.keep_last_exports || 0))} export set(s); pruned ${escapeHtml(String(retention.pruned_export_count || 0))} older set(s).</div>`
+    : "";
+  return `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(data.status || "success"))}">${escapeHtml(data.status || "success")}</span>
+      <span>${escapeHtml(data.run_id || "")} ${escapeHtml(String(data.format || "").toUpperCase())} export</span>
+    </div>
+    <div class="decision-chip-row">
+      <span>rows ${escapeHtml(_fmtNumber(counts.total || 0))}</span>
+      <span>root ${escapeHtml(compactArtifactPath(data.export_root))}</span>
+      <span>manifest ${escapeHtml(compactArtifactPath(files.manifest))}</span>
+      ${dependency.engine ? `<span>engine ${escapeHtml(dependency.engine)}</span>` : ""}
+    </div>
+    ${dependencyMessage}
+    ${retentionMessage}
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead><tr><th>Section</th><th>Rows</th><th>File</th><th>SHA-256</th><th>Bytes</th></tr></thead>
+        <tbody>
+          ${Object.keys(counts).filter((name) => name !== "total").map((name) => {
+            const filePath = files[name] || files.jsonl || "";
+            const integrity = integrityFiles[name] || (files[name] ? {} : integrityFiles.jsonl) || {};
+            return `
+              <tr>
+                <td>${escapeHtml(name)}</td>
+                <td>${escapeHtml(_fmtNumber(counts[name]))}</td>
+                <td>${escapeHtml(compactArtifactPath(filePath))}</td>
+                <td>${escapeHtml(String(integrity.sha256 || "").slice(0, 16) || "-")}</td>
+                <td>${escapeHtml(_fmtNumber(integrity.size_bytes || 0))}</td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+    ${renderQuantExportControls(data.run_id)}
+  `;
+}
+
+function renderArtifactExportHistory(data) {
+  const items = Array.isArray(data.items) ? data.items : [];
+  return `
+    <div class="decision-status-row">
+      <span class="decision-badge ok">${escapeHtml(data.status || "success")}</span>
+      <span>${escapeHtml(data.run_id || "")} · ${escapeHtml(_fmtNumber(data.count || 0))} export manifest(s)</span>
+    </div>
+    ${renderQuantExportControls(data.run_id || "")}
+    ${items.length ? `
+      <div class="decision-table-wrap">
+        <table class="decision-table">
+          <thead><tr><th>Generated</th><th>Format</th><th>Status</th><th>Rows</th><th>Bytes</th><th>Integrity</th><th>Manifest</th><th>Verify</th></tr></thead>
+          <tbody>
+            ${items.map((item) => `
+              <tr>
+                <td>${escapeHtml(fmtDate(item.generated_at) || "-")}</td>
+                <td>${escapeHtml(String(item.format || "unknown").toUpperCase())}</td>
+                <td><span class="table-status ${escapeHtml(decisionStatusClass(item.status || "unknown"))}">${escapeHtml(item.status || "unknown")}</span></td>
+                <td>${escapeHtml(_fmtNumber(item.total_rows || 0))}</td>
+                <td>${escapeHtml(_fmtNumber(item.total_bytes || 0))}</td>
+                <td>${item.integrity_available ? "sha256" : "missing"}</td>
+                <td>${escapeHtml(compactArtifactPath(item.manifest_path))}</td>
+                <td><button type="button" class="linkish" data-action="verify-export" data-run-id="${escapeHtml(data.run_id || "")}" data-manifest-path="${escapeHtml(item.manifest_path || "")}">verify</button></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    ` : decisionEmpty("No generated artifact exports have been saved for this run yet.")}
+  `;
+}
+
+function renderArtifactExportCleanupPlan(data) {
+  const kept = Array.isArray(data.kept_exports) ? data.kept_exports : [];
+  const prune = Array.isArray(data.prune_exports) ? data.prune_exports : [];
+  const applied = !!data.cleanup_applied;
+  const statusText = applied ? "export cleanup applied" : "export cleanup preview";
+  return `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(data.status || "success"))}">${escapeHtml(data.status || "success")}</span>
+      <span>${escapeHtml(data.run_id || "")} ${statusText}</span>
+    </div>
+    <div class="decision-chip-row">
+      <span>policy ${escapeHtml(data.policy || "keep_last_exports")}</span>
+      <span>keep last ${escapeHtml(_fmtNumber(data.keep_last_exports || 0))}</span>
+      <span>exports ${escapeHtml(_fmtNumber(data.export_count || 0))}</span>
+      <span>prune ${escapeHtml(_fmtNumber(data.prune_export_count || 0))}</span>
+      <span>bytes ${escapeHtml(_fmtNumber(applied ? data.total_bytes_pruned || 0 : data.total_bytes_to_prune || 0))}</span>
+    </div>
+    ${renderQuantExportControls(data.run_id || "")}
+    ${!applied && prune.length ? `
+      <div class="decision-chip-row">
+        <button type="button" class="linkish decision-inline-action" data-action="export-cleanup-apply" data-run-id="${escapeHtml(data.run_id || "")}" data-keep-last="${escapeHtml(String(data.keep_last_exports || 0))}">apply cleanup</button>
+      </div>
+    ` : ""}
+    ${prune.length ? `
+      <div class="decision-section-title">${applied ? "Pruned exports" : "Exports that would be pruned"}</div>
+      ${renderArtifactExportCleanupTable(prune)}
+    ` : decisionEmpty("No generated export directories are eligible for cleanup with this policy.")}
+    ${kept.length ? `
+      <div class="decision-section-title">Exports kept</div>
+      ${renderArtifactExportCleanupTable(kept)}
+    ` : ""}
+  `;
+}
+
+function renderArtifactExportCleanupTable(items) {
+  return `
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead><tr><th>Generated</th><th>Format</th><th>Status</th><th>Rows</th><th>Bytes</th><th>Directory</th></tr></thead>
+        <tbody>
+          ${items.map((item) => `
+            <tr>
+              <td>${escapeHtml(fmtDate(item.generated_at) || "-")}</td>
+              <td>${escapeHtml(String(item.format || "unknown").toUpperCase())}</td>
+              <td><span class="table-status ${escapeHtml(decisionStatusClass(item.status || "unknown"))}">${escapeHtml(item.status || "unknown")}</span></td>
+              <td>${escapeHtml(_fmtNumber(item.total_rows || 0))}</td>
+              <td>${escapeHtml(_fmtNumber(item.total_bytes || item.directory_size_bytes || 0))}</td>
+              <td>${escapeHtml(compactArtifactPath(item.directory || item.export_root || ""))}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderArtifactExportVerification(data) {
+  const files = data.files || {};
+  const failures = Array.isArray(data.failures) ? data.failures : [];
+  return `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(data.status || "unknown"))}">${escapeHtml(data.status || "unknown")}</span>
+      <span>${escapeHtml(data.run_id || "")} export integrity verification</span>
+    </div>
+    <div class="decision-chip-row">
+      <span>checked ${escapeHtml(_fmtNumber(data.files_checked || 0))}</span>
+      <span>passed ${escapeHtml(_fmtNumber(data.files_passed || 0))}</span>
+      <span>failed ${escapeHtml(_fmtNumber(data.files_failed || 0))}</span>
+      <span>format ${escapeHtml(String(data.format || "unknown").toUpperCase())}</span>
+      <span>manifest ${escapeHtml(compactArtifactPath(data.manifest_path))}</span>
+    </div>
+    ${failures.length ? `<div class="decision-warning">${escapeHtml(failures.map((item) => `${item.file}:${item.reason}`).join(", "))}</div>` : ""}
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead><tr><th>File</th><th>Status</th><th>Expected SHA</th><th>Actual SHA</th><th>Expected bytes</th><th>Actual bytes</th></tr></thead>
+        <tbody>
+          ${Object.entries(files).map(([name, item]) => `
+            <tr>
+              <td>${escapeHtml(name)}</td>
+              <td><span class="table-status ${item.status === "passed" ? "ok" : "fail"}">${escapeHtml(item.status || "unknown")}</span></td>
+              <td>${escapeHtml(String(item.expected_sha256 || "").slice(0, 16) || "-")}</td>
+              <td>${escapeHtml(String(item.actual_sha256 || "").slice(0, 16) || "-")}</td>
+              <td>${escapeHtml(_fmtNumber(item.expected_size_bytes || 0))}</td>
+              <td>${escapeHtml(_fmtNumber(item.actual_size_bytes || 0))}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+    ${renderQuantExportControls(data.run_id || "")}
+  `;
+}
+
+function renderQuantReplayComparison(data) {
+  if (!els.backtestSurface) return;
+  const deltas = data.metric_deltas || {};
+  const original = data.original_metrics || {};
+  const replay = data.replay_metrics || {};
+  const tolerancePolicy = data.tolerance_policy || {};
+  const metricTolerances = tolerancePolicy.metrics || {};
+  const toleranceFailures = Array.isArray(data.tolerance_failures) ? data.tolerance_failures : [];
+  const keys = ["total_return", "cagr", "annualized_volatility", "sharpe", "sortino", "max_drawdown", "turnover", "exposure"]
+    .filter((key) => original[key] !== undefined || replay[key] !== undefined || deltas[key] !== undefined);
+  const status = data.status || "unknown";
+  els.backtestSurface.innerHTML = `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
+      <span>${escapeHtml(data.run_id || "")} replayed as ${escapeHtml(data.replay_run_id || "")}</span>
+    </div>
+    <div class="decision-chip-row">
+      <span>config hash ${data.config_hash_match ? "matched" : "changed"}</span>
+      <span>original ${escapeHtml(String(data.original_config_hash || "-")).slice(0, 10)}</span>
+      <span>replay ${escapeHtml(String(data.replay_config_hash || "-")).slice(0, 10)}</span>
+      <span>lookahead ${data.diagnostics?.lookahead_safe ? "safe" : "check"}</span>
+      <span>tolerance ${data.tolerance_passed ? "passed" : "check"}</span>
+    </div>
+    <div class="decision-chip-row">
+      <button type="button" class="linkish decision-inline-action" data-action="replay-reports" data-run-id="${escapeHtml(data.run_id || "")}">replay report history</button>
+    </div>
+    ${renderQuantExportControls(data.run_id)}
+    <div class="decision-section-title">Replay metric comparison</div>
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead><tr><th>Metric</th><th>Original</th><th>Replay</th><th>Delta</th><th>Tolerance</th></tr></thead>
+        <tbody>
+          ${keys.map((key) => `
+            <tr>
+              <td>${escapeHtml(key)}</td>
+              <td>${escapeHtml(formatQuantValue(original[key]))}</td>
+              <td>${escapeHtml(formatQuantValue(replay[key]))}</td>
+              <td><span class="table-status ${Math.abs(Number(deltas[key] || 0)) <= Number(metricTolerances[key] ?? tolerancePolicy.default_abs ?? 0) ? "ok" : "warn"}">${escapeHtml(formatQuantValue(deltas[key] ?? 0))}</span></td>
+              <td>${escapeHtml(formatQuantValue(metricTolerances[key] ?? tolerancePolicy.default_abs ?? 0))}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+    ${toleranceFailures.length ? `<div class="decision-warning">Replay tolerance failures: ${escapeHtml(toleranceFailures.map((item) => `${item.metric}=${item.abs_delta}`).join(", "))}</div>` : ""}
+    <div class="decision-section-title">Lineage</div>
+    <div class="decision-list compact">
+      <div class="decision-list-row"><span>Original generated</span><strong>${escapeHtml(data.original_generated_at || "-")}</strong></div>
+      <div class="decision-list-row"><span>Replay generated</span><strong>${escapeHtml(data.replay_generated_at || "-")}</strong></div>
+      <div class="decision-list-row"><span>Original commit</span><strong>${escapeHtml(String(data.original_code_version?.git_commit || "-")).slice(0, 12)}</strong></div>
+      <div class="decision-list-row"><span>Current commit</span><strong>${escapeHtml(String(data.current_code_version?.git_commit || "-")).slice(0, 12)}</strong></div>
+      <div class="decision-list-row"><span>Replay report</span><strong>${escapeHtml(data.report_path || "-")}</strong></div>
+    </div>
+    <div class="decision-section-title">Replay report history</div>
+    ${renderReplayReportHistoryTable(data.report_history || {})}
+    ${(data.diagnostics?.warnings || []).length ? `<div class="decision-warning">${escapeHtml(data.diagnostics.warnings.join(" "))}</div>` : ""}
+  `;
+}
+
+async function runQuantBacktestReplay(runId) {
+  if (!runId || !els.backtestSurface) return;
+  els.backtestSurface.innerHTML = decisionEmpty(`${runId} replay comparison is running.`);
+  try {
+    const res = await fetch(API.quantBacktestReplay(runId), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ persist_report: true }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    renderQuantReplayComparison(data);
+  } catch (err) {
+    els.backtestSurface.innerHTML = decisionEmpty(`Replay comparison failed: ${err.message || err}`);
+  }
+}
+
+async function loadQuantReplayReports(runId) {
+  if (!runId || !els.backtestSurface) return;
+  els.backtestSurface.innerHTML = decisionEmpty(`${runId} replay report history is loading.`);
+  try {
+    const res = await fetch(`${API.quantBacktestReplayReports(runId)}?limit=20`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    els.backtestSurface.innerHTML = `
+      <div class="decision-status-row">
+        <span class="decision-badge ok">${escapeHtml(data.status || "success")}</span>
+        <span>${escapeHtml(data.run_id || runId)} · ${escapeHtml(_fmtNumber(data.count || 0))} replay reports</span>
+      </div>
+      <div class="decision-chip-row">
+        <button type="button" class="linkish decision-inline-action" data-action="replay-backtest" data-run-id="${escapeHtml(runId)}">run new replay</button>
+      </div>
+      ${renderQuantExportControls(runId)}
+      ${renderReplayReportHistoryTable(data)}
+    `;
+  } catch (err) {
+    els.backtestSurface.innerHTML = decisionEmpty(`Replay report history failed: ${err.message || err}`);
+  }
+}
+
+async function exportQuantBacktestArtifact(runId, format = "jsonl") {
+  if (!runId || !els.backtestSurface) return;
+  const cleanFormat = String(format || "jsonl").toLowerCase();
+  const keepLast = selectedQuantExportRetention();
+  els.backtestSurface.innerHTML = decisionEmpty(`${runId} ${cleanFormat.toUpperCase()} export is being prepared.`);
+  try {
+    const payload = { format: cleanFormat };
+    if (keepLast > 0) payload.keep_last_exports = keepLast;
+    const res = await fetch(API.quantBacktestExport(runId), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    els.backtestSurface.innerHTML = renderArtifactExportSummary(data);
+  } catch (err) {
+    els.backtestSurface.innerHTML = decisionEmpty(`Artifact export failed: ${err.message || err}`);
+  }
+}
+
+function selectedQuantExportRetention() {
+  const field = els.backtestSurface?.querySelector?.('[data-action="export-retention"]');
+  const value = Number(field?.value || 0);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+async function loadQuantExportHistory(runId) {
+  if (!runId || !els.backtestSurface) return;
+  els.backtestSurface.innerHTML = decisionEmpty(`${runId} export history is loading.`);
+  try {
+    const res = await fetch(`${API.quantBacktestExports(runId)}?limit=20`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    els.backtestSurface.innerHTML = renderArtifactExportHistory(data);
+  } catch (err) {
+    els.backtestSurface.innerHTML = decisionEmpty(`Export history failed: ${err.message || err}`);
+  }
+}
+
+async function previewQuantExportCleanup(runId) {
+  if (!runId || !els.backtestSurface) return;
+  const keepLast = selectedQuantExportRetention() || 5;
+  els.backtestSurface.innerHTML = decisionEmpty(`${runId} export cleanup preview is loading.`);
+  try {
+    const qs = new URLSearchParams({ keep_last_exports: String(keepLast) });
+    const res = await fetch(`${API.quantBacktestExportCleanupPreview(runId)}?${qs.toString()}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    els.backtestSurface.innerHTML = renderArtifactExportCleanupPlan(data);
+  } catch (err) {
+    els.backtestSurface.innerHTML = decisionEmpty(`Export cleanup preview failed: ${err.message || err}`);
+  }
+}
+
+async function applyQuantExportCleanup(runId, keepLast = 5) {
+  if (!runId || !els.backtestSurface) return;
+  const resolvedKeepLast = Number(keepLast || selectedQuantExportRetention() || 5);
+  els.backtestSurface.innerHTML = decisionEmpty(`${runId} export cleanup is applying.`);
+  try {
+    const res = await fetch(API.quantBacktestExportCleanup(runId), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keep_last_exports: resolvedKeepLast }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    els.backtestSurface.innerHTML = renderArtifactExportCleanupPlan(data);
+    loadQuantRunHistory(true);
+  } catch (err) {
+    els.backtestSurface.innerHTML = decisionEmpty(`Export cleanup failed: ${err.message || err}`);
+  }
+}
+
+async function verifyQuantExport(runId, manifestPath = "") {
+  if (!runId || !els.backtestSurface) return;
+  els.backtestSurface.innerHTML = decisionEmpty(`${runId} export integrity is being verified.`);
+  try {
+    const payload = manifestPath ? { export_manifest_path: manifestPath } : {};
+    const res = await fetch(API.quantBacktestExportVerify(runId), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    els.backtestSurface.innerHTML = renderArtifactExportVerification(data);
+  } catch (err) {
+    els.backtestSurface.innerHTML = decisionEmpty(`Export verification failed: ${err.message || err}`);
+  }
+}
+
+async function runQuantFeaturePreview() {
+  if (!els.quantFeatureSurface) return;
+  const request = quantFeatureRequestFromControls();
+  if (!request.tickers.length) {
+    els.quantFeatureSurface.innerHTML = decisionEmpty("Enter at least one ticker in the Quant Lab universe.");
+    return;
+  }
+  els.quantFeatureSurface.innerHTML = decisionEmpty(`${request.tickers.join(", ")} factors are loading.`);
+  try {
+    const res = await fetch(API.quantFeatures, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    state.lastFeatureResult = data;
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    const diagnostics = data.diagnostics || {};
+    const status = data.status || "unknown";
+    els.quantFeatureSurface.innerHTML = `
+      <div class="decision-status-row">
+        <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
+        <span>${escapeHtml(data.as_of || "unknown")} · ${escapeHtml(request.benchmark)} benchmark · data_mart</span>
+      </div>
+      <div class="decision-table-wrap">
+        <table class="decision-table">
+          <thead><tr><th>Ticker</th><th>As of</th><th>Freshness</th><th>Momentum</th><th>Vol</th><th>Drawdown</th><th>Trend</th><th>Rel strength</th></tr></thead>
+          <tbody>
+            ${rows.map((row) => {
+              const features = row.features || {};
+              return `
+                <tr>
+                  <td>${escapeHtml(row.ticker || "")}</td>
+                  <td>${escapeHtml(row.as_of || "unknown")}</td>
+                  <td><span class="table-status ${escapeHtml(decisionStatusClass(row.freshness_status))}">${escapeHtml(row.freshness_status || "unknown")}</span></td>
+                  <td>${escapeHtml(formatQuantValue(features.momentum_63d))}</td>
+                  <td>${escapeHtml(formatQuantValue(features.realized_vol_21d))}</td>
+                  <td>${escapeHtml(formatQuantValue(features.drawdown_current))}</td>
+                  <td>${escapeHtml(formatQuantValue(features.ma_ratio_20_50))}</td>
+                  <td>${escapeHtml(formatQuantValue(features.relative_strength_spy_63d))}</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+      <div class="decision-chip-row">
+        ${Object.entries(diagnostics.price_counts || {}).map(([ticker, count]) => `<span>${escapeHtml(ticker)} ${escapeHtml(_fmtNumber(count))} rows</span>`).join("")}
+      </div>
+      ${renderFreshnessAuditPanel(diagnostics)}
+      ${(diagnostics.missing_assets || []).length ? `<div class="decision-warning">Missing: ${escapeHtml(diagnostics.missing_assets.join(", "))}</div>` : ""}
+      ${(diagnostics.stale_assets || []).length ? `<div class="decision-warning">Stale: ${escapeHtml(diagnostics.stale_assets.join(", "))}</div>` : ""}
+    `;
+  } catch (err) {
+    els.quantFeatureSurface.innerHTML = decisionEmpty(`Feature preview failed: ${err.message || err}`);
+  }
+}
+
+async function runQuantSignalPreview() {
+  if (!els.quantSignalSurface) return;
+  const base = quantFeatureRequestFromControls();
+  const template = quantSignalTemplateFromStrategy(els.backtestStrategy?.value);
+  if (!base.tickers.length) {
+    els.quantSignalSurface.innerHTML = decisionEmpty("Enter at least one ticker in the Quant Lab universe.");
+    return;
+  }
+  els.quantSignalSurface.innerHTML = decisionEmpty(`${base.tickers.join(", ")} signals are loading.`);
+  try {
+    const res = await fetch(API.quantSignals, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...base, template, use_research_score: !!els.backtestUseResearchScore?.checked }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    state.lastSignalResult = data;
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    const diagnostics = data.diagnostics || {};
+    const status = data.status || "unknown";
+    els.quantSignalSurface.innerHTML = `
+      <div class="decision-status-row">
+        <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
+        <span>${escapeHtml(template)} · ${escapeHtml(diagnostics.execution_assumption || "next_bar_close")} · shift ${escapeHtml(String(diagnostics.signal_shift_bars || 1))}</span>
+      </div>
+      <div class="decision-table-wrap">
+        <table class="decision-table">
+          <thead><tr><th>Ticker</th><th>Signal date</th><th>Score</th><th>Signal</th><th>Execution</th><th>Diagnostics</th></tr></thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                <td>${escapeHtml(row.ticker || "")}</td>
+                <td>${escapeHtml(row.date || "unknown")}</td>
+                <td>${escapeHtml(fmtDecimal(row.final_score, 3))}</td>
+                <td><span class="table-status ${Number(row.signal || 0) > 0 ? "ok" : "warn"}">${escapeHtml(fmtDecimal(row.signal, 2))}</span></td>
+                <td>${escapeHtml(row.execution_date || "next available bar")}</td>
+                <td><div class="decision-chip-row compact">${renderDiagnosticsChips(row.diagnostics)}</div></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+      ${renderResearchProvenancePanel(diagnostics.research_score_provenance)}
+      ${renderFreshnessAuditPanel(diagnostics)}
+      ${(data.warnings || []).length ? `<div class="decision-warning">${escapeHtml(data.warnings.join(" "))}</div>` : ""}
+    `;
+  } catch (err) {
+    els.quantSignalSurface.innerHTML = decisionEmpty(`Signal generation failed: ${err.message || err}`);
+  }
+}
+
+function quantStrategyDraftFromControls() {
+  const request = quantBacktestRequestFromControls();
+  return {
+    strategy_id: "custom_momentum_review_v1",
+    name: "Custom Momentum Review",
+    universe: request.tickers.length ? request.tickers : ["SPY", "QQQ", "TLT"],
+    benchmark: request.benchmark || "SPY",
+    frequency: "daily",
+    features: {
+      momentum_63d: { id: "momentum_63d", lookback: 63 },
+      realized_vol_21d: { id: "realized_vol_21d", lookback: 21 },
+      ...(request.use_research_score ? { research_score: { id: "research_score", max_age_days: 7 } } : {}),
+    },
+    signal: { type: "rank_top_n", top_n: request.top_n || 2 },
+    portfolio: { method: request.portfolio_method || "equal_weight", max_weight: 0.5 },
+    execution: {
+      trade_at: "next_bar_close",
+      transaction_cost_bps: request.transaction_cost_bps ?? 5,
+      slippage_bps: request.slippage_bps ?? 2,
+    },
+    diagnostics: {
+      freshness_profile: request.freshness_profile || "research_default",
+      require_fresh_prices: !!request.require_fresh_prices,
+      require_no_lookahead: true,
+    },
+  };
+}
+
+function setStrategyEditor(strategy) {
+  if (!els.strategyDefinitionJson) return;
+  els.strategyDefinitionJson.value = JSON.stringify(strategy || quantStrategyDraftFromControls(), null, 2);
+  state.activeStrategyId = String(strategy?.strategy_id || "");
+}
+
+function strategyPayloadFromEditor() {
+  const raw = els.strategyDefinitionJson?.value || "";
+  if (!raw.trim()) return quantStrategyDraftFromControls();
+  return JSON.parse(raw);
+}
+
+function applyStrategyToControls(strategy) {
+  if (!strategy || typeof strategy !== "object") return;
+  const universe = Array.isArray(strategy.universe) ? strategy.universe : [];
+  if (universe.length && els.backtestTicker) els.backtestTicker.value = universe.join(",");
+  if (universe.length && els.portfolioTickers) els.portfolioTickers.value = universe.join(",");
+  if (strategy.benchmark && els.portfolioBenchmark) els.portfolioBenchmark.value = strategy.benchmark;
+  const portfolio = strategy.portfolio || {};
+  if (portfolio.method && els.portfolioMethod) els.portfolioMethod.value = portfolio.method;
+  if (portfolio.max_weight && els.portfolioMaxWeight) els.portfolioMaxWeight.value = String(portfolio.max_weight);
+  const signal = strategy.signal || {};
+  if (signal.top_n && els.backtestTopN) els.backtestTopN.value = String(signal.top_n);
+  const execution = strategy.execution || {};
+  if (execution.transaction_cost_bps !== undefined && els.backtestCostBps) {
+    els.backtestCostBps.value = String(execution.transaction_cost_bps);
+  }
+  if (execution.slippage_bps !== undefined && els.backtestSlippageBps) {
+    els.backtestSlippageBps.value = String(execution.slippage_bps);
+  }
+  const diagnostics = strategy.diagnostics || {};
+  if (diagnostics.freshness_profile && els.backtestFreshnessProfile) {
+    els.backtestFreshnessProfile.value = diagnostics.freshness_profile;
+  }
+  if (els.backtestRequireFresh && diagnostics.require_fresh_prices !== undefined) {
+    els.backtestRequireFresh.checked = !!diagnostics.require_fresh_prices;
+  }
+  if (els.backtestUseResearchScore) {
+    const features = strategy.features || {};
+    els.backtestUseResearchScore.checked = !!features.research_score;
+  }
+  if (els.backtestStrategy) {
+    els.backtestStrategy.value = signal.type === "rank_top_n" ? "momentum_ranking" : "moving_average";
+  }
+}
+
+function renderQuantStrategyList(extraHtml = "") {
+  if (!els.quantStrategySurface) return;
+  const items = Array.isArray(state.quantStrategyItems) ? state.quantStrategyItems : [];
+  if (!items.length) {
+    els.quantStrategySurface.innerHTML = decisionEmpty("No strategy definitions are available yet.");
+    return;
+  }
+  els.quantStrategySurface.innerHTML = `
+    <div class="decision-status-row">
+      <span class="decision-badge ok">success</span>
+      <span>${escapeHtml(_fmtNumber(items.length))} strategies · next-bar execution required</span>
+    </div>
+    ${extraHtml}
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead><tr><th>Strategy</th><th>Source</th><th>Version</th><th>Trade at</th><th>Features</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${items.map((item) => {
+            const features = item.features && typeof item.features === "object" ? Object.keys(item.features) : [];
+            const execution = item.execution || {};
+            const source = item.source || "default";
+            const strategyId = item.strategy_id || "";
+            return `
+              <tr>
+                <td>${escapeHtml(item.name || strategyId)}</td>
+                <td>${escapeHtml(source)}</td>
+                <td>${escapeHtml(`${item.schema_version || "default"} / ${item.strategy_version || "-"}`)}</td>
+                <td><span class="table-status ${execution.trade_at === "next_bar_close" ? "ok" : "fail"}">${escapeHtml(execution.trade_at || "-")}</span></td>
+                <td>${escapeHtml(features.join(", ") || "-")}</td>
+                <td>
+                  <button type="button" class="linkish" data-strategy-load="${escapeHtml(strategyId)}">load</button>
+                  <button type="button" class="linkish" data-strategy-dry="${escapeHtml(strategyId)}">dry-run</button>
+                  ${source === "user" ? `<button type="button" class="linkish" data-strategy-delete="${escapeHtml(strategyId)}">delete</button>` : ""}
+                </td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+  els.quantStrategySurface.querySelectorAll("[data-strategy-load]").forEach((button) => {
+    button.addEventListener("click", () => loadQuantStrategyDetail(button.dataset.strategyLoad || ""));
+  });
+  els.quantStrategySurface.querySelectorAll("[data-strategy-dry]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const strategy = await fetchQuantStrategy(button.dataset.strategyDry || "");
+      if (strategy) {
+        setStrategyEditor(strategy);
+        applyStrategyToControls(strategy);
+        runQuantStrategyDryRun(strategy);
+      }
+    });
+  });
+  els.quantStrategySurface.querySelectorAll("[data-strategy-delete]").forEach((button) => {
+    button.addEventListener("click", () => deleteQuantStrategy(button.dataset.strategyDelete || ""));
+  });
+}
+
+function renderQuantStrategyResult(data) {
+  if (!els.quantStrategyResultSurface) return;
+  const diagnostics = data.diagnostics || {};
+  const status = data.status || "unknown";
+  const strategy = data.strategy || {};
+  els.quantStrategyResultSurface.innerHTML = `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
+      <span>${escapeHtml(strategy.strategy_id || state.activeStrategyId || "strategy")} · valid ${data.valid ? "yes" : "no"}</span>
+    </div>
+    <div class="decision-chip-row">
+      <span>trade_at ${escapeHtml(diagnostics.execution_trade_at || "-")}</span>
+      <span>lookahead ${diagnostics.lookahead_safe ? "safe" : "check"}</span>
+      <span>schema ${escapeHtml(diagnostics.schema_version || strategy.schema_version || "-")}</span>
+      <span>version ${escapeHtml(diagnostics.strategy_version || strategy.strategy_version || "-")}</span>
+      ${(diagnostics.feature_ids || []).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
+    </div>
+    ${(diagnostics.migration_history || []).length ? `<div class="decision-warning">Migrated strategy schema: ${escapeHtml(diagnostics.migration_history.map((item) => item.migration || item.to_schema_version || "migration").join(", "))}</div>` : ""}
+    ${(diagnostics.missing_features || []).length ? `<div class="decision-warning">Missing features: ${escapeHtml(diagnostics.missing_features.join(", "))}</div>` : ""}
+    ${(data.warnings || []).length ? `<div class="decision-warning">${escapeHtml(data.warnings.join(" "))}</div>` : ""}
+  `;
+}
+
+async function loadQuantStrategies(force = false) {
+  if (!els.quantStrategySurface || (state.quantStrategiesLoaded && !force)) return;
+  els.quantStrategySurface.innerHTML = decisionEmpty("Loading strategy registry.");
+  try {
+    const res = await fetch(API.quantStrategies);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    state.quantStrategyItems = Array.isArray(data.items) ? data.items : [];
+    state.quantStrategiesLoaded = true;
+    renderQuantStrategyList();
+    if (!els.strategyDefinitionJson?.value.trim()) {
+      setStrategyEditor(state.quantStrategyItems[0] || quantStrategyDraftFromControls());
+    }
+  } catch (err) {
+    els.quantStrategySurface.innerHTML = decisionEmpty(`Strategy registry failed: ${err.message || err}`);
+  }
+}
+
+async function fetchQuantStrategy(strategyId) {
+  if (!strategyId) return null;
+  const res = await fetch(API.quantStrategy(strategyId));
+  const data = await res.json();
+  if (!res.ok) {
+    showQuantStrategyMessage(`Strategy load failed: ${data.detail || `HTTP ${res.status}`}`, "failed");
+    return null;
+  }
+  return data;
+}
+
+async function loadQuantStrategyDetail(strategyId) {
+  const strategy = await fetchQuantStrategy(strategyId);
+  if (!strategy) return;
+  setStrategyEditor(strategy);
+  applyStrategyToControls(strategy);
+  showQuantStrategyMessage(`${strategy.strategy_id || "strategy"} loaded into the workbench controls.`, "success");
+}
+
+async function runQuantStrategyDryRun(strategy = null) {
+  if (!els.quantStrategyResultSurface) return;
+  let payload = strategy;
+  try {
+    payload = payload || strategyPayloadFromEditor();
+  } catch (err) {
+    showQuantStrategyMessage(`Strategy JSON is invalid: ${err.message || err}`, "failed");
+    return;
+  }
+  els.quantStrategyResultSurface.innerHTML = decisionEmpty("Strategy dry-run is checking features and execution policy.");
+  try {
+    const res = await fetch(API.quantStrategyDryRun, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    if (data.strategy) {
+      setStrategyEditor(data.strategy);
+      applyStrategyToControls(data.strategy);
+    }
+    renderQuantStrategyResult(data);
+  } catch (err) {
+    showQuantStrategyMessage(`Strategy dry-run failed: ${err.message || err}`, "failed");
+  }
+}
+
+async function saveQuantStrategy() {
+  let payload;
+  try {
+    payload = strategyPayloadFromEditor();
+  } catch (err) {
+    showQuantStrategyMessage(`Strategy JSON is invalid: ${err.message || err}`, "failed");
+    return;
+  }
+  els.quantStrategyResultSurface.innerHTML = decisionEmpty("Saving strategy definition.");
+  try {
+    const res = await fetch(API.quantStrategySave, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    if (data.strategy) setStrategyEditor(data.strategy);
+    showQuantStrategyMessage(`Saved ${data.strategy?.strategy_id || payload.strategy_id}.`, "success");
+    state.quantStrategiesLoaded = false;
+    await loadQuantStrategies(true);
+  } catch (err) {
+    showQuantStrategyMessage(`Strategy save failed: ${err.message || err}`, "failed");
+  }
+}
+
+async function deleteQuantStrategy(strategyId = "") {
+  let id = strategyId || state.activeStrategyId || "";
+  try {
+    if (!id) id = strategyPayloadFromEditor().strategy_id || "";
+    if (!id) {
+      showQuantStrategyMessage("No saved strategy id is selected.", "failed");
+      return;
+    }
+    const res = await fetch(API.quantStrategy(id), { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    showQuantStrategyMessage(`Deleted ${data.strategy_id || id}.`, "success");
+    setStrategyEditor(quantStrategyDraftFromControls());
+    state.quantStrategiesLoaded = false;
+    await loadQuantStrategies(true);
+  } catch (err) {
+    showQuantStrategyMessage(`Strategy delete failed: ${err.message || err}`, "failed");
+  }
+}
+
+function showQuantStrategyMessage(message, status = "success") {
+  if (!els.quantStrategyResultSurface) return;
+  els.quantStrategyResultSurface.innerHTML = `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
+      <span>${escapeHtml(message)}</span>
+    </div>
+  `;
+}
+
 async function runHomeBacktest() {
   if (!els.backtestSurface || !els.backtestTicker) return;
-  const request = backtestRequestFromControls();
+  const legacyRequest = backtestRequestFromControls();
+  const request = quantBacktestRequestFromControls();
   if (!request.tickers.length) {
     els.backtestSurface.innerHTML = decisionEmpty("백테스트할 티커를 하나 이상 입력해야 합니다.");
     return;
   }
-  state.lastBacktestRequest = request;
+  state.lastBacktestRequest = legacyRequest;
+  state.lastQuantBacktestRequest = request;
   els.backtestSurface.innerHTML = decisionEmpty(`${request.tickers.join(", ")} 백테스트를 실행 중입니다.`);
   try {
-    const res = await fetch(API.backtestRun, {
+    const res = await fetch(API.quantBacktest, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
@@ -1839,58 +3060,291 @@ async function runHomeBacktest() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
     state.lastBacktestResult = data;
-    const metrics = data.metrics || {};
-    const status = data.status || "unknown";
-    const assetResults = data.asset_results || {};
-    const assetEntries = Object.entries(assetResults);
-    const missing = Array.isArray(data.missing_assets) ? data.missing_assets : [];
     syncPortfolioFromBacktest();
-    els.backtestSurface.innerHTML = `
-      <div class="decision-status-row">
-        <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
-        <span>${escapeHtml(data.date_range?.start || request.start_date || "-")} -> ${escapeHtml(data.date_range?.end || request.end_date || "-")} · ${escapeHtml(data.data_status || "")}</span>
-      </div>
-      ${renderMetricGrid(metrics, status)}
-      <div class="decision-assumption">
-        비용 ${escapeHtml(String(request.transaction_cost_bps))}bps · 슬리피지 ${escapeHtml(String(request.slippage_bps))}bps · ${escapeHtml(data.assumptions?.lookahead_policy || "signals applied after calculation")}
-      </div>
-      ${data.summary_policy ? `<div class="decision-summary ok">${escapeHtml(data.summary_policy)}</div>` : ""}
-      ${assetEntries.length > 1 ? `
-        <div class="decision-section-title">종목별 결과</div>
-        <div class="decision-table-wrap">
-          <table class="decision-table">
-            <thead><tr><th>티커</th><th>상태</th><th>CAGR</th><th>Sharpe</th><th>MDD</th><th>거래</th></tr></thead>
-            <tbody>
-              ${assetEntries.map(([asset, result]) => {
-                const rowStatus = result.status || "unknown";
-                const rowMetrics = result.metrics || {};
-                return `
-                  <tr>
-                    <td>${escapeHtml(asset)}</td>
-                    <td><span class="table-status ${escapeHtml(decisionStatusClass(rowStatus))}">${escapeHtml(rowStatus)}</span></td>
-                    <td>${escapeHtml(fmtMetricRatio(rowMetrics.cagr))}</td>
-                    <td>${escapeHtml(fmtDecimal(rowMetrics.sharpe, 2))}</td>
-                    <td>${escapeHtml(fmtMetricRatio(rowMetrics.max_drawdown))}</td>
-                    <td>${escapeHtml(_fmtNumber(rowMetrics.trade_count))}</td>
-                  </tr>
-                `;
-              }).join("")}
-            </tbody>
-          </table>
-        </div>
-      ` : ""}
-      ${(data.selected_history || []).length ? `
-        <div class="decision-section-title">최근 랭킹 선택</div>
-        <div class="decision-chip-row">
-          ${data.selected_history.slice(-5).map((row) => `<span>${escapeHtml(row.date || "")}: ${escapeHtml((row.selected || []).join(", "))}</span>`).join("")}
-        </div>
-      ` : ""}
-      ${missing.length ? `<div class="decision-warning">가격 데이터 부족: ${escapeHtml(missing.join(", "))}</div>` : ""}
-      <button type="button" class="linkish decision-inline-action" data-action="sync-backtest-portfolio">이 조건을 포트폴리오에 적용</button>
-      ${status === "success" ? "" : decisionEmpty(data.reason || "저장 가격이 부족해 일부 결과만 표시됩니다.")}
-    `;
+    renderQuantBacktestResult(data, request);
+    loadQuantRunHistory(true);
   } catch (err) {
     els.backtestSurface.innerHTML = decisionEmpty(`Backtest failed: ${err.message || err}`);
+  }
+}
+
+function normalizeQuantBundle(bundle) {
+  const config = bundle.config || {};
+  const manifest = bundle.manifest || {};
+  const files = manifest.files || {};
+  return {
+    status: bundle.status || "success",
+    run_id: bundle.run_id || manifest.run_id || "",
+    template: config.template || "unknown",
+    tickers: config.tickers || [],
+    benchmark: config.benchmark || "",
+    date_range: {
+      start: config.start_date || "",
+      end: config.end_date || "",
+    },
+    metrics: bundle.metrics || {},
+    equity_curve: Array.isArray(bundle.equity_curve) ? bundle.equity_curve : [],
+    drawdown_curve: Array.isArray(bundle.drawdown_curve) ? bundle.drawdown_curve : [],
+    trades: Array.isArray(bundle.trades) ? bundle.trades : [],
+    signals: Array.isArray(bundle.signals) ? bundle.signals : [],
+    weights: Array.isArray(bundle.weights) ? bundle.weights : [],
+    diagnostics: bundle.diagnostics || {},
+    artifacts: files,
+    replay_reports: bundle.replay_reports || {},
+    config,
+  };
+}
+
+async function loadQuantBacktestArtifact(runId) {
+  if (!runId || !els.backtestSurface) return;
+  els.backtestSurface.innerHTML = decisionEmpty(`${runId} artifact bundle is loading.`);
+  try {
+    const res = await fetch(API.quantBacktestBundle(runId));
+    const bundle = await res.json();
+    if (!res.ok) throw new Error(bundle.detail || `HTTP ${res.status}`);
+    const data = normalizeQuantBundle(bundle);
+    state.lastBacktestResult = data;
+    state.lastQuantBacktestRequest = data.config || null;
+    state.lastBacktestRequest = data.config || null;
+    renderQuantBacktestResult(data, data.config || {});
+    syncPortfolioFromBacktest();
+  } catch (err) {
+    els.backtestSurface.innerHTML = decisionEmpty(`Artifact load failed: ${err.message || err}`);
+  }
+}
+
+function renderQuantExportStorageReport(data) {
+  const topRuns = Array.isArray(data.top_runs) ? data.top_runs : [];
+  const staleExports = Array.isArray(data.stale_exports) ? data.stale_exports : [];
+  const formatCounts = data.format_counts || {};
+  const manifestStatuses = data.manifest_status_counts || {};
+  const formatText = Object.keys(formatCounts).length
+    ? Object.entries(formatCounts).map(([key, value]) => `${key}:${_fmtNumber(value)}`).join(", ")
+    : "none";
+  const manifestText = Object.keys(manifestStatuses).length
+    ? Object.entries(manifestStatuses).map(([key, value]) => `${key}:${_fmtNumber(value)}`).join(", ")
+    : "none";
+  return `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(data.status || "success"))}">${escapeHtml(data.status || "success")}</span>
+      <span>cross-run export storage report</span>
+    </div>
+    <div class="decision-chip-row">
+      <span>runs ${escapeHtml(_fmtNumber(data.run_count || 0))}</span>
+      <span>with exports ${escapeHtml(_fmtNumber(data.runs_with_exports || 0))}</span>
+      <span>export dirs ${escapeHtml(_fmtNumber(data.export_directory_count || 0))}</span>
+      <span>bytes ${escapeHtml(_fmtNumber(data.total_bytes || 0))}</span>
+      <span>stale ${escapeHtml(_fmtNumber(data.stale_export_count || 0))}</span>
+      <button type="button" class="linkish decision-inline-action" data-action="cross-run-cleanup-preview" data-keep-last="1" data-stale-after-days="0">cleanup preview</button>
+    </div>
+    <div class="decision-list compact">
+      <div class="decision-list-row"><span>Formats</span><strong>${escapeHtml(formatText)}</strong></div>
+      <div class="decision-list-row"><span>Manifest status</span><strong>${escapeHtml(manifestText)}</strong></div>
+      <div class="decision-list-row"><span>Oldest export</span><strong>${escapeHtml(data.oldest_export_generated_at || "-")}</strong></div>
+      <div class="decision-list-row"><span>Newest export</span><strong>${escapeHtml(data.newest_export_generated_at || "-")}</strong></div>
+      <div class="decision-list-row"><span>Root</span><strong>${escapeHtml(compactArtifactPath(data.artifact_root || ""))}</strong></div>
+    </div>
+    <div class="decision-section-title">Largest runs by generated export storage</div>
+    ${topRuns.length ? `
+      <div class="decision-table-wrap">
+        <table class="decision-table">
+          <thead><tr><th>Run</th><th>Exports</th><th>Bytes</th><th>Rows</th><th>Formats</th><th>Newest</th><th>Open</th></tr></thead>
+          <tbody>
+            ${topRuns.map((item) => `
+              <tr>
+                <td>${escapeHtml(item.run_id || "")}</td>
+                <td>${escapeHtml(_fmtNumber(item.export_count || 0))}</td>
+                <td>${escapeHtml(_fmtNumber(item.total_bytes || 0))}</td>
+                <td>${escapeHtml(_fmtNumber(item.total_rows || 0))}</td>
+                <td>${escapeHtml(Object.keys(item.formats || {}).join(", ") || "-")}</td>
+                <td>${escapeHtml(fmtDate(item.newest_export_generated_at || ""))}</td>
+                <td><button type="button" class="linkish" data-quant-run-id="${escapeHtml(item.run_id || "")}">open</button></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    ` : decisionEmpty("No generated artifact exports are present yet.")}
+    <div class="decision-section-title">Old export candidates</div>
+    ${staleExports.length ? `
+      <div class="decision-table-wrap">
+        <table class="decision-table">
+          <thead><tr><th>Run</th><th>Format</th><th>Age</th><th>Bytes</th><th>Status</th><th>Manifest</th></tr></thead>
+          <tbody>
+            ${staleExports.map((item) => `
+              <tr>
+                <td>${escapeHtml(item.run_id || "")}</td>
+                <td>${escapeHtml(item.format || "")}</td>
+                <td>${escapeHtml(_fmtNumber(item.age_days || 0))}d</td>
+                <td>${escapeHtml(_fmtNumber(item.total_bytes || 0))}</td>
+                <td><span class="table-status ${escapeHtml(decisionStatusClass(item.status || "unknown"))}">${escapeHtml(item.status || "unknown")}</span></td>
+                <td>${escapeHtml(compactArtifactPath(item.manifest_path || ""))}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    ` : decisionEmpty("No export directories exceed the stale-age threshold.")}
+  `;
+}
+
+function renderCrossRunExportCleanupPlan(data) {
+  const candidates = Array.isArray(data.candidates) ? data.candidates : [];
+  const pruned = Array.isArray(data.pruned_exports) ? data.pruned_exports : [];
+  const applied = !!data.cleanup_applied;
+  const shown = applied ? pruned : candidates;
+  if (!applied) {
+    state.lastCrossRunExportCleanupPreview = data;
+  }
+  return `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(data.status || "success"))}">${escapeHtml(data.status || "success")}</span>
+      <span>cross-run export cleanup ${applied ? "applied" : "preview"}</span>
+    </div>
+    <div class="decision-chip-row">
+      <span>keep last ${escapeHtml(_fmtNumber(data.keep_last_exports || 0))}</span>
+      <span>stale ${escapeHtml(_fmtNumber(data.stale_after_days || 0))}d</span>
+      <span>eligible ${escapeHtml(_fmtNumber(data.eligible_export_count || 0))}</span>
+      <span>candidates ${escapeHtml(_fmtNumber(data.candidate_count || 0))}</span>
+      <span>bytes ${escapeHtml(_fmtNumber(applied ? data.total_bytes_pruned || 0 : data.total_bytes_to_prune || 0))}</span>
+      <span>preview ${escapeHtml(String(data.preview_id || "").slice(0, 12))}</span>
+    </div>
+    ${!applied && candidates.length ? `
+      <div class="decision-chip-row">
+        <button type="button" class="linkish decision-inline-action danger" data-action="cross-run-cleanup-apply">apply exact preview</button>
+      </div>
+    ` : ""}
+    ${shown.length ? `
+      <div class="decision-section-title">${applied ? "Pruned exports" : "Exports that would be pruned"}</div>
+      ${renderArtifactExportCleanupTable(shown)}
+    ` : decisionEmpty("No cross-run export directories match this cleanup policy.")}
+  `;
+}
+
+async function previewCrossRunExportCleanup(keepLast = 1, staleAfterDays = 0) {
+  if (!els.quantRunHistorySurface) return;
+  const params = new URLSearchParams({
+    keep_last_exports: String(keepLast || 1),
+    stale_after_days: String(staleAfterDays ?? 0),
+    limit: "50",
+  });
+  els.quantRunHistorySurface.innerHTML = decisionEmpty("Loading cross-run export cleanup preview.");
+  try {
+    const res = await fetch(`${API.quantExportCleanupPreview}?${params.toString()}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    els.quantRunHistorySurface.innerHTML = renderCrossRunExportCleanupPlan(data);
+  } catch (err) {
+    els.quantRunHistorySurface.innerHTML = decisionEmpty(`Cross-run export cleanup preview failed: ${err.message || err}`);
+  }
+}
+
+async function applyCrossRunExportCleanup() {
+  if (!els.quantRunHistorySurface) return;
+  const preview = state.lastCrossRunExportCleanupPreview || {};
+  const candidateIds = Array.isArray(preview.candidate_ids) ? preview.candidate_ids : [];
+  els.quantRunHistorySurface.innerHTML = decisionEmpty("Applying exact cross-run export cleanup preview.");
+  try {
+    const res = await fetch(API.quantExportCleanup, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        preview_id: preview.preview_id || "",
+        candidate_ids: candidateIds,
+        keep_last_exports: preview.keep_last_exports || 1,
+        stale_after_days: preview.stale_after_days ?? 0,
+        limit: preview.limit || 50,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    state.lastCrossRunExportCleanupPreview = null;
+    els.quantRunHistorySurface.innerHTML = renderCrossRunExportCleanupPlan(data);
+  } catch (err) {
+    els.quantRunHistorySurface.innerHTML = decisionEmpty(`Cross-run export cleanup failed: ${err.message || err}`);
+  }
+}
+
+async function loadQuantExportStorageReport() {
+  if (!els.quantRunHistorySurface) return;
+  els.quantRunHistorySurface.innerHTML = decisionEmpty("Loading cross-run export storage report.");
+  try {
+    const res = await fetch(`${API.quantExportStorage}?limit=20&stale_after_days=30`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    els.quantRunHistorySurface.innerHTML = renderQuantExportStorageReport(data);
+    els.quantRunHistorySurface.querySelectorAll("[data-quant-run-id]").forEach((button) => {
+      button.addEventListener("click", () => loadQuantBacktestArtifact(button.dataset.quantRunId || ""));
+    });
+  } catch (err) {
+    els.quantRunHistorySurface.innerHTML = decisionEmpty(`Export storage report failed: ${err.message || err}`);
+  }
+}
+
+async function loadQuantRunHistory(force = false) {
+  if (!els.quantRunHistorySurface || (state.quantRunHistoryLoaded && !force)) return;
+  els.quantRunHistorySurface.innerHTML = decisionEmpty("Loading Quant Lab artifact history.");
+  try {
+    const res = await fetch(`${API.quantBacktests}?limit=8`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    const items = Array.isArray(data.items) ? data.items : [];
+    state.quantRunHistoryLoaded = true;
+    if (!items.length) {
+      els.quantRunHistorySurface.innerHTML = decisionEmpty("No Quant Lab backtest artifacts have been saved yet.");
+      return;
+    }
+    els.quantRunHistorySurface.innerHTML = `
+      <div class="decision-status-row">
+        <span class="decision-badge ok">${escapeHtml(data.status || "success")}</span>
+        <span>${escapeHtml(_fmtNumber(data.count))} saved runs</span>
+      </div>
+      <div class="decision-table-wrap">
+        <table class="decision-table">
+          <thead><tr><th>Run</th><th>Template</th><th>Universe</th><th>Sharpe</th><th>MDD</th><th>Lookahead</th><th>Reports</th><th>Open</th><th>Replay</th><th>Export</th></tr></thead>
+          <tbody>
+            ${items.map((item) => {
+              const metrics = item.metrics || {};
+              const diagnostics = item.diagnostics || {};
+              return `
+                <tr>
+                  <td>${escapeHtml(item.run_id || "")}</td>
+                  <td>${escapeHtml(item.template || "")}</td>
+                  <td>${escapeHtml((item.tickers || []).join(","))}</td>
+                  <td>${escapeHtml(fmtDecimal(metrics.sharpe, 2))}</td>
+                  <td>${escapeHtml(fmtMetricRatio(metrics.max_drawdown))}</td>
+                  <td><span class="table-status ${diagnostics.lookahead_safe ? "ok" : "fail"}">${diagnostics.lookahead_safe ? "safe" : "check"}</span></td>
+                  <td><button type="button" class="linkish" data-quant-replay-reports-id="${escapeHtml(item.run_id || "")}">${escapeHtml(_fmtNumber(item.replay_reports?.count || 0))}</button></td>
+                  <td><button type="button" class="linkish" data-quant-run-id="${escapeHtml(item.run_id || "")}">open</button></td>
+                  <td><button type="button" class="linkish" data-quant-replay-id="${escapeHtml(item.run_id || "")}">compare</button></td>
+                  <td>
+                    <button type="button" class="linkish" data-quant-export-id="${escapeHtml(item.run_id || "")}" data-format="jsonl">jsonl</button>
+                    <button type="button" class="linkish" data-quant-export-id="${escapeHtml(item.run_id || "")}" data-format="parquet">parquet</button>
+                  </td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+      <div class="decision-chip-row">
+        ${items.slice(0, 3).map((item) => `<span>${escapeHtml(fmtDate(item.generated_at))} · ${escapeHtml(compactArtifactPath(item.manifest))}</span>`).join("")}
+      </div>
+    `;
+    els.quantRunHistorySurface.querySelectorAll("[data-quant-run-id]").forEach((button) => {
+      button.addEventListener("click", () => loadQuantBacktestArtifact(button.dataset.quantRunId || ""));
+    });
+    els.quantRunHistorySurface.querySelectorAll("[data-quant-replay-id]").forEach((button) => {
+      button.addEventListener("click", () => runQuantBacktestReplay(button.dataset.quantReplayId || ""));
+    });
+    els.quantRunHistorySurface.querySelectorAll("[data-quant-replay-reports-id]").forEach((button) => {
+      button.addEventListener("click", () => loadQuantReplayReports(button.dataset.quantReplayReportsId || ""));
+    });
+    els.quantRunHistorySurface.querySelectorAll("[data-quant-export-id]").forEach((button) => {
+      button.addEventListener("click", () => exportQuantBacktestArtifact(button.dataset.quantExportId || "", button.dataset.format || "jsonl"));
+    });
+  } catch (err) {
+    els.quantRunHistorySurface.innerHTML = decisionEmpty(`Run history failed: ${err.message || err}`);
   }
 }
 
@@ -1905,6 +3359,9 @@ async function runPortfolioOptimize() {
   const endDate = textInputValue(els.portfolioEndDate);
   const lookbackDays = numberInputValue(els.portfolioLookbackDays, 756, { min: 2, max: 5000 });
   const maxWeight = numberInputValue(els.portfolioMaxWeight, 0.6, { min: 0.01, max: 1 });
+  const benchmark = normalizeTickerToken(els.portfolioBenchmark?.value || "SPY") || "SPY";
+  const covarianceMethod = els.portfolioCovarianceMethod?.value || "sample";
+  const shrinkageAlpha = numberInputValue(els.portfolioShrinkageAlpha, 0.1, { min: 0, max: 1 });
   els.portfolioSurface.innerHTML = decisionEmpty(`${tickers.join(", ")} 포트폴리오 최적화를 실행 중입니다.`);
   try {
     const res = await fetch(API.portfolioOptimize, {
@@ -1913,10 +3370,13 @@ async function runPortfolioOptimize() {
       body: JSON.stringify({
         tickers,
         method: els.portfolioMethod?.value || "equal_weight",
+        benchmark,
         start_date: startDate,
         end_date: endDate,
         lookback_days: lookbackDays,
         max_weight: maxWeight,
+        covariance_method: covarianceMethod,
+        shrinkage_alpha: shrinkageAlpha,
       }),
     });
     const data = await res.json();
@@ -1928,10 +3388,11 @@ async function runPortfolioOptimize() {
     const returnCounts = data.return_counts || {};
     const portfolioMetrics = data.portfolio_metrics || {};
     const riskContributions = data.risk_contributions || {};
+    const correlationMatrix = data.correlation_matrix || {};
     els.portfolioSurface.innerHTML = `
       <div class="decision-status-row">
         <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
-        <span>${escapeHtml(data.method || "")} · sum ${escapeHtml(String(data.sum_weights ?? "-"))} · max ${escapeHtml(fmtPct(Number(data.max_weight || maxWeight) * 100))}</span>
+        <span>${escapeHtml(data.method || "")} · ${escapeHtml(data.benchmark || benchmark)} benchmark · sum ${escapeHtml(String(data.sum_weights ?? "-"))}</span>
       </div>
       <div class="decision-summary ok">
         ${escapeHtml(tickers.join(", "))} · ${escapeHtml(startDate || "lookback")} -> ${escapeHtml(endDate || "latest")} · ${escapeHtml(String(lookbackDays))}일 가격 기준
@@ -1953,14 +3414,18 @@ async function runPortfolioOptimize() {
         ${decisionMetric("기대수익", fmtMetricRatio(portfolioMetrics.expected_annual_return), status)}
         ${decisionMetric("예상 변동성", fmtMetricRatio(portfolioMetrics.annualized_volatility), status)}
         ${decisionMetric("예상 Sharpe", fmtDecimal(portfolioMetrics.sharpe, 2), status)}
-        ${decisionMetric("공분산 사용", diagnostics.uses_covariance ? "yes" : "no", diagnostics.uses_covariance ? "ok" : "warn")}
+        ${decisionMetric("Active return", fmtMetricRatio(portfolioMetrics.active_annual_return), status)}
+        ${decisionMetric("Tracking error", fmtMetricRatio(portfolioMetrics.tracking_error), status)}
+        ${decisionMetric("Info ratio", fmtDecimal(portfolioMetrics.information_ratio, 2), status)}
+        ${decisionMetric("Beta", fmtDecimal(portfolioMetrics.beta_to_benchmark, 2), status)}
+        ${decisionMetric("공분산", `${diagnostics.covariance_method || "sample"}${diagnostics.covariance_shrinkage_used ? ` ${fmtDecimal(diagnostics.shrinkage_alpha, 2)}` : ""}`, diagnostics.uses_covariance ? "ok" : "warn")}
+        ${decisionMetric("효과 포지션", fmtDecimal(diagnostics.effective_number_of_positions, 2), status)}
       </div>
       ${Object.keys(riskContributions).length ? `
         <div class="decision-section-title">위험 기여도</div>
-        <div class="decision-chip-row">
-          ${Object.entries(riskContributions).map(([ticker, contribution]) => `<span>${escapeHtml(ticker)} ${escapeHtml(fmtPct(Number(contribution) * 100))}</span>`).join("")}
-        </div>
+        ${renderRiskContributionBars(riskContributions)}
       ` : ""}
+      ${renderCorrelationPreview(correlationMatrix)}
       ${Object.keys(returnCounts).length ? `
         <div class="decision-section-title">데이터 사용량</div>
         <div class="decision-chip-row">
@@ -4795,12 +6260,59 @@ function bindInputs() {
   });
   if (els.dataHealthRefresh) els.dataHealthRefresh.addEventListener("click", () => loadDataHealth(true));
   if (els.assetDetailLoad) els.assetDetailLoad.addEventListener("click", loadAssetDetail);
+  if (els.quantFeatureRun) els.quantFeatureRun.addEventListener("click", runQuantFeaturePreview);
+  if (els.quantSignalRun) els.quantSignalRun.addEventListener("click", runQuantSignalPreview);
+  if (els.quantStrategyRefresh) els.quantStrategyRefresh.addEventListener("click", () => loadQuantStrategies(true));
+  if (els.quantStrategyNewDraft) els.quantStrategyNewDraft.addEventListener("click", () => {
+    setStrategyEditor(quantStrategyDraftFromControls());
+    showQuantStrategyMessage("Draft strategy initialized from current Quant Lab controls.", "success");
+  });
+  if (els.quantStrategyDryRun) els.quantStrategyDryRun.addEventListener("click", () => runQuantStrategyDryRun());
+  if (els.quantStrategySave) els.quantStrategySave.addEventListener("click", saveQuantStrategy);
+  if (els.quantStrategyDelete) els.quantStrategyDelete.addEventListener("click", () => deleteQuantStrategy());
+  if (els.quantRunHistoryRefresh) els.quantRunHistoryRefresh.addEventListener("click", () => loadQuantRunHistory(true));
+  if (els.quantExportStorageReport) els.quantExportStorageReport.addEventListener("click", loadQuantExportStorageReport);
+  if (els.quantCrossRunCleanupPreview) els.quantCrossRunCleanupPreview.addEventListener("click", () => previewCrossRunExportCleanup(1, 0));
+  if (els.quantRunHistorySurface) {
+    els.quantRunHistorySurface.addEventListener("click", (event) => {
+      const rawTarget = event.target;
+      const target = rawTarget?.closest ? rawTarget.closest("[data-action]") : rawTarget;
+      if (target && target.dataset && target.dataset.action === "cross-run-cleanup-preview") {
+        previewCrossRunExportCleanup(target.dataset.keepLast || 1, target.dataset.staleAfterDays || 0);
+      }
+      if (target && target.dataset && target.dataset.action === "cross-run-cleanup-apply") {
+        applyCrossRunExportCleanup();
+      }
+    });
+  }
   if (els.backtestRun) els.backtestRun.addEventListener("click", runHomeBacktest);
   if (els.backtestSurface) {
     els.backtestSurface.addEventListener("click", (event) => {
-      const target = event.target;
+      const rawTarget = event.target;
+      const target = rawTarget?.closest ? rawTarget.closest("[data-action]") : rawTarget;
       if (target && target.dataset && target.dataset.action === "sync-backtest-portfolio") {
         syncPortfolioFromBacktest();
+      }
+      if (target && target.dataset && target.dataset.action === "replay-backtest") {
+        runQuantBacktestReplay(target.dataset.runId || "");
+      }
+      if (target && target.dataset && target.dataset.action === "replay-reports") {
+        loadQuantReplayReports(target.dataset.runId || "");
+      }
+      if (target && target.dataset && target.dataset.action === "export-backtest") {
+        exportQuantBacktestArtifact(target.dataset.runId || "", target.dataset.format || "jsonl");
+      }
+      if (target && target.dataset && target.dataset.action === "export-history") {
+        loadQuantExportHistory(target.dataset.runId || "");
+      }
+      if (target && target.dataset && target.dataset.action === "export-cleanup-preview") {
+        previewQuantExportCleanup(target.dataset.runId || "");
+      }
+      if (target && target.dataset && target.dataset.action === "export-cleanup-apply") {
+        applyQuantExportCleanup(target.dataset.runId || "", target.dataset.keepLast || "");
+      }
+      if (target && target.dataset && target.dataset.action === "verify-export") {
+        verifyQuantExport(target.dataset.runId || "", target.dataset.manifestPath || "");
       }
     });
   }

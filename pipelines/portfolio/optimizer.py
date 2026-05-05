@@ -9,6 +9,10 @@ def optimize_portfolio(
     *,
     method: str = "equal_weight",
     max_weight: float = 1.0,
+    covariance_method: str = "sample",
+    shrinkage_alpha: float = 0.1,
+    benchmark: str | None = None,
+    benchmark_returns: Iterable[float] | None = None,
 ) -> dict[str, object]:
     returns_table, warnings = _aligned_returns_table(returns_by_asset)
     assets = list(returns_table)
@@ -17,7 +21,10 @@ def optimize_portfolio(
     method = str(method or "equal_weight").lower()
     matrix = [returns_table[asset] for asset in assets]
     means = [_mean(rows) for rows in matrix]
-    covariance = _covariance_matrix(matrix)
+    sample_covariance = _covariance_matrix(matrix)
+    covariance_method = str(covariance_method or "sample").strip().lower()
+    shrinkage_alpha = max(0.0, min(float(shrinkage_alpha), 1.0))
+    covariance = _apply_covariance_method(sample_covariance, method=covariance_method, shrinkage_alpha=shrinkage_alpha)
     uses_covariance = False
     if method == "equal_weight":
         raw = {asset: 1.0 for asset in assets}
@@ -57,6 +64,18 @@ def optimize_portfolio(
     weights, effective_cap, cap_warnings = _normalize_with_cap(raw, max_weight=max_weight)
     warnings.extend(cap_warnings)
     portfolio_metrics = _portfolio_metrics(weights, assets, means, covariance)
+    portfolio_metrics.update(
+        _benchmark_relative_metrics(
+            weights,
+            returns_table,
+            benchmark_returns=_resolve_benchmark_returns(
+                benchmark=benchmark,
+                returns_table=returns_table,
+                benchmark_returns=benchmark_returns,
+            ),
+        )
+    )
+    risk_contributions = _risk_contributions(weights, assets, covariance)
     return {
         "status": "success",
         "method": method,
@@ -65,12 +84,24 @@ def optimize_portfolio(
         "max_weight": effective_cap,
         "warnings": warnings,
         "portfolio_metrics": portfolio_metrics,
-        "risk_contributions": _risk_contributions(weights, assets, covariance),
+        "risk_contributions": risk_contributions,
+        "correlation_matrix": _correlation_matrix(covariance, assets),
         "diagnostics": {
             "asset_count": len(assets),
             "sample_count": len(next(iter(returns_table.values()), [])),
             "uses_covariance": uses_covariance,
+            "covariance_method": covariance_method,
+            "shrinkage_alpha": shrinkage_alpha if covariance_method == "diagonal_shrinkage" else 0.0,
+            "covariance_shrinkage_used": covariance_method == "diagonal_shrinkage",
+            "benchmark": str(benchmark or "").upper(),
+            "benchmark_sample_count": portfolio_metrics.get("benchmark_sample_count", 0),
             "optimizer": "closed_form_covariance_long_only" if uses_covariance else "deterministic_score_weighting",
+            "max_weight_actual": round(max(weights.values()) if weights else 0.0, 8),
+            "capped_assets": [asset for asset, weight in weights.items() if weight >= effective_cap - 1e-8],
+            "concentration_hhi": round(sum(weight * weight for weight in weights.values()), 8),
+            "effective_number_of_positions": round(1.0 / max(sum(weight * weight for weight in weights.values()), 1e-12), 6),
+            "risk_contribution_sum": round(sum(risk_contributions.values()), 6),
+            "risk_contribution_method": "component_variance",
         },
     }
 
@@ -140,6 +171,26 @@ def _covariance_matrix(matrix: list[list[float]]) -> list[list[float]]:
     for i in range(n_assets):
         cov[i][i] += ridge
     return cov
+
+
+def _apply_covariance_method(
+    covariance: list[list[float]],
+    *,
+    method: str,
+    shrinkage_alpha: float,
+) -> list[list[float]]:
+    if method in {"sample", ""}:
+        return covariance
+    if method != "diagonal_shrinkage":
+        raise ValueError(f"unsupported covariance method: {method}")
+    alpha = max(0.0, min(float(shrinkage_alpha), 1.0))
+    shrunk: list[list[float]] = []
+    for i, row in enumerate(covariance):
+        next_row: list[float] = []
+        for j, value in enumerate(row):
+            next_row.append(float(value) if i == j else float(value) * (1.0 - alpha))
+        shrunk.append(next_row)
+    return shrunk
 
 
 def _minimum_variance_weights(covariance: list[list[float]]) -> list[float]:
@@ -247,6 +298,94 @@ def _portfolio_metrics(
     }
 
 
+def _resolve_benchmark_returns(
+    *,
+    benchmark: str | None,
+    returns_table: dict[str, list[float]],
+    benchmark_returns: Iterable[float] | None,
+) -> list[float]:
+    clean = str(benchmark or "").strip().upper()
+    if clean and clean in returns_table:
+        return list(returns_table[clean])
+    if benchmark_returns is None:
+        return []
+    out: list[float] = []
+    for value in benchmark_returns:
+        try:
+            val = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(val):
+            out.append(val)
+    return out
+
+
+def _benchmark_relative_metrics(
+    weights: dict[str, float],
+    returns_table: dict[str, list[float]],
+    *,
+    benchmark_returns: list[float],
+) -> dict[str, float]:
+    if not benchmark_returns or not returns_table:
+        return {
+            "benchmark_annual_return": 0.0,
+            "active_annual_return": 0.0,
+            "tracking_error": 0.0,
+            "information_ratio": 0.0,
+            "beta_to_benchmark": 0.0,
+            "benchmark_sample_count": 0,
+        }
+    n_obs = min([len(benchmark_returns), *[len(values) for values in returns_table.values()]])
+    if n_obs < 2:
+        return {
+            "benchmark_annual_return": 0.0,
+            "active_annual_return": 0.0,
+            "tracking_error": 0.0,
+            "information_ratio": 0.0,
+            "beta_to_benchmark": 0.0,
+            "benchmark_sample_count": n_obs,
+        }
+    assets = list(returns_table)
+    portfolio_returns = []
+    for idx in range(n_obs):
+        portfolio_returns.append(
+            sum(float(weights.get(asset, 0.0)) * returns_table[asset][-n_obs + idx] for asset in assets)
+        )
+    bench = benchmark_returns[-n_obs:]
+    active = [p - b for p, b in zip(portfolio_returns, bench)]
+    active_return = _mean(active) * 252
+    tracking_error = _vol(active) * math.sqrt(252)
+    bench_var = _variance(bench)
+    beta = _covariance(portfolio_returns, bench) / bench_var if bench_var > 0 else 0.0
+    benchmark_annual_return = _mean(bench) * 252
+    return {
+        "benchmark_annual_return": round(benchmark_annual_return, 6),
+        "active_annual_return": round(active_return, 6),
+        "tracking_error": round(tracking_error, 6),
+        "information_ratio": round(active_return / tracking_error, 6) if tracking_error else 0.0,
+        "beta_to_benchmark": round(beta, 6),
+        "benchmark_sample_count": n_obs,
+    }
+
+
+def _variance(values: list[float]) -> float:
+    if len(values) < 2:
+        return 0.0
+    mean = _mean(values)
+    return sum((value - mean) ** 2 for value in values) / (len(values) - 1)
+
+
+def _covariance(left: list[float], right: list[float]) -> float:
+    n_obs = min(len(left), len(right))
+    if n_obs < 2:
+        return 0.0
+    left_tail = left[-n_obs:]
+    right_tail = right[-n_obs:]
+    left_mean = _mean(left_tail)
+    right_mean = _mean(right_tail)
+    return sum((lval - left_mean) * (rval - right_mean) for lval, rval in zip(left_tail, right_tail)) / (n_obs - 1)
+
+
 def _risk_contributions(weights: dict[str, float], assets: list[str], covariance: list[list[float]]) -> dict[str, float]:
     weight_vec = [float(weights.get(asset, 0.0)) for asset in assets]
     variance = _portfolio_variance_vec(weight_vec, covariance)
@@ -257,6 +396,20 @@ def _risk_contributions(weights: dict[str, float], assets: list[str], covariance
         asset: round(max(weight_vec[idx] * marginal[idx] / variance, 0.0), 6)
         for idx, asset in enumerate(assets)
     }
+
+
+def _correlation_matrix(covariance: list[list[float]], assets: list[str]) -> dict[str, dict[str, float]]:
+    out: dict[str, dict[str, float]] = {}
+    for i, asset_i in enumerate(assets):
+        row: dict[str, float] = {}
+        var_i = covariance[i][i] if i < len(covariance) and i < len(covariance[i]) else 0.0
+        for j, asset_j in enumerate(assets):
+            var_j = covariance[j][j] if j < len(covariance) and j < len(covariance[j]) else 0.0
+            denom = math.sqrt(max(var_i, 0.0) * max(var_j, 0.0))
+            cov = covariance[i][j] if i < len(covariance) and j < len(covariance[i]) else 0.0
+            row[asset_j] = round(cov / denom, 6) if denom else 0.0
+        out[asset_i] = row
+    return out
 
 
 def _normalize_with_cap(raw: dict[str, float], *, max_weight: float) -> tuple[dict[str, float], float, list[str]]:

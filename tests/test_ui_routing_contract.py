@@ -38,6 +38,21 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn("function progressNode(stage)", self.source)
         self.assertIn("if (!node) return", self.source)
 
+    def test_quant_backtest_workbench_uses_artifact_endpoint(self):
+        match = re.search(r"async function runHomeBacktest\(\) \{(?P<body>.*?)\n\}\n\nasync function loadQuantRunHistory", self.source, re.S)
+        self.assertIsNotNone(match)
+        body = match.group("body")
+        self.assertIn("fetch(API.quantBacktest", body)
+        self.assertIn("renderQuantBacktestResult(data, request)", body)
+        self.assertIn("renderQuantDiagnosticsPanel(data)", self.source)
+        self.assertIn("loadQuantRunHistory(true)", body)
+        self.assertNotIn("fetch(API.backtestRun", body)
+
+    def test_quant_run_history_can_reopen_artifacts(self):
+        self.assertIn("API.quantBacktestBundle", self.source)
+        self.assertIn("function loadQuantBacktestArtifact", self.source)
+        self.assertIn("data-quant-run-id", self.source)
+
 
 if __name__ == "__main__":
     unittest.main()
