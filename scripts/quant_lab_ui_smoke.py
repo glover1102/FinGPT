@@ -86,6 +86,11 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
                 "#backtestFreshnessProfile",
                 "#backtestRequireFresh",
                 "#backtestUseResearchScore",
+                "#backtestUniverseOpen",
+                "#backtestUniverseChips",
+                "#backtestStrategyRegistry",
+                "#backtestBenchmark",
+                "#backtestBenchmarkCompare",
                 "#portfolioBenchmark",
                 "#portfolioCovarianceMethod",
                 "#portfolioShrinkageAlpha",
@@ -94,9 +99,23 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
             ]:
                 page.locator(selector).wait_for(state="visible", timeout=timeout_ms)
                 _mark(checked, selector)
+            page.locator("#symbolPickerModal").wait_for(state="attached", timeout=timeout_ms)
+            _mark(checked, "#symbolPickerModal")
 
             page.locator("#backtestFreshnessProfile").select_option("historical_lab")
             page.locator("#backtestTicker").fill("SPY,QQQ,TLT")
+            page.locator("#backtestBenchmark").fill("SPY")
+            if not page.locator("#backtestBenchmarkCompare").is_checked():
+                page.locator("#backtestBenchmarkCompare").check()
+            page.locator("#backtestUniverseOpen").click()
+            page.locator("#symbolPickerModal").wait_for(state="visible", timeout=timeout_ms)
+            page.locator("#symbolPickerSearch").fill("NVDA")
+            page.locator('[data-symbol-toggle="NVDA"]').click()
+            page.locator("#symbolPickerApply").click()
+            page.locator("#symbolPickerModal").wait_for(state="hidden", timeout=timeout_ms)
+            if "NVDA" not in page.locator("#backtestTicker").input_value():
+                raise AssertionError("symbol picker did not add NVDA to the backtest universe")
+            _mark(checked, "symbol universe picker")
             page.locator("#backtestStrategy").select_option("momentum_ranking")
             page.locator("#backtestShortWindow").fill("21")
             page.locator("#backtestTopN").fill("2")
@@ -112,6 +131,14 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
             _mark(checked, "signal matrix")
 
             page.locator("#quantStrategySurface .decision-status-row").wait_for(state="visible", timeout=timeout_ms)
+            page.wait_for_function(
+                "document.querySelector('#backtestStrategyRegistry')?.options.length > 1",
+                timeout=timeout_ms,
+            )
+            strategy_value = page.locator("#backtestStrategyRegistry option:not([value=''])").first.get_attribute("value")
+            if strategy_value:
+                page.locator("#backtestStrategyRegistry").select_option(strategy_value)
+                _mark(checked, "strategy governance linked selector")
             page.locator("#quantStrategyNewDraft").click()
             page.locator("#quantStrategyDryRun").click()
             page.locator("#quantStrategyResultSurface .decision-status-row").wait_for(state="visible", timeout=timeout_ms)
@@ -119,8 +146,10 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
 
             page.locator("#backtestRun").click()
             page.locator("#backtestSurface .decision-status-row").wait_for(state="visible", timeout=timeout_ms)
+            page.locator("text=수익 곡선 비교").wait_for(state="visible", timeout=timeout_ms)
             page.locator('#backtestSurface [data-action="replay-backtest"]').wait_for(state="visible", timeout=timeout_ms)
             _mark(checked, "backtest")
+            _mark(checked, "backtest benchmark comparison")
 
             page.locator('#backtestSurface [data-action="replay-backtest"]').click()
             page.locator("text=Replay metric comparison").wait_for(state="visible", timeout=timeout_ms)
@@ -130,10 +159,10 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
             page.locator("text=replay reports").wait_for(state="visible", timeout=timeout_ms)
             _mark(checked, "replay report history")
 
-            page.locator('#backtestSurface [data-action="export-backtest"][data-format="parquet"]').first.click()
-            page.locator("text=PARQUET export").wait_for(state="visible", timeout=timeout_ms)
+            page.locator('#backtestSurface [data-action="export-backtest"][data-format="jsonl"]').first.click()
+            page.locator("text=JSONL export").wait_for(state="visible", timeout=timeout_ms)
             page.locator("text=SHA-256").wait_for(state="visible", timeout=timeout_ms)
-            _mark(checked, "artifact parquet export")
+            _mark(checked, "artifact jsonl export")
             _mark(checked, "artifact export integrity")
 
             page.locator('#backtestSurface [data-action="verify-export"]').first.click()

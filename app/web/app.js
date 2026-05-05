@@ -182,6 +182,7 @@ const els = {
   quantLabTab: document.getElementById("quantLabTab"),
   homeHeatmap: document.getElementById("homeHeatmap"),
   homeHeatmapMeta: document.getElementById("homeHeatmapMeta"),
+  homeHeatmapRefresh: document.getElementById("homeHeatmapRefresh"),
   homeMarketList: document.getElementById("homeMarketList"),
   dataHealthRefresh: document.getElementById("dataHealthRefresh"),
   homeDataHealth: document.getElementById("homeDataHealth"),
@@ -189,7 +190,12 @@ const els = {
   assetDetailLoad: document.getElementById("assetDetailLoad"),
   assetDetailSurface: document.getElementById("assetDetailSurface"),
   backtestTicker: document.getElementById("backtestTicker"),
+  backtestUniverseOpen: document.getElementById("backtestUniverseOpen"),
+  backtestUniverseChips: document.getElementById("backtestUniverseChips"),
   backtestStrategy: document.getElementById("backtestStrategy"),
+  backtestStrategyRegistry: document.getElementById("backtestStrategyRegistry"),
+  backtestBenchmark: document.getElementById("backtestBenchmark"),
+  backtestBenchmarkCompare: document.getElementById("backtestBenchmarkCompare"),
   backtestStartDate: document.getElementById("backtestStartDate"),
   backtestEndDate: document.getElementById("backtestEndDate"),
   backtestLookbackDays: document.getElementById("backtestLookbackDays"),
@@ -236,6 +242,16 @@ const els = {
   tvOverviewFallback: document.getElementById("tvOverviewFallback"),
   tvHeatmapWidget: document.getElementById("tvHeatmapWidget"),
   tvHeatmapFallback: document.getElementById("tvHeatmapFallback"),
+  symbolPickerModal: document.getElementById("symbolPickerModal"),
+  symbolPickerClose: document.getElementById("symbolPickerClose"),
+  symbolPickerSearch: document.getElementById("symbolPickerSearch"),
+  symbolPickerTabs: document.getElementById("symbolPickerTabs"),
+  symbolPickerCountry: document.getElementById("symbolPickerCountry"),
+  symbolPickerSector: document.getElementById("symbolPickerSector"),
+  symbolPickerSelected: document.getElementById("symbolPickerSelected"),
+  symbolPickerList: document.getElementById("symbolPickerList"),
+  symbolPickerClear: document.getElementById("symbolPickerClear"),
+  symbolPickerApply: document.getElementById("symbolPickerApply"),
 };
 
 // Shared state
@@ -271,9 +287,41 @@ const state = {
   quantStrategiesLoaded: false,
   quantStrategyItems: [],
   activeStrategyId: "",
+  symbolPickerType: "all",
   quantRunHistoryLoaded: false,
   lastCrossRunExportCleanupPreview: null,
 };
+
+const SYMBOL_CATALOG = [
+  { symbol: "SPY", name: "SPDR S&P 500 ETF Trust", type: "etf", country: "US", sector: "macro", exchange: "NYSE Arca" },
+  { symbol: "QQQ", name: "Invesco QQQ Trust", type: "etf", country: "US", sector: "technology", exchange: "NASDAQ" },
+  { symbol: "DIA", name: "SPDR Dow Jones Industrial Average ETF", type: "etf", country: "US", sector: "macro", exchange: "NYSE Arca" },
+  { symbol: "IWM", name: "iShares Russell 2000 ETF", type: "etf", country: "US", sector: "macro", exchange: "NYSE Arca" },
+  { symbol: "TLT", name: "iShares 20+ Year Treasury Bond ETF", type: "etf", country: "US", sector: "macro", exchange: "NASDAQ" },
+  { symbol: "GLD", name: "SPDR Gold Shares", type: "etf", country: "US", sector: "macro", exchange: "NYSE Arca" },
+  { symbol: "AAPL", name: "Apple Inc.", type: "stock", country: "US", sector: "technology", exchange: "NASDAQ" },
+  { symbol: "MSFT", name: "Microsoft Corporation", type: "stock", country: "US", sector: "technology", exchange: "NASDAQ" },
+  { symbol: "NVDA", name: "NVIDIA Corporation", type: "stock", country: "US", sector: "ai_semis", exchange: "NASDAQ" },
+  { symbol: "TSLA", name: "Tesla, Inc.", type: "stock", country: "US", sector: "consumer", exchange: "NASDAQ" },
+  { symbol: "GOOGL", name: "Alphabet Inc.", type: "stock", country: "US", sector: "technology", exchange: "NASDAQ" },
+  { symbol: "AMZN", name: "Amazon.com, Inc.", type: "stock", country: "US", sector: "consumer", exchange: "NASDAQ" },
+  { symbol: "META", name: "Meta Platforms, Inc.", type: "stock", country: "US", sector: "technology", exchange: "NASDAQ" },
+  { symbol: "AMD", name: "Advanced Micro Devices, Inc.", type: "stock", country: "US", sector: "ai_semis", exchange: "NASDAQ" },
+  { symbol: "AVGO", name: "Broadcom Inc.", type: "stock", country: "US", sector: "ai_semis", exchange: "NASDAQ" },
+  { symbol: "MU", name: "Micron Technology, Inc.", type: "stock", country: "US", sector: "ai_semis", exchange: "NASDAQ" },
+  { symbol: "PLTR", name: "Palantir Technologies Inc. Class A", type: "stock", country: "US", sector: "technology", exchange: "NASDAQ" },
+  { symbol: "CRCL", name: "Circle Internet Group, Inc. Class A", type: "stock", country: "US", sector: "financials", exchange: "NYSE" },
+  { symbol: "IONQ", name: "IonQ, Inc.", type: "stock", country: "US", sector: "technology", exchange: "NYSE" },
+  { symbol: "MSTR", name: "Strategy Inc. Class A", type: "stock", country: "US", sector: "technology", exchange: "NASDAQ" },
+  { symbol: "JPM", name: "JPMorgan Chase & Co.", type: "stock", country: "US", sector: "financials", exchange: "NYSE" },
+  { symbol: "BRK-B", name: "Berkshire Hathaway Inc. Class B", type: "stock", country: "US", sector: "financials", exchange: "NYSE" },
+  { symbol: "005930", name: "Samsung Electronics Co., Ltd.", type: "stock", country: "KR", sector: "technology", exchange: "KRX" },
+  { symbol: "000660", name: "SK hynix Inc.", type: "stock", country: "KR", sector: "ai_semis", exchange: "KRX" },
+  { symbol: "BTC-USD", name: "Bitcoin USD", type: "crypto", country: "GLOBAL", sector: "crypto", exchange: "Crypto" },
+  { symbol: "ETH-USD", name: "Ethereum USD", type: "crypto", country: "GLOBAL", sector: "crypto", exchange: "Crypto" },
+  { symbol: "^GSPC", name: "S&P 500 Index", type: "index", country: "US", sector: "macro", exchange: "INDEX" },
+  { symbol: "^IXIC", name: "NASDAQ Composite", type: "index", country: "US", sector: "technology", exchange: "INDEX" },
+];
 
 // ---------- Utilities ----------
 const fmtDate = (iso) => {
@@ -323,6 +371,107 @@ function parseTickerInput(raw) {
       seen.add(ticker);
       return true;
     });
+}
+
+function setBacktestUniverse(tickers) {
+  const clean = [];
+  const seen = new Set();
+  (tickers || []).map(normalizeTickerToken).forEach((ticker) => {
+    if (!ticker || seen.has(ticker)) return;
+    seen.add(ticker);
+    clean.push(ticker);
+  });
+  if (els.backtestTicker) els.backtestTicker.value = clean.join(",");
+  renderBacktestUniverseChips();
+}
+
+function selectedBacktestUniverse() {
+  return parseTickerInput(els.backtestTicker?.value || "");
+}
+
+function renderBacktestUniverseChips() {
+  if (!els.backtestUniverseChips) return;
+  const tickers = selectedBacktestUniverse();
+  els.backtestUniverseChips.innerHTML = tickers.length
+    ? tickers.map((ticker) => `
+        <button type="button" data-universe-remove="${escapeHtml(ticker)}" title="${escapeHtml(ticker)} 제거">${escapeHtml(ticker)}</button>
+      `).join("")
+    : '<span>선택된 심볼 없음</span>';
+  els.backtestUniverseChips.querySelectorAll("[data-universe-remove]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setBacktestUniverse(selectedBacktestUniverse().filter((ticker) => ticker !== button.dataset.universeRemove));
+    });
+  });
+}
+
+function symbolPickerMatches(item, query, selectedType, country, sector) {
+  if (!item) return false;
+  if (selectedType !== "all" && item.type !== selectedType) return false;
+  if (country !== "all" && item.country !== country) return false;
+  if (sector !== "all" && item.sector !== sector) return false;
+  if (!query) return true;
+  const haystack = `${item.symbol} ${item.name} ${item.exchange} ${item.type} ${item.country}`.toLowerCase();
+  return haystack.includes(query.toLowerCase());
+}
+
+function renderSymbolPicker() {
+  if (!els.symbolPickerList) return;
+  const selected = new Set(selectedBacktestUniverse());
+  const query = els.symbolPickerSearch?.value.trim() || "";
+  const type = state.symbolPickerType || "all";
+  const country = els.symbolPickerCountry?.value || "all";
+  const sector = els.symbolPickerSector?.value || "all";
+  const items = SYMBOL_CATALOG
+    .filter((item) => symbolPickerMatches(item, query, type, country, sector))
+    .sort((a, b) => Number(selected.has(b.symbol)) - Number(selected.has(a.symbol)) || a.symbol.localeCompare(b.symbol));
+
+  if (els.symbolPickerSelected) {
+    els.symbolPickerSelected.innerHTML = selected.size
+      ? Array.from(selected).map((ticker) => `<span>${escapeHtml(ticker)}</span>`).join("")
+      : '<span>백테스트에 사용할 심볼을 선택하세요.</span>';
+  }
+  els.symbolPickerList.innerHTML = items.length
+    ? items.map((item) => {
+        const isSelected = selected.has(item.symbol);
+        return `
+          <button type="button" class="symbol-picker-row${isSelected ? " selected" : ""}" data-symbol-toggle="${escapeHtml(item.symbol)}">
+            <span class="symbol-picker-symbol">${escapeHtml(item.symbol)}</span>
+            <span class="symbol-picker-name">${escapeHtml(item.name)}</span>
+            <span class="symbol-picker-meta">${escapeHtml(item.type)} · ${escapeHtml(item.exchange)}</span>
+          </button>
+        `;
+      }).join("")
+    : '<div class="symbol-picker-empty">검색 조건과 일치하는 심볼이 없습니다.</div>';
+}
+
+function openSymbolPicker() {
+  if (!els.symbolPickerModal) return;
+  state.symbolPickerType = "all";
+  els.symbolPickerTabs?.querySelectorAll("[data-symbol-type]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.symbolType === "all");
+  });
+  if (els.symbolPickerSearch) els.symbolPickerSearch.value = "";
+  if (els.symbolPickerCountry) els.symbolPickerCountry.value = "all";
+  if (els.symbolPickerSector) els.symbolPickerSector.value = "all";
+  els.symbolPickerModal.classList.remove("hidden");
+  renderSymbolPicker();
+  window.setTimeout(() => els.symbolPickerSearch?.focus(), 0);
+}
+
+function closeSymbolPicker() {
+  els.symbolPickerModal?.classList.add("hidden");
+}
+
+function toggleSymbolPickerItem(symbol) {
+  const ticker = normalizeTickerToken(symbol);
+  if (!ticker) return;
+  const selected = selectedBacktestUniverse();
+  if (selected.includes(ticker)) {
+    setBacktestUniverse(selected.filter((item) => item !== ticker));
+  } else {
+    setBacktestUniverse([...selected, ticker]);
+  }
+  renderSymbolPicker();
 }
 
 function inferTickerFromQuestion(question) {
@@ -392,12 +541,20 @@ async function checkHealth() {
 // ---------- Preflight ----------
 const PREFLIGHT_WARNING_ONLY = new Set([
   "HF_TOKEN", "FMP_API_KEY", "FMP_STOCK_NEWS",
-  "SEC_FILINGS", "TRANSCRIPT_PROVIDER", "ALPHA_VANTAGE_NEWS",
+  "SEC_FILINGS", "FRED_MACRO", "TRANSCRIPT_PROVIDER", "ALPHA_VANTAGE_NEWS",
+  "QDRANT_COLLECTION_SCHEMA", "OPENBB_NEWS_RUNTIME", "OPENBB_AGENT_CONTRACT",
 ]);
 
 function classifyCheck(check) {
   if (check.ok) return "ok";
   return PREFLIGHT_WARNING_ONLY.has(check.name) ? "warn" : "err";
+}
+
+function preflightStateLabel(level) {
+  if (level === "ok") return "정상";
+  if (level === "warn") return "경고";
+  if (level === "err") return "치명";
+  return "확인";
 }
 
 function summarizePreflight(report) {
@@ -409,10 +566,10 @@ function summarizePreflight(report) {
     if (state === "err") critical += 1;
     else if (state === "warn") warning += 1;
   }
-  if (!checks.length) return { level: "muted", label: "preflight: unknown" };
-  if (critical > 0) return { level: "err", label: `preflight: ${critical} critical` };
-  if (warning > 0) return { level: "warn", label: `preflight: ${warning} warn` };
-  return { level: "ok", label: "preflight: ok" };
+  if (!checks.length) return { level: "muted", label: "사전 점검: 알 수 없음" };
+  if (critical > 0) return { level: "err", label: `사전 점검: 치명 ${critical}개` };
+  if (warning > 0) return { level: "warn", label: `사전 점검: 경고 ${warning}개` };
+  return { level: "ok", label: "사전 점검: 정상" };
 }
 
 function renderPreflightPill(report) {
@@ -436,13 +593,13 @@ function renderPreflightPanel(report) {
         <div class="check-name">${escapeHtml(c.name)}</div>
         <div class="check-detail">${escapeHtml(c.detail || "")}</div>
       </div>
-      <span class="check-state">${level}</span>
+      <span class="check-state">${preflightStateLabel(level)}</span>
     `;
     els.preflightChecks.appendChild(li);
   });
   const ts = report.checked_at || "—";
-  const overall = report.passed ? "pass" : "fail";
-  els.preflightSubtitle.textContent = `마지막 점검: ${ts} · overall=${overall}`;
+  const overall = report.passed ? "핵심 통과" : "핵심 실패";
+  els.preflightSubtitle.textContent = `마지막 점검: ${ts} · ${overall}`;
 }
 
 async function loadPreflight(force = false) {
@@ -459,7 +616,7 @@ async function loadPreflight(force = false) {
   } catch (e) {
     els.preflightPill.classList.remove("ok", "warn");
     els.preflightPill.classList.add("err");
-    els.preflightLabel.textContent = "preflight: offline";
+    els.preflightLabel.textContent = "사전 점검: 오프라인";
     return null;
   }
 }
@@ -896,7 +1053,7 @@ function setDashboardTab(tab = "market") {
   const homeTitle = document.querySelector(".home-hero h2");
   const homeCopy = document.querySelector(".home-hero p:not(.eyebrow)");
   if (active === "quant") {
-    if (homeTitle) homeTitle.textContent = "Quant Lab";
+    if (homeTitle) homeTitle.textContent = "퀀트 랩";
     if (homeCopy) homeCopy.textContent = "저장 가격 기반 리스크, 전략 검증, 포트폴리오 배분을 같은 조건으로 점검합니다.";
     loadQuantRunHistory(false);
     loadQuantStrategies(false);
@@ -1368,6 +1525,9 @@ const HEATMAP_SECTOR_ZONES = {
   OTHER: { x: 92, y: 61, w: 8, h: 18 },
 };
 
+const HEATMAP_DISPLAY_MAX = 96;
+const HEATMAP_DISPLAY_MIN = 24;
+
 const HEATMAP_CLASSIFICATION = {
   MSFT: { sector: "TECHNOLOGY", industry: "SOFTWARE - INFRASTRUCTURE" },
   ORCL: { sector: "TECHNOLOGY", industry: "SOFTWARE - INFRASTRUCTURE" },
@@ -1434,6 +1594,18 @@ function renderHomeHeatmap(items, meta = {}) {
     }
     return;
   }
+  const displayTarget = Math.max(
+    HEATMAP_DISPLAY_MIN,
+    Math.min(HEATMAP_DISPLAY_MAX, Math.ceil(usable.length / 2)),
+  );
+  const displayItems = usable
+    .slice()
+    .sort((a, b) => {
+      const weightDiff = heatmapWeight(b) - heatmapWeight(a);
+      if (weightDiff) return weightDiff;
+      return Math.abs(Number(b.change_pct || 0)) - Math.abs(Number(a.change_pct || 0));
+    })
+    .slice(0, displayTarget);
   const counts = meta.freshness_counts || {};
   const staleTotal = (counts.stale_prior_close || 0) + (counts.stale || 0) + (counts.unknown || 0);
   const latest = meta.latest_as_of ? fmtHeatmapAsOf(meta.latest_as_of) : "미확인";
@@ -1442,10 +1614,11 @@ function renderHomeHeatmap(items, meta = {}) {
       <span>최신 기준시각: ${escapeHtml(latest)} ET</span>
       <span>${escapeHtml(meta.interval || "5m")} intraday</span>
       <span>${escapeHtml(meta.provider || "yfinance")}</span>
+      <span>표시 ${escapeHtml(_fmtNumber(displayItems.length))}/${escapeHtml(_fmtNumber(usable.length))}</span>
       ${staleTotal ? `<strong class="stale">제외: ${staleTotal}개 stale</strong>` : '<strong>신선도 정상</strong>'}
     `;
   }
-  const profiledItems = usable.map((item) => ({ ...item, heatmap_profile: heatmapProfile(item) }));
+  const profiledItems = displayItems.map((item) => ({ ...item, heatmap_profile: heatmapProfile(item) }));
   const bySector = new Map();
   profiledItems.forEach((item) => {
     const key = item.heatmap_profile.sector || "OTHER";
@@ -1518,6 +1691,10 @@ async function loadDashboardEquityHeatmap(force = false) {
   els.homeHeatmap.classList.remove("finviz-treemap");
   els.homeHeatmap.innerHTML = '<div class="home-news-empty">intraday 히트맵 데이터를 불러오는 중입니다.</div>';
   if (els.homeHeatmapMeta) els.homeHeatmapMeta.textContent = "Yahoo/yfinance 5분봉 최신 가격을 확인하는 중입니다.";
+  if (els.homeHeatmapRefresh) {
+    els.homeHeatmapRefresh.disabled = true;
+    els.homeHeatmapRefresh.textContent = force ? "새로고침 중" : "불러오는 중";
+  }
   try {
     const url = force ? `${API.dashboardEquityHeatmap}?force=true` : API.dashboardEquityHeatmap;
     const res = await fetch(url);
@@ -1529,6 +1706,11 @@ async function loadDashboardEquityHeatmap(force = false) {
   } catch (err) {
     els.homeHeatmap.innerHTML = `<div class="home-news-empty">intraday 히트맵 로드 실패: ${escapeHtml(err.message || err)}</div>`;
     if (els.homeHeatmapMeta) els.homeHeatmapMeta.textContent = "히트맵 데이터 로드 실패";
+  } finally {
+    if (els.homeHeatmapRefresh) {
+      els.homeHeatmapRefresh.disabled = false;
+      els.homeHeatmapRefresh.textContent = "데이터 새로고침";
+    }
   }
 }
 
@@ -1588,6 +1770,16 @@ function decisionStatusClass(status) {
   if (["failed", "fail", "error"].includes(key)) return "fail";
   if (["partial", "warn", "stale", "empty", "credentials_missing", "dependency_missing"].includes(key)) return "warn";
   return "muted";
+}
+
+function decisionStatusLabel(status) {
+  const key = String(status || "").toLowerCase();
+  if (key === "success" || key === "ok") return "정상";
+  if (key === "failed" || key === "fail" || key === "error") return "실패";
+  if (key === "partial") return "부분";
+  if (key === "warn" || key === "stale") return "경고";
+  if (key === "empty") return "비어 있음";
+  return status || "미확인";
 }
 
 function decisionEmpty(message) {
@@ -1680,21 +1872,48 @@ function metricStatusForPct(value, inverse = false) {
   return n >= 0 ? "ok" : "warn";
 }
 
-function renderMiniPriceBars(rows) {
-  const slice = rows.slice(-40);
-  const values = slice.map(priceValue).filter((value) => value !== null);
-  if (values.length < 2) return "";
+function renderMiniPriceLineChart(rows) {
+  const points = rows
+    .slice(-80)
+    .map((row) => ({ date: row.date || "", value: priceValue(row) }))
+    .filter((row) => row.value !== null);
+  if (points.length < 2) return "";
+  const width = 640;
+  const height = 132;
+  const padX = 14;
+  const padY = 16;
+  const values = points.map((point) => point.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
+  const xStep = (width - padX * 2) / Math.max(1, points.length - 1);
+  const xy = points.map((point, index) => {
+    const x = padX + index * xStep;
+    const y = height - padY - ((point.value - min) / range) * (height - padY * 2);
+    return { ...point, x, y };
+  });
+  const linePoints = xy.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+  const areaPoints = `${padX},${height - padY} ${linePoints} ${width - padX},${height - padY}`;
+  const first = points[0];
+  const last = points[points.length - 1];
+  const changePct = first.value ? (last.value / first.value - 1) * 100 : null;
+  const changeClass = Number(changePct) >= 0 ? "ok" : "warn";
   return `
-    <div class="mini-price-bars" aria-label="recent price sparkline">
-      ${slice.map((row) => {
-        const value = priceValue(row);
-        if (value === null) return '<i style="height:2px"></i>';
-        const height = 18 + ((value - min) / range) * 52;
-        return `<i title="${escapeHtml(row.date || "")}: ${escapeHtml(fmtDecimal(value, 2))}" style="height:${height.toFixed(1)}%"></i>`;
-      }).join("")}
+    <div class="mini-price-line" aria-label="최근 종가 선 차트">
+      <div class="mini-price-line-head">
+        <span>${escapeHtml(first.date || "-")} -> ${escapeHtml(last.date || "-")}</span>
+        <strong class="${escapeHtml(changeClass)}">${escapeHtml(changePct === null ? "-" : fmtPct(changePct))}</strong>
+      </div>
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="최근 ${escapeHtml(String(points.length))}개 가격 추이">
+        <polygon points="${areaPoints}" class="mini-price-area"></polygon>
+        <polyline points="${linePoints}" class="mini-price-stroke"></polyline>
+        <circle cx="${xy[xy.length - 1].x.toFixed(1)}" cy="${xy[xy.length - 1].y.toFixed(1)}" r="4" class="mini-price-last"></circle>
+      </svg>
+      <div class="mini-price-line-foot">
+        <span>저점 ${escapeHtml(fmtDecimal(min, 2))}</span>
+        <span>고점 ${escapeHtml(fmtDecimal(max, 2))}</span>
+        <span>최근 ${escapeHtml(fmtDecimal(last.value, 2))}</span>
+      </div>
     </div>
   `;
 }
@@ -1716,22 +1935,21 @@ function renderRecentPriceRows(rows) {
         </tbody>
       </table>
     </div>
-    ${renderQuantExportControls(data.run_id)}
   `;
 }
 
 function renderMetricGrid(metrics, status = "ok") {
   const rows = [
-    ["Total", fmtMetricRatio(metrics.total_return)],
+    ["총수익", fmtMetricRatio(metrics.total_return)],
     ["CAGR", fmtMetricRatio(metrics.cagr)],
-    ["Vol", fmtMetricRatio(metrics.volatility)],
+    ["변동성", fmtMetricRatio(metrics.volatility)],
     ["Sharpe", fmtDecimal(metrics.sharpe, 2)],
     ["Sortino", fmtDecimal(metrics.sortino, 2)],
     ["MDD", fmtMetricRatio(metrics.max_drawdown)],
     ["Calmar", fmtDecimal(metrics.calmar, 2)],
-    ["Turnover", fmtDecimal(metrics.turnover, 2)],
-    ["Exposure", fmtMetricRatio(metrics.exposure)],
-    ["Trades", _fmtNumber(metrics.trade_count)],
+    ["회전율", fmtDecimal(metrics.turnover, 2)],
+    ["노출도", fmtMetricRatio(metrics.exposure)],
+    ["거래 수", _fmtNumber(metrics.trade_count)],
   ];
   return `<div class="decision-metric-grid dense">${rows.map(([label, value]) => decisionMetric(label, value, status)).join("")}</div>`;
 }
@@ -1751,9 +1969,12 @@ function backtestMetricsWithDerivedTotals(metrics, equityCurve) {
 
 function backtestRequestFromControls() {
   const tickers = parseTickerInput(els.backtestTicker?.value || "");
+  const benchmark = normalizeTickerToken(els.backtestBenchmark?.value || "SPY") || "SPY";
   return {
     tickers,
     strategy: els.backtestStrategy?.value || "buy_and_hold",
+    benchmark,
+    compare_benchmark: !!els.backtestBenchmarkCompare?.checked,
     start_date: textInputValue(els.backtestStartDate),
     end_date: textInputValue(els.backtestEndDate),
     lookback_days: numberInputValue(els.backtestLookbackDays, 756, { min: 2, max: 5000 }),
@@ -1775,6 +1996,7 @@ function syncPortfolioFromBacktest() {
   if (els.portfolioEndDate) els.portfolioEndDate.value = request.end_date || "";
   if (els.portfolioLookbackDays) els.portfolioLookbackDays.value = String(request.lookback_days || 756);
   if (els.portfolioBenchmark) els.portfolioBenchmark.value = request.benchmark || (request.tickers || [])[0] || "SPY";
+  if (els.backtestBenchmark) els.backtestBenchmark.value = request.benchmark || "SPY";
 }
 
 async function loadDataHealth(force = false) {
@@ -1792,16 +2014,17 @@ async function loadDataHealth(force = false) {
     const qualityRows = Array.isArray(data.recent_quality_checks) ? data.recent_quality_checks.slice(0, 6) : [];
     const failedCount = Number(summary.failed_provider_rows || 0);
     const staleCount = Number(summary.stale_or_failed_quality_rows || 0);
+    const coveredEmptyCount = Number(summary.covered_empty_provider_rows || 0);
     const runRows = Number(latest.rows_inserted || 0) + Number(latest.rows_updated || 0);
     els.homeDataHealth.innerHTML = `
       <div class="decision-status-row">
-        <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
+        <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(decisionStatusLabel(status))}</span>
         <span>${escapeHtml(latest.finished_at || latest.started_at || "업데이트 실행 이력 없음")} · ${escapeHtml(latest.market || "all")}</span>
       </div>
       <div class="decision-summary ${escapeHtml(decisionStatusClass(status))}">
         ${failedCount || staleCount
           ? `주의 필요: provider 실패 ${failedCount}건, 품질 경고 ${staleCount}건`
-          : `업데이트 ${escapeHtml(latest.status || "ok")} · 이번 실행 반영 ${escapeHtml(_fmtNumber(runRows))} rows`}
+          : `업데이트 ${escapeHtml(latest.status || "ok")} · 이번 실행 반영 ${escapeHtml(_fmtNumber(runRows))}행${coveredEmptyCount ? ` · 적용 불가 empty ${escapeHtml(_fmtNumber(coveredEmptyCount))}건 정상 처리` : ""}`}
       </div>
       <div class="decision-metric-grid">
         ${decisionMetric("가격 행", _fmtNumber(counts.prices_daily), status)}
@@ -1813,8 +2036,8 @@ async function loadDataHealth(force = false) {
       <div class="decision-list">
         ${providerRows.length ? providerRows.map((row) => `
           <div class="decision-list-row">
-            <span>${escapeHtml(row.provider || "provider")}${row.ticker ? ` · ${escapeHtml(row.ticker)}` : ""}</span>
-            <strong class="${escapeHtml(decisionStatusClass(row.status))}">${escapeHtml(row.status || "unknown")}</strong>
+            <span>${escapeHtml(row.provider || "provider")}${row.ticker ? ` · ${escapeHtml(row.ticker)}` : ""}${row.raw_status === "empty" ? " · empty 보강" : ""}</span>
+            <strong class="${escapeHtml(decisionStatusClass(row.status))}">${escapeHtml(decisionStatusLabel(row.status || "unknown"))}</strong>
           </div>
         `).join("") : '<div class="muted small">No provider status rows yet.</div>'}
       </div>
@@ -1870,8 +2093,8 @@ async function loadAssetDetail() {
     const latestDate = latest.date || rows[rows.length - 1]?.date || "-";
     els.assetDetailSurface.innerHTML = `
       <div class="decision-status-row">
-        <span class="decision-badge ok">ok</span>
-        <span>${escapeHtml(String(data.count))} rows · ${escapeHtml(latest.source || "source unknown")} · collected ${escapeHtml(latest.collected_at || "-")}</span>
+        <span class="decision-badge ok">정상</span>
+        <span>${escapeHtml(String(data.count))}행 · ${escapeHtml(latest.source || "소스 미확인")} · 수집 ${escapeHtml(latest.collected_at || "-")}</span>
       </div>
       <div class="decision-metric-grid dense">
         ${decisionMetric("기준일", latestDate, "ok")}
@@ -1883,11 +2106,11 @@ async function loadAssetDetail() {
         ${decisionMetric("60D Vol", vol60 === null ? "-" : fmtPct(vol60), vol60 === null ? "warn" : "ok")}
         ${decisionMetric("MDD", fmtPct(mdd), metricStatusForPct(mdd, true))}
       </div>
-      ${renderMiniPriceBars(rows)}
+      ${renderMiniPriceLineChart(rows)}
       ${renderRecentPriceRows(rows)}
     `;
   } catch (err) {
-    els.assetDetailSurface.innerHTML = decisionEmpty(`Asset detail failed: ${err.message || err}`);
+    els.assetDetailSurface.innerHTML = decisionEmpty(`자산 상세 조회 실패: ${err.message || err}`);
   }
 }
 
@@ -1895,7 +2118,7 @@ function quantFeatureRequestFromControls() {
   const request = backtestRequestFromControls();
   const payload = {
     tickers: request.tickers,
-    benchmark: request.tickers[0] || "SPY",
+    benchmark: request.benchmark || "SPY",
     start_date: request.start_date,
     end_date: request.end_date,
     freshness_profile: els.backtestFreshnessProfile?.value || "research_default",
@@ -1914,17 +2137,44 @@ function quantFeatureRequestFromControls() {
 function quantSignalTemplateFromStrategy(strategy) {
   const clean = String(strategy || "").toLowerCase();
   if (clean === "momentum_ranking") return "momentum_ranking";
+  if (clean === "research_confirmed_momentum") return "research_confirmed_momentum";
   if (clean === "moving_average") return "moving_average_trend";
   if (clean === "volatility_targeting") return "volatility_targeting";
   if (clean === "buy_and_hold") return "buy_and_hold";
   return "momentum_ranking";
 }
 
+const QUANT_TEMPLATE_LABELS = {
+  buy_and_hold: "매수 후 보유",
+  moving_average_trend: "이동평균 추세",
+  volatility_targeting: "변동성 타깃",
+  momentum_ranking: "모멘텀 랭킹",
+  research_confirmed_momentum: "리서치 확인 모멘텀",
+};
+
+const PORTFOLIO_METHOD_LABELS = {
+  equal_weight: "동일 비중",
+  inverse_volatility: "역변동성",
+  risk_parity: "리스크 패리티",
+  minimum_volatility: "최소 변동성",
+  max_sharpe: "최대 샤프",
+  momentum_tilt: "모멘텀 틸트",
+};
+
+function quantTemplateLabel(template) {
+  return QUANT_TEMPLATE_LABELS[String(template || "")] || String(template || "전략");
+}
+
+function portfolioMethodLabel(method) {
+  return PORTFOLIO_METHOD_LABELS[String(method || "")] || String(method || "배분 방식");
+}
+
 function quantBacktestRequestFromControls() {
   const request = backtestRequestFromControls();
   const payload = {
+    strategy_id: state.activeStrategyId || els.backtestStrategyRegistry?.value || null,
     tickers: request.tickers,
-    benchmark: request.tickers[0] || "SPY",
+    benchmark: request.benchmark || "SPY",
     template: quantSignalTemplateFromStrategy(request.strategy),
     start_date: request.start_date,
     end_date: request.end_date,
@@ -1951,7 +2201,7 @@ function formatQuantValue(value) {
 
 function renderDiagnosticsChips(values) {
   const items = Array.isArray(values) ? values : [];
-  if (!items.length) return '<span>no diagnostics</span>';
+  if (!items.length) return '<span>진단 없음</span>';
   return items.slice(0, 6).map((item) => `<span>${escapeHtml(String(item))}</span>`).join("");
 }
 
@@ -1959,10 +2209,10 @@ function renderResearchProvenancePanel(provenance) {
   const entries = Object.entries(provenance || {});
   if (!entries.length) return "";
   return `
-    <div class="decision-section-title">Research confirmation</div>
+    <div class="decision-section-title">리서치 확인</div>
     <div class="decision-table-wrap">
       <table class="decision-table">
-        <thead><tr><th>Ticker</th><th>Status</th><th>Score</th><th>Run</th><th>Evidence</th><th>Expiry</th></tr></thead>
+        <thead><tr><th>종목</th><th>상태</th><th>점수</th><th>실행</th><th>근거</th><th>만료</th></tr></thead>
         <tbody>
           ${entries.map(([ticker, item]) => `
             <tr>
@@ -1985,17 +2235,17 @@ function renderFreshnessAuditPanel(diagnostics) {
   const audits = Object.entries(diagnostics?.asset_freshness || {});
   if (!Object.keys(policy).length && !audits.length) return "";
   return `
-    <div class="decision-section-title">Freshness policy</div>
+    <div class="decision-section-title">데이터 신선도 정책</div>
     <div class="decision-chip-row">
       <span>${escapeHtml(policy.policy_id || "daily_price_policy")}</span>
-      <span>expected ${escapeHtml(diagnostics.expected_latest_date || policy.expected_latest_date || "unknown")}</span>
-      <span>max lag ${escapeHtml(String(policy.max_market_calendar_lag_days ?? "-"))}</span>
-      <span>strict ${policy.require_fresh_prices ? "on" : "off"}</span>
+      <span>기준일 ${escapeHtml(diagnostics.expected_latest_date || policy.expected_latest_date || "알 수 없음")}</span>
+      <span>허용 지연 ${escapeHtml(String(policy.max_market_calendar_lag_days ?? "-"))}일</span>
+      <span>강제 최신 ${policy.require_fresh_prices ? "켜짐" : "꺼짐"}</span>
     </div>
     ${audits.length ? `
       <div class="decision-table-wrap">
         <table class="decision-table">
-          <thead><tr><th>Ticker</th><th>Status</th><th>Latest</th><th>Lag</th><th>Reason</th></tr></thead>
+          <thead><tr><th>종목</th><th>상태</th><th>최근일</th><th>지연</th><th>사유</th></tr></thead>
           <tbody>
             ${audits.map(([ticker, audit]) => `
               <tr>
@@ -2019,10 +2269,10 @@ function renderRebalanceSnapshots(weights) {
     .slice(-5);
   if (!snapshots.length) return "";
   return `
-    <div class="decision-section-title">Rebalance attribution</div>
+    <div class="decision-section-title">리밸런싱 귀속</div>
     <div class="decision-table-wrap">
       <table class="decision-table">
-        <thead><tr><th>Signal</th><th>Execution</th><th>Selected</th><th>Rejected</th><th>Turnover</th></tr></thead>
+        <thead><tr><th>신호일</th><th>체결일</th><th>선정</th><th>제외</th><th>회전율</th></tr></thead>
         <tbody>
           ${snapshots.map((row) => {
             const selected = Array.isArray(row.selected)
@@ -2065,7 +2315,7 @@ function renderCorrelationPreview(matrix) {
   const assets = Object.keys(matrix || {}).slice(0, 5);
   if (!assets.length) return "";
   return `
-    <div class="decision-section-title">Correlation matrix</div>
+    <div class="decision-section-title">상관관계 행렬</div>
     <div class="decision-table-wrap">
       <table class="decision-table">
         <thead><tr><th></th>${assets.map((asset) => `<th>${escapeHtml(asset)}</th>`).join("")}</tr></thead>
@@ -2078,6 +2328,41 @@ function renderCorrelationPreview(matrix) {
           `).join("")}
         </tbody>
       </table>
+    </div>
+  `;
+}
+
+function renderPortfolioDecisionBrief({ entries, portfolioMetrics, diagnostics, riskContributions, method, benchmark, maxWeight }) {
+  const largest = entries[0] || ["-", 0];
+  const largestWeight = Number(largest[1] || 0);
+  const effectivePositions = Number(diagnostics.effective_number_of_positions);
+  const beta = Number(portfolioMetrics.beta_to_benchmark);
+  const trackingError = Number(portfolioMetrics.tracking_error);
+  const infoRatio = Number(portfolioMetrics.information_ratio);
+  const maxRiskEntry = Object.entries(riskContributions || {})
+    .sort((a, b) => Number(b[1]) - Number(a[1]))[0] || ["-", 0];
+  const concentrationStatus = largestWeight > Math.min(0.5, Number(maxWeight || 1) * 0.95) ? "warn" : "ok";
+  const betaStatus = Number.isFinite(beta) && beta > 1.1 ? "warn" : "ok";
+  const teStatus = Number.isFinite(trackingError) && trackingError > 0.12 ? "warn" : "ok";
+  const rebalanceText = entries
+    .slice(0, 4)
+    .map(([ticker, weight]) => `${ticker} ${fmtPct(Number(weight) * 100)}`)
+    .join(" · ");
+  return `
+    <div class="decision-practical-grid portfolio-practical-grid">
+      ${decisionMetric("배분 방식", portfolioMethodLabel(method), "ok")}
+      ${decisionMetric("최대 편입", `${largest[0]} ${fmtPct(largestWeight * 100)}`, concentrationStatus)}
+      ${decisionMetric("효과 포지션", fmtDecimal(effectivePositions, 2), Number.isFinite(effectivePositions) && effectivePositions >= 2 ? "ok" : "warn")}
+      ${decisionMetric("최대 위험 기여", `${maxRiskEntry[0]} ${fmtPct(Number(maxRiskEntry[1]) * 100)}`, Number(maxRiskEntry[1]) > 0.5 ? "warn" : "ok")}
+      ${decisionMetric(`${benchmark} 베타`, fmtDecimal(beta, 2), betaStatus)}
+      ${decisionMetric("추적오차", fmtMetricRatio(trackingError), teStatus)}
+      ${decisionMetric("정보비율", fmtDecimal(infoRatio, 2), Number.isFinite(infoRatio) && infoRatio > 0 ? "ok" : "warn")}
+      ${decisionMetric("리밸런싱 초안", rebalanceText || "-", entries.length ? "ok" : "warn")}
+    </div>
+    <div class="decision-action-list">
+      <div><strong>운용 체크</strong><span>${largestWeight > 0.5 ? "단일 종목 집중도가 높습니다. 최대 비중을 낮추거나 역변동성/리스크 패리티를 비교하세요." : "집중도는 제한 안에 있습니다. 위험 기여도와 상관관계가 같은 방향으로 몰리는지만 확인하세요."}</span></div>
+      <div><strong>벤치마크 체크</strong><span>${Number.isFinite(beta) ? `${benchmark} 대비 베타 ${fmtDecimal(beta, 2)}, 추적오차 ${fmtMetricRatio(trackingError)}입니다. 목표가 절대수익이면 낮은 추적오차보다 MDD와 변동성을 우선 보세요.` : "벤치마크 대비 민감도를 계산할 수 없습니다. 벤치마크 가격 누락 여부를 확인하세요."}</span></div>
+      <div><strong>실행 체크</strong><span>목표 비중은 주문 전 현재 보유 비중, 세금, 최소 주문 단위, 거래비용을 반영해 최종 주문량으로 변환해야 합니다.</span></div>
     </div>
   `;
 }
@@ -2149,25 +2434,106 @@ function renderDecisionLineChart(rows, key, label, status = "ok") {
   `;
 }
 
+function normalizedCurve(rows, key = "equity") {
+  const values = (Array.isArray(rows) ? rows : [])
+    .map((row) => ({ date: row.date || "", value: Number(row[key]) }))
+    .filter((row) => row.date && Number.isFinite(row.value) && row.value > 0);
+  if (values.length < 2) return [];
+  const base = values[0].value || 1;
+  return values.map((row) => ({ date: row.date, value: row.value / base }));
+}
+
+function renderBenchmarkComparisonChart(data, status = "ok") {
+  const strategy = normalizedCurve(data.equity_curve, "equity");
+  const benchmark = normalizedCurve(data.benchmark_curve, "equity");
+  if (strategy.length < 2 || benchmark.length < 2) return "";
+  const width = 640;
+  const height = 112;
+  const pad = 10;
+  const allValues = [...strategy, ...benchmark].map((row) => row.value);
+  const min = Math.min(...allValues);
+  const max = Math.max(...allValues);
+  const span = max - min || 1;
+  const toPoints = (rows) => rows.map((row, idx) => {
+    const x = pad + (idx / Math.max(1, rows.length - 1)) * (width - pad * 2);
+    const y = height - pad - ((row.value - min) / span) * (height - pad * 2);
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(" ");
+  const strategyLatest = strategy[strategy.length - 1]?.value ?? 1;
+  const benchmarkLatest = benchmark[benchmark.length - 1]?.value ?? 1;
+  const benchmarkTicker = data.benchmark_ticker || data.benchmark || "SPY";
+  return `
+    <div class="decision-chart decision-chart-wide">
+      <div class="decision-chart-head">
+        <span>수익 곡선 비교</span>
+        <strong class="${escapeHtml(decisionStatusClass(status))}">전략 ${escapeHtml(fmtPct((strategyLatest - 1) * 100))} · ${escapeHtml(benchmarkTicker)} ${escapeHtml(fmtPct((benchmarkLatest - 1) * 100))}</strong>
+      </div>
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="백테스트 벤치마크 비교">
+        <polyline points="${toPoints(benchmark)}" fill="none" stroke="#60a5fa" stroke-width="2" vector-effect="non-scaling-stroke"></polyline>
+        <polyline points="${toPoints(strategy)}" fill="none" stroke="#34d399" stroke-width="2.4" vector-effect="non-scaling-stroke"></polyline>
+      </svg>
+      <div class="decision-chart-foot">
+        <span><i class="legend-line strategy"></i>전략</span>
+        <span><i class="legend-line benchmark"></i>${escapeHtml(benchmarkTicker)} 벤치마크</span>
+      </div>
+    </div>
+  `;
+}
+
+async function attachBenchmarkComparison(data, request = {}) {
+  if (!data || !request?.compare_benchmark) return data;
+  const benchmarkTicker = normalizeTickerToken(request.benchmark || data.benchmark || "SPY") || "SPY";
+  try {
+    const res = await fetch(API.dataPrices(benchmarkTicker, 5000));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const payload = await res.json();
+    const rows = Array.isArray(payload.items) ? payload.items : [];
+    const start = data.date_range?.start || request.start_date || "";
+    const end = data.date_range?.end || request.end_date || "";
+    const filtered = rows.filter((row) => {
+      const date = row.date || "";
+      if (start && date < start) return false;
+      if (end && date > end) return false;
+      return priceValue(row) !== null;
+    });
+    const base = priceValue(filtered[0]);
+    if (!base) throw new Error(`${benchmarkTicker} price history is unavailable`);
+    return {
+      ...data,
+      benchmark_ticker: benchmarkTicker,
+      benchmark_curve: filtered.map((row) => ({
+        date: row.date || "",
+        equity: Number((priceValue(row) / base).toFixed(8)),
+      })),
+    };
+  } catch (err) {
+    return {
+      ...data,
+      benchmark_ticker: benchmarkTicker,
+      benchmark_warning: `벤치마크 비교 불가: ${err.message || err}`,
+    };
+  }
+}
+
 function renderQuantDiagnosticsPanel(data) {
   const diagnostics = data.diagnostics || {};
   const artifacts = data.artifacts || {};
   const priceCounts = diagnostics.price_counts || {};
   const chips = [
-    `lookahead ${diagnostics.lookahead_safe ? "safe" : "unsafe"}`,
-    `shift ${diagnostics.signal_shift_bars ?? 1}`,
+    `룩어헤드 ${diagnostics.lookahead_safe ? "안전" : "점검 필요"}`,
+    `시그널 지연 ${diagnostics.signal_shift_bars ?? 1}봉`,
     diagnostics.execution_assumption || "next_bar_close",
     diagnostics.data_source || "data_mart",
-    ...Object.entries(priceCounts).map(([ticker, count]) => `${ticker} ${_fmtNumber(count)} rows`),
+    ...Object.entries(priceCounts).map(([ticker, count]) => `${ticker} ${_fmtNumber(count)}행`),
   ];
   return `
-    <div class="decision-section-title">Diagnostics</div>
+    <div class="decision-section-title">진단</div>
     <div class="decision-chip-row">${chips.map((chip) => `<span>${escapeHtml(chip)}</span>`).join("")}</div>
-    ${(diagnostics.missing_assets || []).length ? `<div class="decision-warning">Missing assets: ${escapeHtml(diagnostics.missing_assets.join(", "))}</div>` : ""}
-    ${(diagnostics.stale_assets || []).length ? `<div class="decision-warning">Stale assets: ${escapeHtml(diagnostics.stale_assets.join(", "))}</div>` : ""}
+    ${(diagnostics.missing_assets || []).length ? `<div class="decision-warning">누락 종목: ${escapeHtml(diagnostics.missing_assets.join(", "))}</div>` : ""}
+    ${(diagnostics.stale_assets || []).length ? `<div class="decision-warning">오래된 가격: ${escapeHtml(diagnostics.stale_assets.join(", "))}</div>` : ""}
     ${(diagnostics.warnings || []).length ? `<div class="decision-warning">${escapeHtml(diagnostics.warnings.join(" "))}</div>` : ""}
     ${renderFreshnessAuditPanel(diagnostics)}
-    <div class="decision-section-title">Artifacts</div>
+    <div class="decision-section-title">산출물</div>
     <div class="decision-list compact">
       ${["manifest", "config", "metrics", "diagnostics", "equity_curve", "drawdown_curve", "trades", "signals", "weights", "replay_report"].map((name) => `
         <div class="decision-list-row">
@@ -2186,10 +2552,10 @@ function renderQuantBacktestTables(data) {
   const weights = Array.isArray(data.weights) ? data.weights : [];
   return `
     ${signals.length ? `
-      <div class="decision-section-title">Latest signals</div>
+      <div class="decision-section-title">최근 시그널</div>
       <div class="decision-table-wrap">
         <table class="decision-table">
-          <thead><tr><th>Ticker</th><th>Date</th><th>Score</th><th>Signal</th><th>Exec date</th></tr></thead>
+          <thead><tr><th>종목</th><th>일자</th><th>점수</th><th>신호</th><th>체결일</th></tr></thead>
           <tbody>
             ${signals.map((row) => `
               <tr>
@@ -2205,10 +2571,10 @@ function renderQuantBacktestTables(data) {
       </div>
     ` : ""}
     ${trades.length ? `
-      <div class="decision-section-title">Recent trades</div>
+      <div class="decision-section-title">최근 거래</div>
       <div class="decision-table-wrap">
         <table class="decision-table">
-          <thead><tr><th>Date</th><th>Ticker</th><th>Action</th><th>Weight</th><th>Cost</th></tr></thead>
+          <thead><tr><th>일자</th><th>종목</th><th>액션</th><th>비중</th><th>비용</th></tr></thead>
           <tbody>
             ${trades.map((row) => {
               const assetText = row.ticker || row.asset || (Array.isArray(row.selected) ? row.selected.join(",") : "") || "portfolio";
@@ -2236,24 +2602,29 @@ function renderQuantBacktestResult(data, request = {}) {
   if (!els.backtestSurface) return;
   const metrics = backtestMetricsWithDerivedTotals(data.metrics || {}, data.equity_curve);
   const status = data.status || "unknown";
+  const benchmarkWarning = data.benchmark_warning
+    ? `<div class="decision-warning">${escapeHtml(data.benchmark_warning)}</div>`
+    : "";
   els.backtestSurface.innerHTML = `
     <div class="decision-status-row">
-      <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(decisionStatusLabel(status))}</span>
       <span>${escapeHtml(data.run_id || "run pending")} · ${escapeHtml(data.date_range?.start || request.start_date || "-")} -> ${escapeHtml(data.date_range?.end || request.end_date || "-")}</span>
     </div>
     ${renderMetricGrid(metrics, status)}
     <div class="decision-chart-grid">
-      ${renderDecisionLineChart(data.equity_curve, "equity", "Equity curve", status)}
-      ${renderDecisionLineChart(data.drawdown_curve, "drawdown", "Drawdown", Number(metrics.max_drawdown || 0) < -0.2 ? "warn" : status)}
+      ${renderDecisionLineChart(data.equity_curve, "equity", "수익 곡선", status)}
+      ${renderDecisionLineChart(data.drawdown_curve, "drawdown", "MDD", Number(metrics.max_drawdown || 0) < -0.2 ? "warn" : status)}
+      ${renderBenchmarkComparisonChart(data, status)}
     </div>
+    ${benchmarkWarning}
     <div class="decision-assumption">
-      template ${escapeHtml(data.template || request.template || "unknown")} · benchmark ${escapeHtml(data.benchmark || request.benchmark || "-")} · cost ${escapeHtml(String(request.transaction_cost_bps ?? data.config?.transaction_cost_bps ?? "-"))}bps · slippage ${escapeHtml(String(request.slippage_bps ?? data.config?.slippage_bps ?? "-"))}bps
+      전략 ${escapeHtml(request.strategy_id || data.config?.strategy_id || state.activeStrategyId || "임시")} · 템플릿 ${escapeHtml(quantTemplateLabel(data.template || request.template || "unknown"))} · 벤치마크 ${escapeHtml(data.benchmark_ticker || data.benchmark || request.benchmark || "-")} · 비용 ${escapeHtml(String(request.transaction_cost_bps ?? data.config?.transaction_cost_bps ?? "-"))}bps · 슬리피지 ${escapeHtml(String(request.slippage_bps ?? data.config?.slippage_bps ?? "-"))}bps
     </div>
     ${renderQuantBacktestTables(data)}
     ${renderQuantDiagnosticsPanel(data)}
     <button type="button" class="linkish decision-inline-action" data-action="sync-backtest-portfolio">이 조건을 포트폴리오에 적용</button>
-    ${data.run_id ? `<button type="button" class="linkish decision-inline-action" data-action="replay-backtest" data-run-id="${escapeHtml(data.run_id)}">replay compare</button>` : ""}
-    ${data.run_id ? `<button type="button" class="linkish decision-inline-action" data-action="replay-reports" data-run-id="${escapeHtml(data.run_id)}">replay history</button>` : ""}
+    ${data.run_id ? `<button type="button" class="linkish decision-inline-action" data-action="replay-backtest" data-run-id="${escapeHtml(data.run_id)}">재현 비교</button>` : ""}
+    ${data.run_id ? `<button type="button" class="linkish decision-inline-action" data-action="replay-reports" data-run-id="${escapeHtml(data.run_id)}">재현 이력</button>` : ""}
     ${status === "success" ? "" : decisionEmpty(data.reason || "저장 가격이 부족해 일부 결과만 표시됩니다.")}
   `;
 }
@@ -2474,7 +2845,7 @@ function renderQuantReplayComparison(data) {
   const status = data.status || "unknown";
   els.backtestSurface.innerHTML = `
     <div class="decision-status-row">
-      <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(decisionStatusLabel(status))}</span>
       <span>${escapeHtml(data.run_id || "")} replayed as ${escapeHtml(data.replay_run_id || "")}</span>
     </div>
     <div class="decision-chip-row">
@@ -2656,10 +3027,10 @@ async function runQuantFeaturePreview() {
   if (!els.quantFeatureSurface) return;
   const request = quantFeatureRequestFromControls();
   if (!request.tickers.length) {
-    els.quantFeatureSurface.innerHTML = decisionEmpty("Enter at least one ticker in the Quant Lab universe.");
+    els.quantFeatureSurface.innerHTML = decisionEmpty("퀀트 랩 유니버스에 종목을 하나 이상 입력하세요.");
     return;
   }
-  els.quantFeatureSurface.innerHTML = decisionEmpty(`${request.tickers.join(", ")} factors are loading.`);
+  els.quantFeatureSurface.innerHTML = decisionEmpty(`${request.tickers.join(", ")} 팩터를 계산하는 중입니다.`);
   try {
     const res = await fetch(API.quantFeatures, {
       method: "POST",
@@ -2674,20 +3045,20 @@ async function runQuantFeaturePreview() {
     const status = data.status || "unknown";
     els.quantFeatureSurface.innerHTML = `
       <div class="decision-status-row">
-        <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
-        <span>${escapeHtml(data.as_of || "unknown")} · ${escapeHtml(request.benchmark)} benchmark · data_mart</span>
+        <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(decisionStatusLabel(status))}</span>
+        <span>${escapeHtml(data.as_of || "알 수 없음")} · ${escapeHtml(request.benchmark)} 벤치마크 · 데이터 마트</span>
       </div>
       <div class="decision-table-wrap">
         <table class="decision-table">
-          <thead><tr><th>Ticker</th><th>As of</th><th>Freshness</th><th>Momentum</th><th>Vol</th><th>Drawdown</th><th>Trend</th><th>Rel strength</th></tr></thead>
+          <thead><tr><th>종목</th><th>기준일</th><th>신선도</th><th>모멘텀</th><th>변동성</th><th>낙폭</th><th>추세</th><th>상대강도</th></tr></thead>
           <tbody>
             ${rows.map((row) => {
               const features = row.features || {};
               return `
                 <tr>
                   <td>${escapeHtml(row.ticker || "")}</td>
-                  <td>${escapeHtml(row.as_of || "unknown")}</td>
-                  <td><span class="table-status ${escapeHtml(decisionStatusClass(row.freshness_status))}">${escapeHtml(row.freshness_status || "unknown")}</span></td>
+                  <td>${escapeHtml(row.as_of || "알 수 없음")}</td>
+                  <td><span class="table-status ${escapeHtml(decisionStatusClass(row.freshness_status))}">${escapeHtml(row.freshness_status || "알 수 없음")}</span></td>
                   <td>${escapeHtml(formatQuantValue(features.momentum_63d))}</td>
                   <td>${escapeHtml(formatQuantValue(features.realized_vol_21d))}</td>
                   <td>${escapeHtml(formatQuantValue(features.drawdown_current))}</td>
@@ -2700,15 +3071,49 @@ async function runQuantFeaturePreview() {
         </table>
       </div>
       <div class="decision-chip-row">
-        ${Object.entries(diagnostics.price_counts || {}).map(([ticker, count]) => `<span>${escapeHtml(ticker)} ${escapeHtml(_fmtNumber(count))} rows</span>`).join("")}
+        ${Object.entries(diagnostics.price_counts || {}).map(([ticker, count]) => `<span>${escapeHtml(ticker)} ${escapeHtml(_fmtNumber(count))}행</span>`).join("")}
       </div>
       ${renderFreshnessAuditPanel(diagnostics)}
-      ${(diagnostics.missing_assets || []).length ? `<div class="decision-warning">Missing: ${escapeHtml(diagnostics.missing_assets.join(", "))}</div>` : ""}
-      ${(diagnostics.stale_assets || []).length ? `<div class="decision-warning">Stale: ${escapeHtml(diagnostics.stale_assets.join(", "))}</div>` : ""}
+      ${(diagnostics.missing_assets || []).length ? `<div class="decision-warning">누락 종목: ${escapeHtml(diagnostics.missing_assets.join(", "))}</div>` : ""}
+      ${(diagnostics.stale_assets || []).length ? `<div class="decision-warning">오래된 가격: ${escapeHtml(diagnostics.stale_assets.join(", "))}</div>` : ""}
     `;
   } catch (err) {
-    els.quantFeatureSurface.innerHTML = decisionEmpty(`Feature preview failed: ${err.message || err}`);
+    els.quantFeatureSurface.innerHTML = decisionEmpty(`팩터 미리보기 실패: ${err.message || err}`);
   }
+}
+
+function renderSignalDecisionBrief(rows, diagnostics, template) {
+  const signals = rows.map((row) => Number(row.signal || 0));
+  const active = signals.filter((value) => value > 0).length;
+  const neutral = signals.filter((value) => value === 0).length;
+  const negative = Math.max(0, rows.length - active - neutral);
+  const scoreValues = rows.map((row) => Number(row.final_score)).filter(Number.isFinite);
+  const avgScore = scoreValues.length
+    ? scoreValues.reduce((sum, value) => sum + value, 0) / scoreValues.length
+    : null;
+  const execution = diagnostics.execution_assumption || "next_bar_close";
+  const shift = diagnostics.signal_shift_bars ?? 1;
+  const selected = rows
+    .filter((row) => Number(row.signal || 0) > 0)
+    .map((row) => row.ticker)
+    .filter(Boolean)
+    .join(", ");
+  const decisionTone = active ? "ok" : "warn";
+  return `
+    <div class="decision-practical-grid signal-practical-grid">
+      ${decisionMetric("전략 템플릿", quantTemplateLabel(template), "ok")}
+      ${decisionMetric("매수 신호", `${active}/${rows.length}`, decisionTone)}
+      ${decisionMetric("중립/제외", `${neutral + negative}`, neutral + negative ? "warn" : "ok")}
+      ${decisionMetric("평균 점수", fmtDecimal(avgScore, 3), avgScore === null ? "warn" : "ok")}
+      ${decisionMetric("체결 가정", execution === "next_bar_close" ? "다음 봉 종가" : execution, "ok")}
+      ${decisionMetric("시그널 지연", `${shift}봉`, Number(shift) >= 1 ? "ok" : "fail")}
+    </div>
+    <div class="decision-summary ${decisionTone}">
+      ${active
+        ? `현재 조건에서는 ${escapeHtml(selected || "선정 종목")}에만 포지션을 부여합니다. 신호일과 체결일을 분리해 look-ahead를 피하고, 다음 백테스트/포트폴리오 입력으로 바로 검증하세요.`
+        : "현재 조건에서는 매수 후보가 없습니다. 모멘텀 기간, Top N, 리서치 점수 사용 여부, 데이터 신선도 조건을 완화해 재검토하세요."}
+    </div>
+  `;
 }
 
 async function runQuantSignalPreview() {
@@ -2716,10 +3121,10 @@ async function runQuantSignalPreview() {
   const base = quantFeatureRequestFromControls();
   const template = quantSignalTemplateFromStrategy(els.backtestStrategy?.value);
   if (!base.tickers.length) {
-    els.quantSignalSurface.innerHTML = decisionEmpty("Enter at least one ticker in the Quant Lab universe.");
+    els.quantSignalSurface.innerHTML = decisionEmpty("퀀트 랩 유니버스에 종목을 하나 이상 입력하세요.");
     return;
   }
-  els.quantSignalSurface.innerHTML = decisionEmpty(`${base.tickers.join(", ")} signals are loading.`);
+  els.quantSignalSurface.innerHTML = decisionEmpty(`${base.tickers.join(", ")} 시그널을 생성하는 중입니다.`);
   try {
     const res = await fetch(API.quantSignals, {
       method: "POST",
@@ -2734,20 +3139,21 @@ async function runQuantSignalPreview() {
     const status = data.status || "unknown";
     els.quantSignalSurface.innerHTML = `
       <div class="decision-status-row">
-        <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
-        <span>${escapeHtml(template)} · ${escapeHtml(diagnostics.execution_assumption || "next_bar_close")} · shift ${escapeHtml(String(diagnostics.signal_shift_bars || 1))}</span>
+        <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(decisionStatusLabel(status))}</span>
+        <span>${escapeHtml(quantTemplateLabel(template))} · ${escapeHtml(diagnostics.execution_assumption || "next_bar_close")} · ${escapeHtml(String(diagnostics.signal_shift_bars || 1))}봉 지연</span>
       </div>
+      ${renderSignalDecisionBrief(rows, diagnostics, template)}
       <div class="decision-table-wrap">
         <table class="decision-table">
-          <thead><tr><th>Ticker</th><th>Signal date</th><th>Score</th><th>Signal</th><th>Execution</th><th>Diagnostics</th></tr></thead>
+          <thead><tr><th>종목</th><th>신호일</th><th>점수</th><th>신호</th><th>체결일</th><th>진단</th></tr></thead>
           <tbody>
             ${rows.map((row) => `
               <tr>
                 <td>${escapeHtml(row.ticker || "")}</td>
-                <td>${escapeHtml(row.date || "unknown")}</td>
+                <td>${escapeHtml(row.date || "알 수 없음")}</td>
                 <td>${escapeHtml(fmtDecimal(row.final_score, 3))}</td>
                 <td><span class="table-status ${Number(row.signal || 0) > 0 ? "ok" : "warn"}">${escapeHtml(fmtDecimal(row.signal, 2))}</span></td>
-                <td>${escapeHtml(row.execution_date || "next available bar")}</td>
+                <td>${escapeHtml(row.execution_date || "다음 가용 봉")}</td>
                 <td><div class="decision-chip-row compact">${renderDiagnosticsChips(row.diagnostics)}</div></td>
               </tr>
             `).join("")}
@@ -2759,7 +3165,7 @@ async function runQuantSignalPreview() {
       ${(data.warnings || []).length ? `<div class="decision-warning">${escapeHtml(data.warnings.join(" "))}</div>` : ""}
     `;
   } catch (err) {
-    els.quantSignalSurface.innerHTML = decisionEmpty(`Signal generation failed: ${err.message || err}`);
+    els.quantSignalSurface.innerHTML = decisionEmpty(`시그널 생성 실패: ${err.message || err}`);
   }
 }
 
@@ -2806,9 +3212,10 @@ function strategyPayloadFromEditor() {
 function applyStrategyToControls(strategy) {
   if (!strategy || typeof strategy !== "object") return;
   const universe = Array.isArray(strategy.universe) ? strategy.universe : [];
-  if (universe.length && els.backtestTicker) els.backtestTicker.value = universe.join(",");
+  if (universe.length && els.backtestTicker) setBacktestUniverse(universe);
   if (universe.length && els.portfolioTickers) els.portfolioTickers.value = universe.join(",");
   if (strategy.benchmark && els.portfolioBenchmark) els.portfolioBenchmark.value = strategy.benchmark;
+  if (strategy.benchmark && els.backtestBenchmark) els.backtestBenchmark.value = strategy.benchmark;
   const portfolio = strategy.portfolio || {};
   if (portfolio.method && els.portfolioMethod) els.portfolioMethod.value = portfolio.method;
   if (portfolio.max_weight && els.portfolioMaxWeight) els.portfolioMaxWeight.value = String(portfolio.max_weight);
@@ -2833,26 +3240,55 @@ function applyStrategyToControls(strategy) {
     els.backtestUseResearchScore.checked = !!features.research_score;
   }
   if (els.backtestStrategy) {
-    els.backtestStrategy.value = signal.type === "rank_top_n" ? "momentum_ranking" : "moving_average";
+    const hasResearchScore = !!(strategy.features || {}).research_score;
+    els.backtestStrategy.value = hasResearchScore
+      ? "research_confirmed_momentum"
+      : signal.type === "rank_top_n"
+        ? "momentum_ranking"
+        : "moving_average";
+  }
+  state.activeStrategyId = String(strategy.strategy_id || "");
+  if (els.backtestStrategyRegistry) {
+    populateBacktestStrategyRegistry();
+    els.backtestStrategyRegistry.value = state.activeStrategyId;
+  }
+}
+
+function populateBacktestStrategyRegistry() {
+  if (!els.backtestStrategyRegistry) return;
+  const items = Array.isArray(state.quantStrategyItems) ? state.quantStrategyItems : [];
+  const selected = state.activeStrategyId || els.backtestStrategyRegistry.value || "";
+  els.backtestStrategyRegistry.innerHTML = `
+    <option value="">전략 거버넌스 선택</option>
+    ${items.map((item) => {
+      const id = item.strategy_id || "";
+      const label = item.name || id;
+      const source = item.source || "default";
+      return `<option value="${escapeHtml(id)}">${escapeHtml(label)} · ${escapeHtml(source)}</option>`;
+    }).join("")}
+  `;
+  if (selected && items.some((item) => item.strategy_id === selected)) {
+    els.backtestStrategyRegistry.value = selected;
   }
 }
 
 function renderQuantStrategyList(extraHtml = "") {
   if (!els.quantStrategySurface) return;
   const items = Array.isArray(state.quantStrategyItems) ? state.quantStrategyItems : [];
+  populateBacktestStrategyRegistry();
   if (!items.length) {
-    els.quantStrategySurface.innerHTML = decisionEmpty("No strategy definitions are available yet.");
+    els.quantStrategySurface.innerHTML = decisionEmpty("아직 사용할 수 있는 전략 정의가 없습니다.");
     return;
   }
   els.quantStrategySurface.innerHTML = `
     <div class="decision-status-row">
-      <span class="decision-badge ok">success</span>
-      <span>${escapeHtml(_fmtNumber(items.length))} strategies · next-bar execution required</span>
+      <span class="decision-badge ok">성공</span>
+      <span>${escapeHtml(_fmtNumber(items.length))}개 전략 · 다음 봉 체결 필수</span>
     </div>
     ${extraHtml}
     <div class="decision-table-wrap">
       <table class="decision-table">
-        <thead><tr><th>Strategy</th><th>Source</th><th>Version</th><th>Trade at</th><th>Features</th><th>Actions</th></tr></thead>
+        <thead><tr><th>전략</th><th>출처</th><th>버전</th><th>체결</th><th>팩터</th><th>작업</th></tr></thead>
         <tbody>
           ${items.map((item) => {
             const features = item.features && typeof item.features === "object" ? Object.keys(item.features) : [];
@@ -2867,9 +3303,9 @@ function renderQuantStrategyList(extraHtml = "") {
                 <td><span class="table-status ${execution.trade_at === "next_bar_close" ? "ok" : "fail"}">${escapeHtml(execution.trade_at || "-")}</span></td>
                 <td>${escapeHtml(features.join(", ") || "-")}</td>
                 <td>
-                  <button type="button" class="linkish" data-strategy-load="${escapeHtml(strategyId)}">load</button>
-                  <button type="button" class="linkish" data-strategy-dry="${escapeHtml(strategyId)}">dry-run</button>
-                  ${source === "user" ? `<button type="button" class="linkish" data-strategy-delete="${escapeHtml(strategyId)}">delete</button>` : ""}
+                  <button type="button" class="linkish" data-strategy-load="${escapeHtml(strategyId)}">불러오기</button>
+                  <button type="button" class="linkish" data-strategy-dry="${escapeHtml(strategyId)}">검증</button>
+                  ${source === "user" ? `<button type="button" class="linkish" data-strategy-delete="${escapeHtml(strategyId)}">삭제</button>` : ""}
                 </td>
               </tr>
             `;
@@ -2903,7 +3339,7 @@ function renderQuantStrategyResult(data) {
   const strategy = data.strategy || {};
   els.quantStrategyResultSurface.innerHTML = `
     <div class="decision-status-row">
-      <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(decisionStatusLabel(status))}</span>
       <span>${escapeHtml(strategy.strategy_id || state.activeStrategyId || "strategy")} · valid ${data.valid ? "yes" : "no"}</span>
     </div>
     <div class="decision-chip-row">
@@ -2953,6 +3389,7 @@ async function loadQuantStrategyDetail(strategyId) {
   if (!strategy) return;
   setStrategyEditor(strategy);
   applyStrategyToControls(strategy);
+  populateBacktestStrategyRegistry();
   showQuantStrategyMessage(`${strategy.strategy_id || "strategy"} loaded into the workbench controls.`, "success");
 }
 
@@ -3034,7 +3471,7 @@ function showQuantStrategyMessage(message, status = "success") {
   if (!els.quantStrategyResultSurface) return;
   els.quantStrategyResultSurface.innerHTML = `
     <div class="decision-status-row">
-      <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(decisionStatusLabel(status))}</span>
       <span>${escapeHtml(message)}</span>
     </div>
   `;
@@ -3059,9 +3496,10 @@ async function runHomeBacktest() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-    state.lastBacktestResult = data;
+    const enriched = await attachBenchmarkComparison(data, { ...request, ...legacyRequest });
+    state.lastBacktestResult = enriched;
     syncPortfolioFromBacktest();
-    renderQuantBacktestResult(data, request);
+    renderQuantBacktestResult(enriched, { ...request, ...legacyRequest });
     loadQuantRunHistory(true);
   } catch (err) {
     els.backtestSurface.innerHTML = decisionEmpty(`Backtest failed: ${err.message || err}`);
@@ -3103,10 +3541,16 @@ async function loadQuantBacktestArtifact(runId) {
     const bundle = await res.json();
     if (!res.ok) throw new Error(bundle.detail || `HTTP ${res.status}`);
     const data = normalizeQuantBundle(bundle);
-    state.lastBacktestResult = data;
-    state.lastQuantBacktestRequest = data.config || null;
-    state.lastBacktestRequest = data.config || null;
-    renderQuantBacktestResult(data, data.config || {});
+    const artifactRequest = {
+      ...(data.config || {}),
+      benchmark: data.config?.benchmark || els.backtestBenchmark?.value || "SPY",
+      compare_benchmark: !!els.backtestBenchmarkCompare?.checked,
+    };
+    const enriched = await attachBenchmarkComparison(data, artifactRequest);
+    state.lastBacktestResult = enriched;
+    state.lastQuantBacktestRequest = artifactRequest;
+    state.lastBacktestRequest = artifactRequest;
+    renderQuantBacktestResult(enriched, artifactRequest);
     syncPortfolioFromBacktest();
   } catch (err) {
     els.backtestSurface.innerHTML = decisionEmpty(`Artifact load failed: ${err.message || err}`);
@@ -3283,7 +3727,7 @@ async function loadQuantExportStorageReport() {
 
 async function loadQuantRunHistory(force = false) {
   if (!els.quantRunHistorySurface || (state.quantRunHistoryLoaded && !force)) return;
-  els.quantRunHistorySurface.innerHTML = decisionEmpty("Loading Quant Lab artifact history.");
+  els.quantRunHistorySurface.innerHTML = decisionEmpty("퀀트 랩 산출물 이력을 불러오는 중입니다.");
   try {
     const res = await fetch(`${API.quantBacktests}?limit=8`);
     const data = await res.json();
@@ -3291,7 +3735,7 @@ async function loadQuantRunHistory(force = false) {
     const items = Array.isArray(data.items) ? data.items : [];
     state.quantRunHistoryLoaded = true;
     if (!items.length) {
-      els.quantRunHistorySurface.innerHTML = decisionEmpty("No Quant Lab backtest artifacts have been saved yet.");
+      els.quantRunHistorySurface.innerHTML = decisionEmpty("아직 저장된 퀀트 랩 백테스트 산출물이 없습니다.");
       return;
     }
     els.quantRunHistorySurface.innerHTML = `
@@ -3344,7 +3788,7 @@ async function loadQuantRunHistory(force = false) {
       button.addEventListener("click", () => exportQuantBacktestArtifact(button.dataset.quantExportId || "", button.dataset.format || "jsonl"));
     });
   } catch (err) {
-    els.quantRunHistorySurface.innerHTML = decisionEmpty(`Run history failed: ${err.message || err}`);
+    els.quantRunHistorySurface.innerHTML = decisionEmpty(`실행 이력 로드 실패: ${err.message || err}`);
   }
 }
 
@@ -3391,12 +3835,21 @@ async function runPortfolioOptimize() {
     const correlationMatrix = data.correlation_matrix || {};
     els.portfolioSurface.innerHTML = `
       <div class="decision-status-row">
-        <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(status)}</span>
-        <span>${escapeHtml(data.method || "")} · ${escapeHtml(data.benchmark || benchmark)} benchmark · sum ${escapeHtml(String(data.sum_weights ?? "-"))}</span>
+        <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(decisionStatusLabel(status))}</span>
+        <span>${escapeHtml(portfolioMethodLabel(data.method || ""))} · ${escapeHtml(data.benchmark || benchmark)} 벤치마크 · 비중 합계 ${escapeHtml(String(data.sum_weights ?? "-"))}</span>
       </div>
       <div class="decision-summary ok">
-        ${escapeHtml(tickers.join(", "))} · ${escapeHtml(startDate || "lookback")} -> ${escapeHtml(endDate || "latest")} · ${escapeHtml(String(lookbackDays))}일 가격 기준
+        ${escapeHtml(tickers.join(", "))} · ${escapeHtml(startDate || "조회 기간")} -> ${escapeHtml(endDate || "최근")} · ${escapeHtml(String(lookbackDays))}일 가격 기준
       </div>
+      ${renderPortfolioDecisionBrief({
+        entries,
+        portfolioMetrics,
+        diagnostics,
+        riskContributions,
+        method: data.method || els.portfolioMethod?.value,
+        benchmark: data.benchmark || benchmark,
+        maxWeight,
+      })}
       <div class="portfolio-weight-list">
         ${entries.length ? entries.map(([ticker, weight]) => `
           <div class="portfolio-weight-row">
@@ -3417,7 +3870,7 @@ async function runPortfolioOptimize() {
         ${decisionMetric("Active return", fmtMetricRatio(portfolioMetrics.active_annual_return), status)}
         ${decisionMetric("Tracking error", fmtMetricRatio(portfolioMetrics.tracking_error), status)}
         ${decisionMetric("Info ratio", fmtDecimal(portfolioMetrics.information_ratio, 2), status)}
-        ${decisionMetric("Beta", fmtDecimal(portfolioMetrics.beta_to_benchmark, 2), status)}
+        ${decisionMetric("베타", fmtDecimal(portfolioMetrics.beta_to_benchmark, 2), status)}
         ${decisionMetric("공분산", `${diagnostics.covariance_method || "sample"}${diagnostics.covariance_shrinkage_used ? ` ${fmtDecimal(diagnostics.shrinkage_alpha, 2)}` : ""}`, diagnostics.uses_covariance ? "ok" : "warn")}
         ${decisionMetric("효과 포지션", fmtDecimal(diagnostics.effective_number_of_positions, 2), status)}
       </div>
@@ -3429,14 +3882,14 @@ async function runPortfolioOptimize() {
       ${Object.keys(returnCounts).length ? `
         <div class="decision-section-title">데이터 사용량</div>
         <div class="decision-chip-row">
-          ${Object.entries(returnCounts).map(([ticker, count]) => `<span>${escapeHtml(ticker)} ${escapeHtml(_fmtNumber(count))} returns</span>`).join("")}
+          ${Object.entries(returnCounts).map(([ticker, count]) => `<span>${escapeHtml(ticker)} ${escapeHtml(_fmtNumber(count))}개 수익률</span>`).join("")}
         </div>
       ` : ""}
-      ${(data.missing_assets || []).length ? `<div class="decision-warning">Missing data: ${escapeHtml(data.missing_assets.join(", "))}</div>` : ""}
+      ${(data.missing_assets || []).length ? `<div class="decision-warning">누락 데이터: ${escapeHtml(data.missing_assets.join(", "))}</div>` : ""}
       ${(data.warnings || []).length ? `<div class="decision-warning">${escapeHtml(data.warnings.join(" "))}</div>` : ""}
     `;
   } catch (err) {
-    els.portfolioSurface.innerHTML = decisionEmpty(`Portfolio optimization failed: ${err.message || err}`);
+    els.portfolioSurface.innerHTML = decisionEmpty(`포트폴리오 최적화 실패: ${err.message || err}`);
   }
 }
 
@@ -6258,6 +6711,7 @@ function bindInputs() {
     loadDataHealth(true);
     initializeTradingViewDashboard(true);
   });
+  if (els.homeHeatmapRefresh) els.homeHeatmapRefresh.addEventListener("click", () => loadDashboardEquityHeatmap(true));
   if (els.dataHealthRefresh) els.dataHealthRefresh.addEventListener("click", () => loadDataHealth(true));
   if (els.assetDetailLoad) els.assetDetailLoad.addEventListener("click", loadAssetDetail);
   if (els.quantFeatureRun) els.quantFeatureRun.addEventListener("click", runQuantFeaturePreview);
@@ -6265,7 +6719,7 @@ function bindInputs() {
   if (els.quantStrategyRefresh) els.quantStrategyRefresh.addEventListener("click", () => loadQuantStrategies(true));
   if (els.quantStrategyNewDraft) els.quantStrategyNewDraft.addEventListener("click", () => {
     setStrategyEditor(quantStrategyDraftFromControls());
-    showQuantStrategyMessage("Draft strategy initialized from current Quant Lab controls.", "success");
+    showQuantStrategyMessage("현재 퀀트 랩 조건으로 전략 초안을 만들었습니다.", "success");
   });
   if (els.quantStrategyDryRun) els.quantStrategyDryRun.addEventListener("click", () => runQuantStrategyDryRun());
   if (els.quantStrategySave) els.quantStrategySave.addEventListener("click", saveQuantStrategy);
@@ -6286,6 +6740,59 @@ function bindInputs() {
     });
   }
   if (els.backtestRun) els.backtestRun.addEventListener("click", runHomeBacktest);
+  if (els.backtestTicker) els.backtestTicker.addEventListener("input", renderBacktestUniverseChips);
+  if (els.backtestUniverseOpen) els.backtestUniverseOpen.addEventListener("click", openSymbolPicker);
+  if (els.backtestStrategy) {
+    els.backtestStrategy.addEventListener("change", () => {
+      state.activeStrategyId = "";
+      if (els.backtestStrategyRegistry) els.backtestStrategyRegistry.value = "";
+    });
+  }
+  if (els.backtestStrategyRegistry) {
+    els.backtestStrategyRegistry.addEventListener("change", () => {
+      const strategyId = els.backtestStrategyRegistry.value || "";
+      if (!strategyId) {
+        state.activeStrategyId = "";
+        return;
+      }
+      loadQuantStrategyDetail(strategyId);
+    });
+  }
+  if (els.symbolPickerClose) els.symbolPickerClose.addEventListener("click", closeSymbolPicker);
+  if (els.symbolPickerApply) els.symbolPickerApply.addEventListener("click", closeSymbolPicker);
+  if (els.symbolPickerClear) {
+    els.symbolPickerClear.addEventListener("click", () => {
+      setBacktestUniverse([]);
+      renderSymbolPicker();
+    });
+  }
+  if (els.symbolPickerSearch) els.symbolPickerSearch.addEventListener("input", renderSymbolPicker);
+  if (els.symbolPickerCountry) els.symbolPickerCountry.addEventListener("change", renderSymbolPicker);
+  if (els.symbolPickerSector) els.symbolPickerSector.addEventListener("change", renderSymbolPicker);
+  if (els.symbolPickerTabs) {
+    els.symbolPickerTabs.addEventListener("click", (event) => {
+      const rawTarget = event.target;
+      const target = rawTarget?.closest ? rawTarget.closest("[data-symbol-type]") : rawTarget;
+      if (!target?.dataset?.symbolType) return;
+      state.symbolPickerType = target.dataset.symbolType || "all";
+      els.symbolPickerTabs.querySelectorAll("[data-symbol-type]").forEach((button) => {
+        button.classList.toggle("active", button === target);
+      });
+      renderSymbolPicker();
+    });
+  }
+  if (els.symbolPickerList) {
+    els.symbolPickerList.addEventListener("click", (event) => {
+      const rawTarget = event.target;
+      const target = rawTarget?.closest ? rawTarget.closest("[data-symbol-toggle]") : rawTarget;
+      if (target?.dataset?.symbolToggle) toggleSymbolPickerItem(target.dataset.symbolToggle);
+    });
+  }
+  if (els.symbolPickerModal) {
+    els.symbolPickerModal.addEventListener("click", (event) => {
+      if (event.target === els.symbolPickerModal) closeSymbolPicker();
+    });
+  }
   if (els.backtestSurface) {
     els.backtestSurface.addEventListener("click", (event) => {
       const rawTarget = event.target;
@@ -6383,6 +6890,9 @@ function bindInputs() {
     if (e.key === "Escape" && els.qualityPanel && !els.qualityPanel.classList.contains("hidden")) {
       closeQualityPanel();
     }
+    if (e.key === "Escape" && els.symbolPickerModal && !els.symbolPickerModal.classList.contains("hidden")) {
+      closeSymbolPicker();
+    }
   });
 }
 
@@ -6394,6 +6904,8 @@ function bindInputs() {
   bindDownloads();
   bindInputs();
   restoreForm();
+  renderBacktestUniverseChips();
+  populateBacktestStrategyRegistry();
   renderHistory();
   renderWatchlist();
   initializeTradingViewDashboard(false);

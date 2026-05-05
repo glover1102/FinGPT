@@ -35,6 +35,43 @@ def test_data_health_and_prices_endpoint_use_structured_store(tmp_path, monkeypa
     assert prices.json()["latest"]["date"] == "2026-01-03"
 
 
+def test_data_health_marks_optional_empty_provider_rows_as_covered(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "research_mart.db"
+    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
+    init_db(db_path)
+    run_id = repository.start_update_run(market="us", provider="sec_filings", db_path=db_path)
+    repository.record_provider_status(
+        run_id,
+        provider="sec_filings",
+        status="empty",
+        market="us",
+        ticker="SPY",
+        db_path=db_path,
+    )
+    repository.record_provider_status(
+        run_id,
+        provider="sec_filings",
+        status="ok",
+        market="us",
+        ticker="MSFT",
+        rows_inserted=1,
+        db_path=db_path,
+    )
+    repository.finish_update_run(run_id, status="success", rows_inserted=1, db_path=db_path)
+
+    client = TestClient(app)
+    health = client.get("/api/v1/data/health")
+
+    assert health.status_code == 200
+    body = health.json()
+    spy_row = next(row for row in body["recent_provider_status"] if row["ticker"] == "SPY")
+    assert spy_row["status"] == "ok"
+    assert spy_row["raw_status"] == "empty"
+    assert spy_row["coverage_status"] == "covered_empty"
+    assert body["summary"]["covered_empty_provider_rows"] == 1
+    assert body["summary"]["decision_status"] == "ok"
+
+
 def test_backtest_endpoint_accepts_request_price_rows() -> None:
     client = TestClient(app)
     resp = client.post(

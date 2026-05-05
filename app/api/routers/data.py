@@ -11,19 +11,61 @@ from pipelines.data_mart.storage.repository import get_prices as data_mart_get_p
 
 router = APIRouter(prefix="/api/v1/data", tags=["data"])
 
+_SEC_EMPTY_IS_COVERED_TICKERS = {
+    "BTC-USD",
+    "ETH-USD",
+    "GLD",
+    "HYG",
+    "QQQ",
+    "SPY",
+    "TLT",
+    "USO",
+}
+
+
+def _provider_empty_is_covered(row: dict[str, Any]) -> bool:
+    """Return true for empty provider rows that are valid coverage, not failures."""
+
+    status = str(row.get("status") or "").lower()
+    if status != "empty" or row.get("error_message"):
+        return False
+    provider = str(row.get("provider") or "").lower()
+    ticker = str(row.get("ticker") or "").upper()
+    if provider == "sec_filings":
+        return ticker in _SEC_EMPTY_IS_COVERED_TICKERS
+    if provider == "google_news_rss":
+        return True
+    return False
+
+
+def _normalize_provider_status(row: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(row)
+    if _provider_empty_is_covered(normalized):
+        normalized["raw_status"] = normalized.get("status")
+        normalized["status"] = "ok"
+        normalized["coverage_status"] = "covered_empty"
+        normalized["coverage_note"] = (
+            "Provider returned no rows, but the asset is covered by price, macro, filing, or news evidence elsewhere."
+        )
+    return normalized
+
 
 @router.get("/health")
 async def data_health() -> dict[str, Any]:
     """Structured data mart health, update history, provider status, and quality checks."""
 
     payload = await asyncio.to_thread(data_mart_health)
-    provider_rows = payload.get("recent_provider_status") or []
+    raw_provider_rows = payload.get("recent_provider_status") or []
+    provider_rows = [_normalize_provider_status(row) for row in raw_provider_rows]
+    payload["recent_provider_status"] = provider_rows
     quality_rows = payload.get("recent_quality_checks") or []
     failed = [row for row in provider_rows if str(row.get("status") or "").lower() in {"failed", "error"}]
     stale = [row for row in quality_rows if str(row.get("status") or "").lower() in {"warn", "fail"}]
+    covered_empty = [row for row in provider_rows if row.get("coverage_status") == "covered_empty"]
     payload["summary"] = {
         "provider_rows": len(provider_rows),
         "failed_provider_rows": len(failed),
+        "covered_empty_provider_rows": len(covered_empty),
         "quality_rows": len(quality_rows),
         "stale_or_failed_quality_rows": len(stale),
         "decision_status": "failed" if failed else ("partial" if stale else "ok"),

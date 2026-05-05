@@ -43,7 +43,8 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIsNotNone(match)
         body = match.group("body")
         self.assertIn("fetch(API.quantBacktest", body)
-        self.assertIn("renderQuantBacktestResult(data, request)", body)
+        self.assertIn("attachBenchmarkComparison(data", body)
+        self.assertIn("renderQuantBacktestResult(enriched", body)
         self.assertIn("renderQuantDiagnosticsPanel(data)", self.source)
         self.assertIn("loadQuantRunHistory(true)", body)
         self.assertNotIn("fetch(API.backtestRun", body)
@@ -52,6 +53,13 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn("API.quantBacktestBundle", self.source)
         self.assertIn("function loadQuantBacktestArtifact", self.source)
         self.assertIn("data-quant-run-id", self.source)
+
+    def test_market_heatmap_has_manual_refresh_and_display_limit(self):
+        html = (Path(__file__).resolve().parents[1] / "app" / "web" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('id="homeHeatmapRefresh"', html)
+        self.assertIn("HEATMAP_DISPLAY_MAX", self.source)
+        self.assertIn("loadDashboardEquityHeatmap(true)", self.source)
+        self.assertIn("표시 ${escapeHtml(_fmtNumber(displayItems.length))}", self.source)
 
 
 if __name__ == "__main__":
