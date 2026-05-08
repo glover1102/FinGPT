@@ -14,6 +14,7 @@ from core.utils.model_capabilities import model_capability_dict
 
 PRODUCTION_ROUTE_ALIASES = {"qwen", "mistral", "ollama", "primary", "llama-2", ""}
 FINGPT_AUXILIARY_ALIASES = {"fingpt"}
+EXPLICIT_GEMMA4_ALIASES = {"gemma4"}
 EXPERIMENTAL_GEMMA_ALIASES = {"gemma", "gemma-experimental"}
 
 
@@ -27,6 +28,8 @@ def resolve_model_name(model_name: str, settings) -> str:
         # Qwen/Ollama path because the legacy FinGPT adapter is not reliable for
         # Korean JSON report generation.
         return settings.primary_model
+    if route in EXPLICIT_GEMMA4_ALIASES:
+        return getattr(settings, "gemma4_model", "") or settings.experimental_fallback_model
     if route in EXPERIMENTAL_GEMMA_ALIASES:
         if not settings.enable_experimental_fallback:
             raise ValueError(
@@ -34,7 +37,7 @@ def resolve_model_name(model_name: str, settings) -> str:
             )
         return settings.experimental_fallback_model
     raise ValueError(
-        f"Unsupported model route '{model_name}'. Supported routes: qwen, mistral, ollama, primary, fingpt, llama-2, gemma-experimental."
+        f"Unsupported model route '{model_name}'. Supported routes: qwen, mistral, ollama, primary, fingpt, llama-2, gemma4, gemma-experimental."
     )
 
 

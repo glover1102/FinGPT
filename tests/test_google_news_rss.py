@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 
 
 def _rss_sample(num_items: int = 3, pub: str | None = None) -> str:
-    pub = pub or "Wed, 22 Apr 2026 12:00:00 GMT"
+    pub = pub or (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%a, %d %b %Y %H:%M:%S GMT")
     items = []
     for i in range(num_items):
         items.append(
@@ -35,7 +35,7 @@ def _rss_sample(num_items: int = 3, pub: str | None = None) -> str:
 
 
 def _broad_rss_sample(pub: str | None = None) -> str:
-    pub = pub or "Wed, 22 Apr 2026 12:00:00 GMT"
+    pub = pub or (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%a, %d %b %Y %H:%M:%S GMT")
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel>
   <item>

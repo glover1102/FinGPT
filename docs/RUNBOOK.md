@@ -239,6 +239,18 @@ This adds:
 4. python scripts/profile_topic_latency.py
 ```
 
+### FinGPT Auxiliary Evaluation
+Run the auxiliary FinGPT task fixture gate explicitly when validating FinGPT-style
+classification or forecasting support:
+
+```powershell
+.\venv311\Scripts\python.exe scripts\validation_gate.py --include-fingpt-eval
+```
+
+Expected result: `fingpt_eval_gate` is `passed`, `invalid_outputs` is `0`, and
+the default production model remains `qwen2.5:7b`. `gemma4:e4b` remains an
+experimental fallback option only.
+
 ## Benchmark Commands
 Primary answer-quality benchmark:
 ```bash

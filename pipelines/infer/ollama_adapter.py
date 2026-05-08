@@ -32,12 +32,12 @@ DEFAULT_EXPERIMENTAL_FALLBACK_MODEL = "gemma4:e4b"
 
 # Soft cap: prevents KV fragmentation on ~8k-context local models.
 # The cap and generation budgets were raised to accommodate a larger retrieval
-# window (top_k=10) and the expanded structured output (key_metrics,
+# window (top_k=15) and the expanded structured output (key_metrics,
 # catalyst_timeline, open_questions).
-MAX_PROMPT_CHARS = 14000
+MAX_PROMPT_CHARS = 18000
 DEFAULT_NUM_CTX = 8192
-DEFAULT_NUM_PREDICT = 1024
-RETRY_NUM_PREDICT = 1536
+DEFAULT_NUM_PREDICT = 1536
+RETRY_NUM_PREDICT = 2048
 RETRYABLE_OUTPUT_REASONS = {"empty", "malformed", "truncated", "schema-invalid", "language"}
 
 DOMAIN_DECISION_PLAYBOOK = """
@@ -154,6 +154,7 @@ _SYSTEM_PROMPT = (
     "4. PRECISION: Be specific with numbers, names, and technical terms. Avoid vague boilerplate like 'increased competition'; specify WHO the competitor is and WHAT the quantified impact is.\n"
     "5. QUANTIFY IMPACT: Whenever the context contains numerical evidence (EPS, revenue, guidance, growth rate, margin, yield, price target, AUM, rates), extract the exact figure into key_metrics with its source context and source DATE as as_of. If a narrative sentence repeats a number, include the date basis in that sentence as well. Do not hallucinate numbers that are not present in the documents.\n"
     "5a. STRUCTURED DATA POLICY: If a context block is labeled STRUCTURED DATA MART CONTEXT, treat it as the authoritative source for numeric price, macro, factor, and risk values. Use retrieved news, filings, and transcripts for qualitative interpretation and citations, not for inventing or overriding stored numeric values.\n"
+    "5b. VALUATION GROUNDING: If the user asks whether a stock price is reasonable, fair, cheap, expensive, overvalued, or undervalued, do not answer yes/no unless valuation evidence is present: P/E, P/B, EPS, earnings estimates, peer multiples, cash-flow or target-price support. If only price/return/volatility data exists, explicitly say valuation judgment is deferred and discuss only trend/risk.\n"
     "6. SOURCE HIERARCHY: When weighing evidence, treat official filings and earnings-call transcripts as higher-tier than secondary news; treat primary issuer sources as higher-tier than syndicated wire copies. Contradictions between tiers must be called out.\n"
     "7. EXPLICIT UNCERTAINTY: If evidence is thin, stale, or contradictory, state this candidly in the uncertainty field and list concrete data the reader would need next in open_questions. Do not paper over gaps with boilerplate optimism.\n"
     "8. CHAIN-OF-THOUGHT DISCIPLINE: Before writing bull_points / bear_points, mentally enumerate every distinct material event in the retrieved context, then keep only the ones that are directly investable. Drop filler and duplicates.\n"
@@ -172,7 +173,7 @@ _SYSTEM_PROMPT = (
     "6. open_questions: concrete, investable questions that remain unanswered given the evidence window. Keep each item to one sentence. Return [] only if the evidence is clearly sufficient.\n"
     "7. cited_doc_ids: union of all evidence_doc_ids used across bull_points, bear_points, and key_metrics.\n"
     "8. Use the requested Lens and Horizon to filter and weight the significance of evidence.\n"
-    "9. If the prompt requests Korean, every natural-language value must be Korean: summary, bull_points.text, bear_points.text, key_metrics.name, key_metrics.context, catalyst_timeline items, open_questions, and uncertainty. Keep tickers, company names, product names, and source titles in their original language when appropriate."
+    "9. If the prompt requests Korean, every natural-language value must be Korean: summary, bull_points.text, bear_points.text, key_metrics.name, key_metrics.context, catalyst_timeline items, open_questions, and uncertainty. Keep tickers, company names, product names, and source titles in their original language when appropriate. Do not write Chinese, Japanese, Hanja prose, or garbled mojibake."
 )
 
 
@@ -209,19 +210,59 @@ def _fundamentals_prompt_block(card: FundamentalsCard | None) -> str:
     name = card.name or card.ticker
     analysts = f"{card.num_analysts} analysts" if card.num_analysts is not None else "analyst count N/A"
     return (
-        "FUNDAMENTALS SNAPSHOT (verified from yfinance, not RAG):\n"
-        f"- Name: {name} ({card.ticker}) - Sector: {sector} / Industry: {industry}\n"
+        "FINANCIAL / FUNDAMENTALS SNAPSHOT (verified from yfinance, deterministic provider data):\n"
+        f"- Name: {name} ({card.ticker}) | Type: {card.quote_type or card.asset_class or 'N/A'} | "
+        f"Currency: {card.currency or 'N/A'} | Exchange: {card.exchange or 'N/A'}\n"
+        f"- Sector / Industry: {sector} / {industry}\n"
         f"- Market cap: {_format_compact_money(card.market_cap)} | Price: {_format_compact_money(card.price)} | "
-        f"52w: {_format_compact_money(card.week52_low)} - {_format_compact_money(card.week52_high)}\n"
+        f"52w: {_format_compact_money(card.week52_low)} - {_format_compact_money(card.week52_high)} | "
+        f"Average volume: {_format_float(card.average_volume, 0)}\n"
         f"- Valuation: P/E(TTM) {_format_float(card.trailing_pe, 1)} | P/E(Fwd) {_format_float(card.forward_pe, 1)} | "
-        f"P/B {_format_float(card.price_to_book, 1)} | Beta {_format_float(card.beta, 2)}\n"
+        f"P/B {_format_float(card.price_to_book, 1)} | EPS(TTM) {_format_float(card.trailing_eps, 2)} | "
+        f"EPS(Fwd) {_format_float(card.forward_eps, 2)} | Beta {_format_float(card.beta, 2)}\n"
         f"- Growth / Margins: Revenue growth {_format_percent(card.revenue_growth)} | EPS growth {_format_percent(card.earnings_growth)} | "
-        f"Profit margin {_format_percent(card.profit_margin)}\n"
+        f"Gross margin {_format_percent(card.gross_margin)} | Operating margin {_format_percent(card.operating_margin)} | "
+        f"Profit margin {_format_percent(card.profit_margin)} | ROE {_format_percent(card.return_on_equity)}\n"
+        f"- Scale / Balance sheet: Revenue {_format_compact_money(card.total_revenue)} | EBITDA {_format_compact_money(card.ebitda)} | "
+        f"FCF {_format_compact_money(card.free_cashflow)} | Cash {_format_compact_money(card.total_cash)} | "
+        f"Debt {_format_compact_money(card.total_debt)} | D/E {_format_float(card.debt_to_equity, 1)}\n"
+        f"- ETF / Fund: Total assets {_format_compact_money(card.total_assets or card.net_assets)} | NAV {_format_compact_money(card.nav_price)} | "
+        f"Expense ratio {_format_percent(card.expense_ratio)} | Yield {_format_percent(card.yield_value)}\n"
         f"- Yield / Analyst: Div yield {_format_percent(card.dividend_yield)} | Consensus target "
         f"{_format_compact_money(card.analyst_target_mean)} ({analysts}, mean rating {_format_float(card.analyst_rating_mean, 1)})\n"
-        "RULE: You MAY cite these values directly without an evidence_doc_id.\n"
+        "RULE: Use these values as primary numeric anchors. Include them in key_metrics when they matter.\n"
         "      You MUST NOT contradict them. If RAG text contradicts these, flag it.\n\n"
     )
+
+
+def _fingpt_annotation_prompt_line(metadata: dict[str, Any]) -> str:
+    annotations = metadata.get("fingpt_annotations") or []
+    if not isinstance(annotations, list):
+        return ""
+    parts: list[str] = []
+    for ann in annotations:
+        if not isinstance(ann, dict):
+            continue
+        task = _compact_annotation_field(ann.get("task"), 32)
+        label = _compact_annotation_field(ann.get("label"), 96)
+        confidence = ann.get("confidence")
+        if not task or not label:
+            continue
+        try:
+            conf_text = f"{float(confidence):.2f}"
+        except (TypeError, ValueError):
+            conf_text = "unknown"
+        parts.append(f"{task}={label} confidence={conf_text}")
+        if len(parts) >= 5:
+            break
+    if not parts:
+        return ""
+    return "FINGPT ANNOTATIONS: " + "; ".join(parts)
+
+
+def _compact_annotation_field(value: Any, max_chars: int) -> str:
+    text = " ".join(str(value or "").split())
+    return text[:max_chars]
 
 
 class StructuredOutputError(ValueError):
@@ -257,7 +298,8 @@ def _build_ollama_prompt(
             "INSTRUCTION: Provide every natural-language output field in professional Korean: "
             "summary, bull_points.text, bear_points.text, key_metrics.name, key_metrics.context, "
             "catalyst_timeline items, open_questions, and uncertainty. "
-            "English is allowed only for tickers, product names, company names, source titles, and standard market abbreviations.\n"
+            "English is allowed only for tickers, product names, company names, source titles, and standard market abbreviations. "
+            "Do not use Chinese, Japanese, Hanja prose, or mojibake; if unsure, rewrite the sentence in plain Korean.\n"
         )
     else:
         lang_instr = "LANGUAGE: ENGLISH\nINSTRUCTION: Provide all descriptive fields in professional English.\n"
@@ -271,7 +313,7 @@ def _build_ollama_prompt(
         "For example, do not analyze a commodity ETF like a software company, or a bank like a growth-stock ETF.\n"
         "REPORT SHAPE: Internally answer as a buy-side decision memo: Summary, Core Analysis, Synthesis, Decision Edge, Conclusion. "
         "The JSON fields must contain the raw material for that memo: compact summary, distinct bull/bear points, concrete risk scenarios, catalysts, pricing tension, and view-change triggers. "
-        "If STRUCTURED DATA MART CONTEXT is present, use it as authoritative numeric evidence and do not invent numbers."
+        "If STRUCTURED DATA MART CONTEXT or FINANCIAL FUNDAMENTALS SNAPSHOT is present, use it as authoritative numeric evidence and do not invent numbers."
     )
 
     fundamentals_block = _fundamentals_prompt_block(fundamentals)
@@ -310,12 +352,16 @@ def _build_ollama_prompt(
             chunk_hint = f" | CHUNK: {meta.get('chunk_index')}/{meta.get('total_chunks')}"
 
         snippet = " ".join(chunk.split())
-        block = (
-            f"--- DOCUMENT {i} [ID: {doc_id}] ---\n"
-            f"SOURCE: {source} | DATE: {date}{chunk_hint}\n"
-            f"TITLE: {title}\n"
-            f"CONTENT: {snippet}\n"
-        )
+        block_parts = [
+            f"--- DOCUMENT {i} [ID: {doc_id}] ---",
+            f"SOURCE: {source} | DATE: {date}{chunk_hint}",
+            f"TITLE: {title}",
+        ]
+        annotation_line = _fingpt_annotation_prompt_line(meta)
+        if annotation_line:
+            block_parts.append(annotation_line)
+        block_parts.append(f"CONTENT: {snippet}")
+        block = "\n".join(block_parts) + "\n"
 
         if current_length + len(block) > budget and used_chunks > 0:
             break
@@ -747,8 +793,16 @@ def _parse_generation_result(
 
 def _build_language_repair_prompt(parsed: Dict[str, Any], expected_language: str) -> str:
     language_name = "Korean" if str(expected_language or "").lower() == "ko" else "English"
+    ko_rule = ""
+    if str(expected_language or "").lower() == "ko":
+        ko_rule = (
+            " Korean means modern Hangul-based Korean sentences. "
+            "Do not use Chinese, Japanese, Hanja prose, or mojibake. "
+            "Financial terms such as PER, PBR, EPS, ETF, NAV, FCF, EBITDA may remain as standard abbreviations."
+        )
     return (
         f"Rewrite the following JSON object so every natural-language descriptive field is in {language_name}. "
+        f"{ko_rule}"
         "Do not change tickers, company names, product names, source titles, numeric values, evidence_doc_ids, "
         "cited_doc_ids, sentiment, importance, confidence, symbol, event_type, or horizon. "
         "Return only one valid JSON object with the same keys and nested structure.\n\n"
@@ -815,16 +869,18 @@ def _run_model_attempts(
                         return repaired, latencies, retries_used
                     except StructuredOutputError as repair_err:
                         logger.warning(
-                            "[INFERENCE] %s language repair failed (%s). Returning final valid JSON with warning.",
+                            "[INFERENCE] %s language repair failed (%s). Rejecting non-Korean JSON.",
                             model_name,
                             repair_err.reason,
                         )
+                        raise StructuredOutputError("language", str(parsed.get("_language_warning") or repair_err)) from repair_err
                 else:
                     logger.warning(
                         "[INFERENCE] %s returned valid JSON but missed requested language on final attempt: %s",
                         model_name,
                         parsed["_language_warning"],
                     )
+                    raise StructuredOutputError("language", str(parsed["_language_warning"]))
             return parsed, latencies, retries_used
         except StructuredOutputError as err:
             can_retry = allow_retry and attempt == 0 and err.reason in RETRYABLE_OUTPUT_REASONS
@@ -835,7 +891,8 @@ def _run_model_attempts(
                         prompt
                         + "\n\nRETRY CORRECTION: The previous response was rejected because it was not Korean. "
                         "Return the same JSON schema again, but write every descriptive field in Korean. "
-                        "Only tickers, company names, product names, source titles, and standard market abbreviations may remain in English."
+                        "Only tickers, company names, product names, source titles, and standard market abbreviations may remain in English. "
+                        "Do not use Chinese, Japanese, Hanja prose, or mojibake."
                     )
                 logger.warning(
                     "[INFERENCE] %s returned %s output. Attempting retry 1/1 with larger generation budget...",

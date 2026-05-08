@@ -28,8 +28,8 @@ def parse_args():
         "--model",
         type=str,
         default="qwen",
-        choices=["qwen", "mistral", "ollama", "primary", "fingpt", "llama-2", "gemma", "gemma-experimental"],
-        help="Inference route. Production baseline is qwen2.5; gemma is experimental only.",
+        choices=["qwen", "mistral", "ollama", "primary", "fingpt", "llama-2", "gemma4", "gemma", "gemma-experimental"],
+        help="Inference route. Production baseline is qwen2.5; gemma4 is an explicit experimental option.",
     )
     parser.add_argument("--output-dir", type=str, default=None, help="Directory to save outputs")
     

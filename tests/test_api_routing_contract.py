@@ -33,6 +33,22 @@ def _parse_sse(raw: str) -> list[dict]:
 
 
 class ApiRoutingContractTests(unittest.TestCase):
+    def test_config_exposes_fingpt_integration_status(self):
+        client = TestClient(api_server.app)
+        resp = client.get("/api/v1/config")
+
+        self.assertEqual(resp.status_code, 200)
+        fingpt = resp.json().get("fingpt")
+        self.assertIsInstance(fingpt, dict)
+        self.assertIsInstance(fingpt.get("datasets_enabled"), bool)
+        self.assertIsInstance(fingpt.get("task_model_enabled"), bool)
+        self.assertIn("task_model", fingpt)
+        self.assertEqual(
+            fingpt.get("tasks"),
+            ["sentiment", "headline", "ner", "relation", "fiqa_qa", "forecaster"],
+        )
+        self.assertEqual(fingpt.get("default_behavior"), "disabled_fail_open")
+
     def test_direct_analyze_rejects_missing_ticker_before_pipeline(self):
         client = TestClient(api_server.app)
         with patch.object(research_router, "run_pipeline_async", new=AsyncMock()) as run_pipeline:

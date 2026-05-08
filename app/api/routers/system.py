@@ -46,6 +46,7 @@ SUPPORTED_INFERENCE_ROUTES = (
     "primary",
     "fingpt",
     "llama-2",
+    "gemma4",
     "gemma",
     "gemma-experimental",
 )
@@ -64,6 +65,16 @@ def _ui_model_options() -> list[dict[str, Any]]:
             "enabled": True,
         }
     ]
+    gemma4_model = getattr(_settings, "gemma4_model", None) or getattr(_settings, "experimental_fallback_model", "gemma4:e4b")
+    if gemma4_model:
+        options.append(
+            {
+                "id": "gemma4",
+                "label": f"{gemma4_model} (Gemma4 E4B experimental)",
+                "role": "experimental",
+                "enabled": True,
+            }
+        )
     if bool(getattr(_settings, "enable_experimental_fallback", False)):
         options.append(
             {
@@ -78,9 +89,9 @@ def _ui_model_options() -> list[dict[str, Any]]:
 
 def _ui_presets() -> list[dict[str, str]]:
     return [
-        {"id": "risk", "label": "핵심 리스크", "question": "현재 시장이 과소평가하는 핵심 리스크와 주요 시나리오는 무엇인가요?"},
-        {"id": "catalyst", "label": "상승 촉매", "question": "향후 6~12개월 동안 가격을 움직일 핵심 상승 촉매와 검증 지표는 무엇인가요?"},
-        {"id": "thesis", "label": "12개월 투자 가설", "question": "최신 공개 정보와 정량 지표를 기준으로 12개월 투자 가설을 정리해주세요."},
+        {"id": "risk", "label": "핵심 리스크", "question": "현재 가격과 재무 지표 기준으로 가장 중요한 하방 리스크와 확인해야 할 시나리오는 무엇인가요?"},
+        {"id": "catalyst", "label": "상승 촉매", "question": "향후 6~12개월 동안 가격을 움직일 수 있는 검증 가능한 상승 촉매는 무엇인가요?"},
+        {"id": "thesis", "label": "12개월 투자 가설", "question": "최신 가격, 재무 지표, 수집 근거를 기준으로 12개월 투자 가설을 정리해주세요."},
         {"id": "earnings", "label": "실적 신호", "question": "최근 실적과 가이던스에서 확인되는 매출, 마진, 비용 구조의 핵심 신호를 요약해주세요."},
         {"id": "competitive", "label": "경쟁 구도", "question": "경쟁 구도가 어떻게 변하고 있으며 가격 결정력과 점유율에는 어떤 영향을 주나요?"},
     ]
@@ -100,8 +111,8 @@ async def get_config() -> dict[str, Any]:
             "disabled": list(DISABLED_COLLECTION_SOURCES),
         },
         "limits": {
-            "lookback_days": {"min": 1, "max": 365, "default": 60},
-            "top_k": {"min": 1, "max": 20, "default": 10},
+            "lookback_days": {"min": 1, "max": 365, "default": 90},
+            "top_k": {"min": 1, "max": 20, "default": 15},
             "compare": {
                 "max_tickers": COMPARE_MAX_TICKERS,
                 "max_concurrency": COMPARE_MAX_CONCURRENCY,
@@ -113,6 +124,13 @@ async def get_config() -> dict[str, Any]:
         "dashboard": {
             "news_endpoint": "/api/v1/dashboard/news",
             "tradingview_enabled": True,
+        },
+        "fingpt": {
+            "datasets_enabled": bool(getattr(_settings, "fingpt_datasets_enabled", False)),
+            "task_model_enabled": bool(getattr(_settings, "fingpt_task_model_enabled", False)),
+            "task_model": getattr(_settings, "fingpt_task_model_name", ""),
+            "tasks": ["sentiment", "headline", "ner", "relation", "fiqa_qa", "forecaster"],
+            "default_behavior": "disabled_fail_open",
         },
     }
 

@@ -11,6 +11,7 @@ from core.schemas.quant import QuantBacktestRequest, QuantFeaturePreviewRequest,
 from pipelines.data_mart.models import PriceBar
 from pipelines.data_mart.storage import repository
 from pipelines.data_mart.storage.db import init_db
+from pipelines.output.run_history import _connect
 from pipelines.orchestration import quant_lab_pipeline
 from pipelines.orchestration.quant_lab_pipeline import (
     cleanup_backtest_exports,
@@ -46,6 +47,37 @@ def _seed_prices(db_path) -> None:
             ]
         )
     repository.upsert_prices(rows, db_path=db_path)
+
+
+def _seed_latest_research_run(root: Path, outputs_dir: Path, response: dict) -> None:
+    run_dir = outputs_dir / "runs" / "SPY" / "20260504T000000Z_abc123"
+    run_dir.mkdir(parents=True)
+    (run_dir / "response.json").write_text(json.dumps(response), encoding="utf-8")
+    with _connect(root / "runs.db") as conn:
+        conn.execute(
+            """
+            INSERT INTO runs
+              (id, ticker, question, status, sentiment, confidence, model,
+               lookback_days, top_k, sources, created_at, run_dir, error_metadata)
+            VALUES
+              ('abc123', 'SPY', 'q', 'success', 'bullish', 0.8, 'test-model',
+               30, 5, '[]', '2026-05-04T00:00:00Z', 'outputs/runs/SPY/20260504T000000Z_abc123', NULL)
+            """
+        )
+        conn.commit()
+
+
+def _signal_preview_for_research_response(root: Path, monkeypatch, response: dict):
+    root.mkdir(parents=True, exist_ok=True)
+    db_path = root / "research_mart.db"
+    _seed_prices(db_path)
+    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
+    outputs_dir = root / "outputs"
+    _seed_latest_research_run(root, outputs_dir, response)
+    monkeypatch.setattr(quant_lab_pipeline, "load_settings", lambda: type("S", (), {"outputs_dir": outputs_dir})())
+    return signal_preview(
+        QuantSignalGenerateRequest(tickers=["SPY"], benchmark="SPY", use_research_score=True, research_max_age_days=30)
+    )
 
 
 def test_feature_and_signal_preview_use_data_mart(tmp_path, monkeypatch) -> None:
@@ -477,43 +509,71 @@ def test_quant_backtest_maps_moving_average_template_to_existing_engine(tmp_path
 
 
 def test_signal_preview_reports_research_score_provenance(tmp_path, monkeypatch) -> None:
-    db_path = tmp_path / "research_mart.db"
-    _seed_prices(db_path)
-    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
-    outputs_dir = tmp_path / "outputs"
-    run_dir = outputs_dir / "runs" / "SPY" / "20260504T000000Z_abc123"
-    run_dir.mkdir(parents=True)
-    (run_dir / "response.json").write_text(
-        json.dumps(
-            {
-                "sentiment": "bullish",
-                "confidence": 0.8,
-                "bull_evidence_ids": [["doc-spy-1"]],
-                "bear_evidence_ids": [],
-            }
-        ),
-        encoding="utf-8",
+    base_response = {
+        "sentiment": "bullish",
+        "confidence": 0.8,
+        "bull_evidence_ids": [["doc-spy-1"]],
+        "bear_evidence_ids": [],
+    }
+    signals = _signal_preview_for_research_response(
+        tmp_path / "annotated",
+        monkeypatch,
+        {
+            **base_response,
+            "execution_meta": {
+                "extras": {
+                    "fingpt_annotations": {
+                        "annotations": [
+                            {
+                                "task": "sentiment",
+                                "label": "positive",
+                                "confidence": 0.9,
+                                "article_id": "doc-spy-1",
+                            },
+                            {
+                                "task": "headline",
+                                "label": "price_up",
+                                "confidence": 0.7,
+                                "article_id": "doc-spy-2",
+                            },
+                        ]
+                    }
+                }
+            },
+        },
     )
-    from pipelines.output.run_history import _connect
-
-    with _connect(tmp_path / "runs.db") as conn:
-        conn.execute(
-            """
-            INSERT INTO runs
-              (id, ticker, question, status, sentiment, confidence, model,
-               lookback_days, top_k, sources, created_at, run_dir, error_metadata)
-            VALUES
-              ('abc123', 'SPY', 'q', 'success', 'bullish', 0.8, 'test-model',
-               30, 5, '[]', '2026-05-04T00:00:00Z', 'outputs/runs/SPY/20260504T000000Z_abc123', NULL)
-            """
-        )
-        conn.commit()
-    monkeypatch.setattr(quant_lab_pipeline, "load_settings", lambda: type("S", (), {"outputs_dir": outputs_dir})())
-
-    signals = signal_preview(
-        QuantSignalGenerateRequest(tickers=["SPY"], benchmark="SPY", use_research_score=True, research_max_age_days=30)
-    )
+    baseline = _signal_preview_for_research_response(tmp_path / "baseline", monkeypatch, base_response)
 
     assert signals.diagnostics.research_score_status in {"fresh", "sparse_evidence"}
     assert signals.diagnostics.research_score_provenance["SPY"]["run_id"] == "abc123"
+    assert signals.diagnostics.fingpt_forecaster_signals["SPY"]["direction"] == "up"
+    assert signals.diagnostics.fingpt_forecaster_signals["SPY"]["evidence_doc_ids"] == ["doc-spy-1", "doc-spy-2"]
     assert signals.rows[0].research_score == 0.8
+    assert signals.rows[0].research_score == baseline.rows[0].research_score
+    assert signals.rows[0].final_score == baseline.rows[0].final_score
+    assert signals.rows[0].signal == baseline.rows[0].signal
+    assert signals.rows[0].diagnostics == baseline.rows[0].diagnostics
+    assert all("fingpt_forecaster_signal" not in item for item in signals.rows[0].diagnostics)
+
+
+def test_signal_preview_ignores_malformed_forecaster_annotations(tmp_path, monkeypatch) -> None:
+    signals = _signal_preview_for_research_response(
+        tmp_path,
+        monkeypatch,
+        {
+            "sentiment": "bullish",
+            "confidence": 0.8,
+            "bull_evidence_ids": [["doc-spy-1"]],
+            "bear_evidence_ids": [],
+            "execution_meta": {
+                "extras": {
+                    "fingpt_annotations": {
+                        "annotations": 123,
+                    }
+                }
+            },
+        },
+    )
+
+    assert signals.rows[0].research_score == 0.8
+    assert signals.diagnostics.fingpt_forecaster_signals == {}

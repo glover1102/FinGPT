@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from pipelines.data_mart.storage.repository import data_health as data_mart_health
+from pipelines.data_mart.storage.repository import latest_fundamentals as data_mart_latest_fundamentals
 from pipelines.data_mart.storage.repository import get_prices as data_mart_get_prices
 
 
@@ -62,12 +63,16 @@ async def data_health() -> dict[str, Any]:
     failed = [row for row in provider_rows if str(row.get("status") or "").lower() in {"failed", "error"}]
     stale = [row for row in quality_rows if str(row.get("status") or "").lower() in {"warn", "fail"}]
     covered_empty = [row for row in provider_rows if row.get("coverage_status") == "covered_empty"]
+    counts = payload.get("table_counts") or {}
+    fundamentals_rows = int(counts.get("fundamentals_snapshots") or 0)
     payload["summary"] = {
         "provider_rows": len(provider_rows),
         "failed_provider_rows": len(failed),
         "covered_empty_provider_rows": len(covered_empty),
         "quality_rows": len(quality_rows),
         "stale_or_failed_quality_rows": len(stale),
+        "fundamentals_rows": fundamentals_rows,
+        "fundamentals_available": fundamentals_rows > 0,
         "decision_status": "failed" if failed else ("partial" if stale else "ok"),
     }
     return payload
@@ -90,3 +95,20 @@ async def data_prices(ticker: str, limit: int = 252) -> dict[str, Any]:
         "latest": latest,
         "items": rows,
     }
+
+
+@router.get("/fundamentals/{ticker}")
+async def data_fundamentals(ticker: str) -> dict[str, Any]:
+    """Return normalized fundamentals, valuation, and financial snapshot data."""
+
+    clean_ticker = str(ticker or "").strip().upper()
+    if not clean_ticker:
+        raise HTTPException(status_code=422, detail="ticker is required")
+    item = await asyncio.to_thread(data_mart_latest_fundamentals, clean_ticker)
+    if not item:
+        return {
+            "status": "empty",
+            "ticker": clean_ticker,
+            "message": "normalized fundamentals snapshot is not available yet",
+        }
+    return {"status": "ok", **item}

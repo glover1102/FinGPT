@@ -234,6 +234,7 @@ def signal_preview(request: QuantSignalGenerateRequest) -> QuantSignalGenerateRe
                 "research_score_used": bool(request.use_research_score),
                 "research_score_status": research["status"],
                 "research_score_provenance": research["provenance"],
+                "fingpt_forecaster_signals": research["forecaster_signals"],
             }
         ),
         warnings=feature_response.warnings + list(research["warnings"]),
@@ -290,6 +291,48 @@ def run_quant_backtest(request: QuantBacktestRequest) -> QuantBacktestResponse:
             benchmark=request.benchmark,
             diagnostics=diagnostics,
         )
+    unavailable_assets = _unique_strings(
+        list(validation.get("missing_assets") or []) + list(validation.get("excluded_assets") or [])
+    )
+    if unavailable_assets:
+        runnable_tickers = [ticker for ticker in tickers if ticker not in set(unavailable_assets)]
+        if not runnable_tickers:
+            run_id = build_run_id(request.template, request.model_dump())
+            diagnostics = QuantRunDiagnostics(
+                lookahead_safe=bool(validation.get("lookahead_safe")),
+                signal_shift_bars=int(validation.get("signal_shift_bars") or 1),
+                execution_assumption=str(validation.get("execution_assumption") or "next_bar_close"),
+                data_source="data_mart:prices_daily",
+                freshness_policy=dict(validation.get("freshness_policy") or {}),
+                missing_assets=[],
+                stale_assets=list(validation.get("stale_assets") or []),
+                excluded_assets=unavailable_assets,
+                price_counts=dict(validation.get("price_counts") or {}),
+                latest_price_dates=dict(validation.get("latest_dates") or {}),
+                expected_latest_date=str(validation.get("expected_latest_date") or "unknown"),
+                market_calendar_lag_days=dict(validation.get("market_calendar_lag_days") or {}),
+                asset_freshness=dict(validation.get("asset_freshness") or {}),
+                warnings=["executable_price_universe_empty", f"excluded_assets:{','.join(unavailable_assets)}"],
+            )
+            return QuantBacktestResponse(
+                run_id=run_id,
+                status="failed",
+                template=request.template,
+                tickers=[],
+                benchmark=request.benchmark,
+                diagnostics=diagnostics,
+            )
+        tickers = runnable_tickers
+        request = request.model_copy(update={"tickers": tickers})
+        prices_by_asset = {ticker: prices_by_asset.get(ticker, []) for ticker in tickers}
+        validation = validate_backtest_inputs(
+            prices_by_asset,
+            transaction_cost_bps=request.transaction_cost_bps,
+            slippage_bps=request.slippage_bps,
+            **freshness_policy,
+        )
+        validation["excluded_assets"] = _unique_strings(list(validation.get("excluded_assets") or []) + unavailable_assets)
+        validation["warnings"] = [f"excluded_unavailable_assets:{','.join(unavailable_assets)}"]
     engine_strategy = _engine_strategy_for_template(request.template)
     if not engine_strategy:
         run_id = build_run_id(request.template, request.model_dump())
@@ -366,7 +409,7 @@ def run_quant_backtest(request: QuantBacktestRequest) -> QuantBacktestResponse:
         research_score_used=bool(request.use_research_score),
         research_score_status=signal_response.diagnostics.research_score_status,
         research_score_provenance=signal_response.diagnostics.research_score_provenance,
-        warnings=list(result.get("warnings") or []) + list(signal_response.warnings or []),
+        warnings=list(validation.get("warnings") or []) + list(result.get("warnings") or []) + list(signal_response.warnings or []),
     )
     artifact_config = _artifact_config(request, config=config, validation=validation)
     weights_payload = list(result.get("weights_history") or result.get("rebalance_snapshots") or result.get("selected_history") or [])
@@ -803,6 +846,17 @@ def _data_snapshot(request: QuantBacktestRequest, *, validation: dict[str, Any])
     }
 
 
+def _unique_strings(values: list[Any]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        item = str(value or "").strip().upper()
+        if item and item not in seen:
+            out.append(item)
+            seen.add(item)
+    return out
+
+
 def _engine_strategy_for_template(template: str) -> str | None:
     clean = str(template or "").strip().lower()
     return {
@@ -890,10 +944,11 @@ def _resolve_research_scores(
     max_age_days: int,
 ) -> dict[str, Any]:
     if not use_research_score:
-        return {"scores": {}, "provenance": {}, "status": "disabled", "warnings": []}
+        return {"scores": {}, "provenance": {}, "forecaster_signals": {}, "status": "disabled", "warnings": []}
     settings = load_settings()
     scores: dict[str, float | None] = {}
     provenance: dict[str, dict[str, Any]] = {}
+    forecaster_signals: dict[str, dict[str, Any]] = {}
     warnings: list[str] = []
     for ticker in tickers:
         payload = _latest_research_score_payload(settings.outputs_dir, ticker)
@@ -901,11 +956,15 @@ def _resolve_research_scores(
         ticker_key = ticker.upper()
         provenance[ticker_key] = evaluation
         scores[ticker_key] = evaluation["score"]
+        forecaster_signal = _build_forecaster_signal_payload(ticker_key, payload)
+        if forecaster_signal:
+            forecaster_signals[ticker_key] = forecaster_signal
         if evaluation["status"] != "fresh":
             warnings.append(f"{ticker_key}:research_score_{evaluation['status']}")
     return {
         "scores": scores,
         "provenance": provenance,
+        "forecaster_signals": forecaster_signals,
         "status": _aggregate_research_status([item["status"] for item in provenance.values()]),
         "warnings": warnings,
     }
@@ -918,6 +977,11 @@ def _latest_research_score_payload(outputs_dir: Path, ticker: str) -> dict[str, 
     latest = runs[0]
     run = get_run(outputs_dir=outputs_dir, run_id=str(latest.get("id") or latest.get("run_id") or ""))
     response = ((run or {}).get("artifacts") or {}).get("response") or {}
+    response = response if isinstance(response, dict) else {}
+    execution_meta = response.get("execution_meta") if isinstance(response.get("execution_meta"), dict) else {}
+    extras = execution_meta.get("extras") if isinstance(execution_meta.get("extras"), dict) else {}
+    fingpt_annotations = extras.get("fingpt_annotations") if isinstance(extras.get("fingpt_annotations"), dict) else {}
+    annotations = fingpt_annotations.get("annotations")
     sentiment = str(latest.get("sentiment") or response.get("sentiment") or "").lower()
     confidence = latest.get("confidence")
     if confidence is None:
@@ -932,7 +996,40 @@ def _latest_research_score_payload(outputs_dir: Path, ticker: str) -> dict[str, 
         "evidence_ids": _flatten_evidence_ids(
             list(response.get("bull_evidence_ids") or []) + list(response.get("bear_evidence_ids") or [])
         ),
+        "annotations": annotations if isinstance(annotations, list) else [],
+        "structured_metrics": _structured_metrics_payload(response, extras),
     }
+
+
+def _build_forecaster_signal_payload(ticker: str, payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not payload:
+        return None
+    annotations = payload.get("annotations") if isinstance(payload.get("annotations"), list) else []
+    if not annotations:
+        return None
+    structured_metrics = payload.get("structured_metrics") if isinstance(payload.get("structured_metrics"), dict) else {}
+    try:
+        from pipelines.fingpt.forecaster_features import build_forecaster_signal
+
+        signal = build_forecaster_signal(
+            ticker=ticker,
+            annotations=annotations,
+            structured_metrics=structured_metrics,
+        )
+        return signal.model_dump(mode="json")
+    except Exception:
+        return None
+
+
+def _structured_metrics_payload(response: dict[str, Any], extras: dict[str, Any]) -> dict[str, Any]:
+    for payload in (
+        response.get("structured_metrics"),
+        extras.get("structured_metrics"),
+        extras.get("metrics"),
+    ):
+        if isinstance(payload, dict):
+            return dict(payload)
+    return {}
 
 
 def _sentiment_to_score(sentiment: str, confidence: Any) -> float | None:

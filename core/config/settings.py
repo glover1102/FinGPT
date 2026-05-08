@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     # Production inference baseline
     ollama_base_url: str = Field(default="http://localhost:11434")
     primary_model: str = Field(default="qwen2.5:7b")
+    gemma4_model: str = Field(default="gemma4:e4b")
     enable_experimental_fallback: bool = Field(default=False)
     experimental_fallback_model: str = Field(default="gemma4:e4b")
 
@@ -49,9 +50,9 @@ class Settings(BaseSettings):
     reranker_model: str = Field(default="Xenova/ms-marco-MiniLM-L-6-v2")
     reranker_candidate_pool: int = Field(default=30)
 
-    # Fixed fundamentals snapshot injected outside RAG for single-name equities.
+    # Fixed finance/fundamentals snapshot injected outside RAG for supported assets.
     fundamentals_card_enabled: bool = Field(default=True)
-    fundamentals_card_timeout_s: float = Field(default=5.0)
+    fundamentals_card_timeout_s: float = Field(default=8.0)
 
     # Ingest chunking. Disabling keeps legacy one-vector-per-document ingest.
     ingest_chunking_enabled: bool = Field(default=True)
@@ -70,7 +71,7 @@ class Settings(BaseSettings):
     # Topic mode / universal routing.
     topic_mode_enabled: bool = Field(default=True)
     router_model: str = Field(default="qwen2.5:7b")
-    topic_retrieval_top_k: int = Field(default=12)
+    topic_retrieval_top_k: int = Field(default=15)
     topic_max_related_tickers: int = Field(default=8)
 
     # Embedding model used by FastEmbed for vectorization. The default keeps
@@ -148,6 +149,15 @@ class Settings(BaseSettings):
     adapter_model_name: str = Field(default="FinGPT/fingpt-mt_llama2-7b_lora")
     enable_4bit: bool = Field(default=True)
     max_new_tokens: int = Field(default=384)
+
+    # Optional FinGPT task datasets and task-specific model adapters. Dataset
+    # loading is disabled by default so offline/local runs do not import or
+    # require the Hugging Face datasets package.
+    fingpt_datasets_enabled: bool = Field(default=False)
+    fingpt_dataset_cache_dir: Path = Field(default=DATA_DIR / "fingpt_datasets")
+    fingpt_dataset_max_rows: int = Field(default=500)
+    fingpt_task_model_enabled: bool = Field(default=False)
+    fingpt_task_model_name: str = Field(default="FinGPT/fingpt-mt_llama3-8b_lora")
 
     # Ensure settings load from .env correctly
     model_config = SettingsConfigDict(env_file=str(BASE_DIR / ".env"), env_file_encoding="utf-8", extra="ignore")

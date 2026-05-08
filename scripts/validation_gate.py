@@ -57,6 +57,7 @@ OUTPUTS_DIR = PROJECT_ROOT / "data" / "outputs"
 REPORTS_DIR = PROJECT_ROOT / "reports"
 QUALITY_RESULTS_PATH = REPORTS_DIR / "quality_review_results.json"
 LATENCY_RESULTS_PATH = REPORTS_DIR / "topic_latency_profile.json"
+FINGPT_EVAL_CASES_PATH = Path("tests/fixtures/fingpt_eval_cases.jsonl")
 API_SMOKE_TIMEOUT_S = 1500
 BROWSER_UI_TIMEOUT_S = 180
 BROWSER_UI_SCREENSHOT_DIR = REPORTS_DIR / "browser_ui"
@@ -1176,6 +1177,56 @@ def _artifact_gate_passed(summary: dict[str, Any]) -> bool:
     return summary.get("gate_passed") is True and int(summary.get("gate_failures") or 0) == 0
 
 
+def _parse_fingpt_eval_summary(stdout: str) -> tuple[dict[str, Any], str | None]:
+    text = str(stdout or "").strip()
+    if not text:
+        return {}, "FinGPT evaluation did not write JSON stdout"
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return {}, f"FinGPT evaluation stdout was not valid JSON: {exc}"
+    if not isinstance(payload, dict):
+        return {}, "FinGPT evaluation stdout was not a JSON object"
+    return payload, None
+
+
+def _fingpt_eval_summary_passed(summary: dict[str, Any]) -> bool:
+    required_metrics = ("total", "accuracy", "invalid_outputs")
+    if any(metric not in summary or summary[metric] is None for metric in required_metrics):
+        return False
+    try:
+        total = int(summary["total"])
+        accuracy = float(summary["accuracy"])
+        invalid_outputs = int(summary["invalid_outputs"])
+    except (TypeError, ValueError):
+        return False
+    return total > 0 and accuracy >= 1.0 and invalid_outputs == 0
+
+
+def run_fingpt_eval_gate() -> dict[str, Any]:
+    result = run_command(
+        "fingpt-eval",
+        [
+            sys.executable,
+            "scripts/evaluate_fingpt_tasks.py",
+            "--cases",
+            str(FINGPT_EVAL_CASES_PATH),
+            "--route",
+            "rule-baseline",
+        ],
+        timeout_s=600,
+    )
+    summary, parse_error = _parse_fingpt_eval_summary(result.get("stdout", ""))
+    if parse_error or not result["ok"] or not _fingpt_eval_summary_passed(summary):
+        return {
+            "status": "failed",
+            "command": result,
+            "summary": summary,
+            "error": parse_error or "FinGPT auxiliary evaluation gate failed",
+        }
+    return {"status": "passed", "command": result, "summary": summary}
+
+
 def run_quality_gate() -> dict[str, Any]:
     _prepare_gate_artifact(QUALITY_RESULTS_PATH)
     result = run_command(
@@ -1334,6 +1385,11 @@ def main() -> int:
         action="store_true",
         help="Run live smoke, quality review, and latency profile as a release-candidate gate.",
     )
+    parser.add_argument(
+        "--include-fingpt-eval",
+        action="store_true",
+        help="Run the opt-in FinGPT auxiliary evaluation gate after code checks.",
+    )
     parser.add_argument("--api-smoke-child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--api-smoke-output", default="", help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -1373,6 +1429,11 @@ def main() -> int:
         phases["runtime_compat_gate"] = run_runtime_compat_gate()
         current_phase = "code_gate"
         phases["code_gate"] = run_code_gate()
+        if args.include_fingpt_eval:
+            current_phase = "fingpt_eval_gate"
+            phases["fingpt_eval_gate"] = run_fingpt_eval_gate()
+            if phases["fingpt_eval_gate"].get("status") != "passed":
+                raise ValidationError(str(phases["fingpt_eval_gate"].get("error") or "FinGPT auxiliary evaluation gate failed"))
         current_phase = "model_baseline_gate"
         phases["model_baseline_gate"] = run_model_baseline_gate()
         current_phase = "provider_compat_gate"

@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from core.schemas.request import UniversalRequest
-from core.schemas.response import AnalysisResponse
+from core.schemas.response import AnalysisResponse, CompareResponse
 from core.schemas.topic import TopicResponse
 from pipelines.orchestration.dispatch import dispatch_async
 from pipelines.router.query_router import RoutedQuery
@@ -47,6 +47,41 @@ class DispatchRoutingTests(unittest.IsolatedAsyncioTestCase):
         request = run_pipeline.await_args.args[0]
         self.assertEqual(request.ticker, "QQQ")
         self.assertEqual(request.sources, ["news", "macro", "transcript"])
+
+    async def test_auto_mode_question_company_names_override_stale_ticker_hint(self):
+        question = "\uc0bc\uc131\uc804\uc790\uc640 \ud558\uc774\ub2c9\uc2a4\uc758 \uc8fc\uac00\ub294 \ud569\ub9ac\uc801\uc778\uac00?"
+        response = CompareResponse(
+            question=question,
+            tickers=["005930.KS", "000660.KS"],
+            results={},
+            elapsed_s=0.01,
+            concurrency=1,
+        )
+        with patch(
+            "pipelines.orchestration.dispatch._run_compare_async",
+            new=AsyncMock(return_value=response),
+        ) as run_compare, patch(
+            "pipelines.orchestration.dispatch.run_pipeline_async",
+            new=AsyncMock(),
+        ) as run_pipeline, patch(
+            "pipelines.orchestration.dispatch.run_topic_pipeline_async",
+            new=AsyncMock(),
+        ) as run_topic:
+            result = await dispatch_async(
+                UniversalRequest(
+                    ticker="TLT",
+                    question=question,
+                    mode_hint="auto",
+                    sources=None,
+                )
+            )
+
+        self.assertEqual(result.tickers, ["005930.KS", "000660.KS"])
+        run_compare.assert_awaited_once()
+        request = run_compare.await_args.args[0]
+        self.assertEqual(request.tickers[:2], ["005930.KS", "000660.KS"])
+        run_pipeline.assert_not_awaited()
+        run_topic.assert_not_awaited()
 
     async def test_auto_mode_without_ticker_uses_explicit_ticker_in_question(self):
         response = AnalysisResponse(

@@ -14,7 +14,7 @@ from core.schemas.response import AnalysisResponse, CompareResponse
 from core.schemas.topic import TopicRequest, TopicResponse
 from pipelines.orchestration.research_pipeline import EventSink, run_pipeline_async
 from pipelines.orchestration.topic_pipeline import run_topic_pipeline_async
-from pipelines.router.query_router import route_query, should_route_hint_as_topic
+from pipelines.router.query_router import extract_explicit_tickers, route_query, should_route_hint_as_topic
 
 
 def _safe_sources(value) -> list[str]:
@@ -130,7 +130,12 @@ async def dispatch_async(
         routed_mode = "single_ticker"
         tickers = [hint]
         theme = None
-    elif universal.mode_hint == "auto" and hint and not should_route_hint_as_topic(universal.question, hint):
+    elif (
+        universal.mode_hint == "auto"
+        and hint
+        and not extract_explicit_tickers(universal.question)
+        and not should_route_hint_as_topic(universal.question, hint)
+    ):
         routed_mode = "single_ticker"
         tickers = [hint]
         theme = None

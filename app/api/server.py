@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.openbb_agent import router as openbb_agent_router
 from app.api.routers.backtest import router as backtest_router
+from app.api.routers.ai_portfolio import router as ai_portfolio_router
 from app.api.routers.dashboard import router as dashboard_router
 from app.api.routers.data import router as data_router
 from app.api.routers.portfolio import router as portfolio_router
@@ -86,6 +87,8 @@ app.include_router(data_router)
 app.include_router(dashboard_router)
 app.include_router(backtest_router)
 app.include_router(portfolio_router)
+app.include_router(ai_portfolio_router, prefix="/api/v1/ai-portfolio")
+app.include_router(ai_portfolio_router, prefix="/api/ai-portfolio")
 app.include_router(watchlist_router)
 app.include_router(quant_lab_router)
 

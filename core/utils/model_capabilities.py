@@ -39,6 +39,21 @@ def model_capability_profile(route: str, resolved_model: str | None = None) -> M
             restricted_tasks=["final_report", "deterministic_quant", "topic_macro_json"],
         )
 
+    if normalized_route == "gemma4":
+        return ModelCapabilityProfile(
+            route="gemma4",
+            resolved_model=resolved or "gemma4:e4b",
+            json_reliability="low",
+            korean_reliability="medium",
+            context_window=8192,
+            structured_output_support=True,
+            finance_reasoning="medium",
+            latency_profile="unknown",
+            gpu_required=False,
+            recommended_tasks=["experimental_review", "single_name_research_comparison"],
+            restricted_tasks=["deterministic_quant"],
+        )
+
     if normalized_route in {"gemma", "gemma-experimental"}:
         return ModelCapabilityProfile(
             route=normalized_route,

@@ -113,6 +113,7 @@ class QuantRunDiagnostics(BaseModel):
     research_score_used: bool = False
     research_score_status: ResearchScoreStatus = "disabled"
     research_score_provenance: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    fingpt_forecaster_signals: dict[str, dict[str, Any]] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
 
 

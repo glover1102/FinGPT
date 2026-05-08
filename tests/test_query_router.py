@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch
 
+from core.utils.symbol_registry import known_symbol_tickers
 from pipelines.router import query_router
 
 
@@ -41,6 +42,106 @@ class QueryRouterTests(unittest.TestCase):
         call_model.assert_not_called()
         self.assertEqual(routed.mode, "single_ticker")
         self.assertEqual(routed.tickers, ["QQQ"])
+
+    def test_korean_company_names_route_to_equity_tickers_without_llm(self):
+        question = "\uc0bc\uc131\uc804\uc790\uc640 \ud558\uc774\ub2c9\uc2a4\uc758 \uc8fc\uac00\ub294 \ud569\ub9ac\uc801\uc778\uac00?"
+        with patch.object(query_router, "_call_router_model") as call_model:
+            routed = query_router.route_query(question)
+
+        call_model.assert_not_called()
+        self.assertEqual(routed.mode, "multi_ticker")
+        self.assertEqual(routed.tickers[:2], ["005930.KS", "000660.KS"])
+
+    def test_korean_company_names_override_stale_non_equity_hint(self):
+        question = "\uc0bc\uc131\uc804\uc790\uc640 \ud558\uc774\ub2c9\uc2a4\uc758 \uc8fc\uac00\ub294 \ud569\ub9ac\uc801\uc778\uac00?"
+        with patch.object(query_router, "_call_router_model") as call_model:
+            routed = query_router.route_query(question, hint_ticker="TLT")
+
+        call_model.assert_not_called()
+        self.assertEqual(routed.mode, "multi_ticker")
+        self.assertEqual(routed.tickers[:2], ["005930.KS", "000660.KS"])
+        self.assertNotIn("TLT", routed.tickers)
+
+    def test_single_korean_company_name_routes_to_single_equity(self):
+        with patch.object(query_router, "_call_router_model") as call_model:
+            routed = query_router.route_query("\uc0bc\uc131\uc804\uc790 \uc8fc\uac00\ub294 \uc9c0\uae08 \ud569\ub9ac\uc801\uc778\uac00?")
+
+        call_model.assert_not_called()
+        self.assertEqual(routed.mode, "single_ticker")
+        self.assertEqual(routed.tickers, ["005930.KS"])
+
+    def test_symbol_universe_company_aliases_route_without_llm(self):
+        cases = [
+            ("NVIDIA \uc8fc\uac00\ub294 \ud569\ub9ac\uc801\uc778\uac00?", ["NVDA"]),
+            ("Broadcom\uacfc Oracle\uc758 \uc2e4\uc801 \ub9ac\uc2a4\ud06c", ["AVGO", "ORCL"]),
+            ("Palantir \uc804\ub9dd", ["PLTR"]),
+            ("Progressive \uc2e4\uc801", ["PGR"]),
+            ("\uc5d4\ube44\ub514\uc544 \uc8fc\uac00", ["NVDA"]),
+            ("SK\ud558\uc774\ub2c9\uc2a4 \uc8fc\uac00", ["000660.KS"]),
+        ]
+
+        with patch.object(query_router, "_call_router_model") as call_model:
+            for question, expected in cases:
+                routed = query_router.route_query(question)
+                self.assertEqual(routed.tickers[: len(expected)], expected)
+                expected_mode = "single_ticker" if len(expected) == 1 else "multi_ticker"
+                self.assertEqual(routed.mode, expected_mode)
+
+        call_model.assert_not_called()
+
+    def test_symbol_aliases_avoid_common_word_and_short_prefix_false_positives(self):
+        self.assertEqual(query_router.extract_explicit_tickers("now what is market risk?"), [])
+        self.assertEqual(query_router.extract_explicit_tickers("SK\ud558\uc774\ub2c9\uc2a4 \uc8fc\uac00"), ["000660.KS"])
+        self.assertEqual(query_router.extract_explicit_tickers("NOW \uc2e4\uc801"), ["NOW"])
+
+    def test_explicit_uppercase_tickers_outside_curated_universe_route_without_llm(self):
+        cases = [
+            ("CRCL \uc8fc\uac00\ub294 \ud569\ub9ac\uc801\uc778\uac00?", ["CRCL"], "single_ticker"),
+            ("CRCL\uc640 IONQ \ubaa8\uba58\ud140 \ube44\uad50", ["CRCL", "IONQ"], "multi_ticker"),
+            ("MSTR: \ube44\ud2b8\ucf54\uc778 \ubbfc\uac10\ub3c4", ["MSTR"], "single_ticker"),
+            ("$AI \uc2e4\uc801 \ub9ac\uc2a4\ud06c", ["AI"], "single_ticker"),
+        ]
+
+        with patch.object(query_router, "_call_router_model") as call_model:
+            for question, expected, mode in cases:
+                routed = query_router.route_query(question)
+                self.assertEqual(routed.mode, mode)
+                self.assertEqual(routed.tickers[: len(expected)], expected)
+
+        call_model.assert_not_called()
+
+    def test_unregistered_ticker_fallback_does_not_route_macro_abbreviations(self):
+        for question in [
+            "AI \ubc18\ub3c4\uccb4 \uc218\uc694\ub294 \uc5b4\ub5a4\uac00?",
+            "AI: \ubc18\ub3c4\uccb4 \uc218\uc694\ub294 \uc5b4\ub5a4\uac00?",
+            "ETF \uc2dc\uc7a5 \ub9ac\uc2a4\ud06c",
+            "GDP\uac00 \uc8fc\uc2dd\uc5d0 \ubbf8\uce58\ub294 \uc601\ud5a5",
+            "7203.T \uc804\ub9dd",
+        ]:
+            self.assertEqual(query_router.extract_explicit_tickers(question), [])
+
+    def test_class_share_dot_ticker_normalizes_to_yahoo_dash_symbol(self):
+        cases = [
+            ("BRK.B: \uc7a5\uae30 \ud22c\uc790 \ub9e4\ub825", ["BRK-B"]),
+            ("$BRK.B \uc7a5\uae30 \ud22c\uc790 \ub9e4\ub825", ["BRK-B"]),
+            ("BRK-B \uc7a5\uae30 \ud22c\uc790 \ub9e4\ub825", ["BRK-B"]),
+        ]
+
+        with patch.object(query_router, "_call_router_model") as call_model:
+            for question, expected in cases:
+                routed = query_router.route_query(question)
+                self.assertEqual(routed.mode, "single_ticker")
+                self.assertEqual(routed.tickers, expected)
+
+        call_model.assert_not_called()
+
+    def test_full_symbol_universe_tickers_are_extractable(self):
+        missing = [
+            ticker for ticker in sorted(known_symbol_tickers())
+            if ticker not in query_router.extract_explicit_tickers(f"{ticker} outlook")
+        ]
+
+        self.assertEqual(missing, [])
 
     def test_non_equity_proxy_ticker_routes_to_topic_without_llm(self):
         with patch.object(query_router, "_call_router_model") as call_model:

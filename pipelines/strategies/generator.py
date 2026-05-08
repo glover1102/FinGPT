@@ -1,0 +1,269 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from typing import Any
+
+import httpx
+
+from core.config.settings import load_settings
+from pipelines.strategies.storage import validate_strategy
+
+
+STRATEGY_CODE_FIELDS = {
+    "strategy_id",
+    "name",
+    "schema_version",
+    "strategy_version",
+    "frequency",
+    "features",
+    "signal",
+    "portfolio",
+    "execution",
+    "diagnostics",
+}
+
+STRATEGY_GENERATION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "strategy": {"type": "object"},
+        "advantages": {"type": "array", "items": {"type": "string"}},
+        "disadvantages": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["strategy", "advantages", "disadvantages"],
+}
+
+SYSTEM_PROMPT = """
+You generate deterministic FinGPT Quant Lab strategy JSON.
+Return exactly one JSON object matching the provided schema.
+The strategy is not Python code. It must be a strategy definition JSON object only.
+Do not include universe, tickers, benchmark, markdown, or explanations inside strategy.
+execution.trade_at must be next_bar_close.
+Use Korean for advantages and disadvantages.
+""".strip()
+
+
+def generate_strategy_from_prompt(
+    prompt: str,
+    *,
+    context: dict[str, Any] | None = None,
+    use_local_llm: bool = True,
+    timeout_s: float = 24.0,
+) -> dict[str, Any]:
+    clean_prompt = str(prompt or "").strip()
+    context = dict(context or {})
+    fallback = _fallback_generation(clean_prompt, context)
+    if not clean_prompt:
+        fallback["status"] = "failed"
+        fallback["warnings"] = ["strategy_prompt_required"]
+        return fallback
+
+    if not use_local_llm:
+        return fallback
+
+    settings = load_settings()
+    model = str(getattr(settings, "primary_model", "") or "qwen2.5:7b")
+    base_url = str(getattr(settings, "ollama_base_url", "") or "http://localhost:11434")
+    try:
+        raw = _call_local_llm(
+            base_url=base_url,
+            model=model,
+            prompt=_strategy_prompt(clean_prompt, context, fallback["strategy"]),
+            timeout_s=max(4.0, min(float(timeout_s or 24.0), 45.0)),
+        )
+        parsed = _extract_json_object(raw)
+        strategy = _code_only_strategy(parsed.get("strategy") if isinstance(parsed.get("strategy"), dict) else parsed)
+        strategy = _repair_required_strategy_fields(strategy, clean_prompt, context)
+        validate_strategy(strategy)
+        return {
+            "status": "success",
+            "model_status": "local_llm",
+            "model": model,
+            "strategy": strategy,
+            "advantages": _clean_text_list(parsed.get("advantages")) or fallback["advantages"],
+            "disadvantages": _clean_text_list(parsed.get("disadvantages")) or fallback["disadvantages"],
+            "warnings": [],
+        }
+    except Exception as exc:  # noqa: BLE001
+        fallback["model_status"] = "fallback_after_llm_error"
+        fallback["model"] = model
+        fallback["warnings"] = [f"local_llm_generation_failed:{type(exc).__name__}"]
+        return fallback
+
+
+def _call_local_llm(*, base_url: str, model: str, prompt: str, timeout_s: float) -> str:
+    response = httpx.post(
+        f"{base_url.rstrip('/')}/api/generate",
+        json={
+            "model": model,
+            "system": SYSTEM_PROMPT,
+            "prompt": prompt,
+            "format": STRATEGY_GENERATION_SCHEMA,
+            "stream": False,
+            "options": {"temperature": 0, "num_ctx": 4096, "num_predict": 1400},
+            "keep_alive": "5m",
+        },
+        timeout=timeout_s,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    text = str(payload.get("response") or "").strip()
+    if not text:
+        raise ValueError("empty local LLM response")
+    return text
+
+
+def _strategy_prompt(prompt: str, context: dict[str, Any], fallback_strategy: dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            "사용자가 원하는 전략을 FinGPT Quant Lab 전략 JSON으로 변환하세요.",
+            "오른쪽 코드칸에는 strategy 객체만 들어가므로 strategy 안에는 설명을 넣지 마세요.",
+            "종목 유니버스와 벤치마크는 아래 백테스트 UI가 관리하므로 반드시 제외하세요.",
+            "지원 팩터: momentum_63d, realized_vol_21d, drawdown_current, ma_ratio_20_50, relative_strength_spy_63d, research_score.",
+            "지원 신호 예: rank_top_n, trend_filter, volatility_target.",
+            "지원 포트폴리오 방식: equal_weight, inverse_volatility, risk_parity, minimum_volatility, max_sharpe, momentum_tilt.",
+            f"현재 UI 컨텍스트: {json.dumps(context, ensure_ascii=False, sort_keys=True)}",
+            f"기본 안전 초안: {json.dumps(fallback_strategy, ensure_ascii=False, sort_keys=True)}",
+            f"사용자 프롬프트: {prompt}",
+        ]
+    )
+
+
+def _extract_json_object(raw: str) -> dict[str, Any]:
+    text = str(raw or "").strip()
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            raise
+        parsed = json.loads(text[start : end + 1])
+    if not isinstance(parsed, dict):
+        raise ValueError("strategy generation returned non-object JSON")
+    return parsed
+
+
+def _fallback_generation(prompt: str, context: dict[str, Any]) -> dict[str, Any]:
+    strategy = _repair_required_strategy_fields({}, prompt, context)
+    return {
+        "status": "success",
+        "model_status": "deterministic_fallback",
+        "model": "deterministic_rules",
+        "strategy": strategy,
+        "advantages": [
+            "다음 봉 체결을 고정해 룩어헤드 편향을 줄입니다.",
+            "모멘텀과 변동성 팩터를 함께 사용해 단순 수익률 순위보다 리스크 점검이 쉽습니다.",
+            "종목 유니버스와 벤치마크를 전략 코드에서 분리해 같은 전략을 여러 조건에 재사용할 수 있습니다.",
+        ],
+        "disadvantages": [
+            "프롬프트가 모호하면 세부 진입/청산 조건은 보수적인 기본값으로 해석됩니다.",
+            "거래비용, 슬리피지, 리밸런싱 주기에 민감하므로 저장 전 백테스트 검증이 필요합니다.",
+            "로컬 데이터 마트에 가격 이력이 없는 종목은 실행 유니버스에서 제외됩니다.",
+        ],
+        "warnings": [] if prompt else ["strategy_prompt_required"],
+    }
+
+
+def _repair_required_strategy_fields(strategy: dict[str, Any], prompt: str, context: dict[str, Any]) -> dict[str, Any]:
+    clean = _code_only_strategy(strategy)
+    prompt_hash = hashlib.sha1(prompt.encode("utf-8", errors="ignore")).hexdigest()[:10]
+    lookback = _number_near(prompt, [r"(\d{2,4})\s*일", r"(\d{2,4})d", r"(\d{2,4})\s*day"], int(context.get("lookback") or 63))
+    vol_lookback = _number_near(prompt, [r"(\d{1,3})\s*일\s*변동", r"vol(?:atility)?\s*(\d{1,3})"], int(context.get("vol_lookback") or 21))
+    top_n = _number_near(prompt, [r"top\s*(\d{1,2})", r"상위\s*(\d{1,2})", r"(\d{1,2})\s*개"], int(context.get("top_n") or 2))
+    top_n = max(1, min(top_n, 50))
+
+    prompt_lower = prompt.lower()
+    use_research = bool(context.get("use_research_score")) or any(token in prompt_lower for token in ["research", "news", "리서치", "뉴스", "근거", "공시"])
+    portfolio_method = str(context.get("portfolio_method") or "equal_weight").lower()
+    if "risk parity" in prompt_lower or "리스크 패리티" in prompt_lower:
+        portfolio_method = "risk_parity"
+    elif "minimum vol" in prompt_lower or "최소 변동" in prompt_lower:
+        portfolio_method = "minimum_volatility"
+    elif "inverse vol" in prompt_lower or "역변동" in prompt_lower:
+        portfolio_method = "inverse_volatility"
+    elif "max sharpe" in prompt_lower or "샤프" in prompt_lower:
+        portfolio_method = "max_sharpe"
+
+    strategy_id = str(clean.get("strategy_id") or f"prompt_strategy_{prompt_hash}").strip().lower()
+    strategy_id = re.sub(r"[^a-z0-9_-]+", "_", strategy_id).strip("_") or f"prompt_strategy_{prompt_hash}"
+    clean["strategy_id"] = strategy_id[:80]
+    clean.setdefault("name", _strategy_name(prompt))
+    clean.setdefault("schema_version", "quant_strategy_v1")
+    clean.setdefault("strategy_version", "1")
+    clean.setdefault("frequency", "daily")
+    features = clean.get("features") if isinstance(clean.get("features"), dict) else {}
+    features.setdefault("momentum_63d", {"id": "momentum_63d", "lookback": lookback})
+    features.setdefault("realized_vol_21d", {"id": "realized_vol_21d", "lookback": vol_lookback})
+    if "drawdown" in prompt_lower or "mdd" in prompt_lower or "낙폭" in prompt_lower:
+        features.setdefault("drawdown_current", {"id": "drawdown_current"})
+    if "trend" in prompt_lower or "이동평균" in prompt or "추세" in prompt:
+        features.setdefault("ma_ratio_20_50", {"id": "ma_ratio_20_50"})
+    if use_research:
+        features.setdefault("research_score", {"id": "research_score", "max_age_days": int(context.get("research_max_age_days") or 7)})
+    clean["features"] = features
+    clean.setdefault("signal", {"type": "rank_top_n", "top_n": top_n})
+    if isinstance(clean.get("signal"), dict):
+        clean["signal"].setdefault("type", "rank_top_n")
+        clean["signal"].setdefault("top_n", top_n)
+    clean.setdefault("portfolio", {"method": portfolio_method, "max_weight": float(context.get("max_weight") or 0.5)})
+    if isinstance(clean.get("portfolio"), dict):
+        clean["portfolio"].setdefault("method", portfolio_method)
+        clean["portfolio"].setdefault("max_weight", float(context.get("max_weight") or 0.5))
+    clean["execution"] = {
+        **(clean.get("execution") if isinstance(clean.get("execution"), dict) else {}),
+        "trade_at": "next_bar_close",
+        "transaction_cost_bps": float(context.get("transaction_cost_bps") or 5),
+        "slippage_bps": float(context.get("slippage_bps") or 2),
+    }
+    diagnostics = clean.get("diagnostics") if isinstance(clean.get("diagnostics"), dict) else {}
+    diagnostics.update(
+        {
+            "require_no_lookahead": True,
+            "prompt_hash": prompt_hash,
+            "freshness_profile": context.get("freshness_profile") or "research_default",
+            "require_fresh_prices": bool(context.get("require_fresh_prices")),
+        }
+    )
+    clean["diagnostics"] = diagnostics
+    return _code_only_strategy(clean)
+
+
+def _strategy_name(prompt: str) -> str:
+    cleaned = re.sub(r"\s+", " ", str(prompt or "").strip())
+    if not cleaned:
+        return "Prompt Strategy"
+    return cleaned[:36].rstrip(" ,.;") or "Prompt Strategy"
+
+
+def _number_near(prompt: str, patterns: list[str], fallback: int) -> int:
+    for pattern in patterns:
+        match = re.search(pattern, prompt, flags=re.IGNORECASE)
+        if not match:
+            continue
+        try:
+            return int(match.group(1))
+        except (TypeError, ValueError):
+            continue
+    return fallback
+
+
+def _clean_text_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text:
+            out.append(text[:240])
+    return out[:6]
+
+
+def _code_only_strategy(strategy: dict[str, Any] | None) -> dict[str, Any]:
+    source = strategy if isinstance(strategy, dict) else {}
+    clean = {key: value for key, value in source.items() if key in STRATEGY_CODE_FIELDS}
+    clean.pop("universe", None)
+    clean.pop("benchmark", None)
+    return clean

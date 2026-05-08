@@ -133,7 +133,7 @@ _HEATMAP_ROWS: tuple[tuple[str, str, str, str, float], ...] = (
     ("TRV", "Travelers", "FINANCIAL", "INSURANCE - PROPERTY", 0.4),
     ("AON", "Aon", "FINANCIAL", "INSURANCE BROKERS", 0.6),
     ("AFL", "Aflac", "FINANCIAL", "INSURANCE", 0.4),
-    ("MMC", "Marsh & McLennan", "FINANCIAL", "INSURANCE BROKERS", 0.7),
+    ("BRO", "Brown & Brown", "FINANCIAL", "INSURANCE BROKERS", 0.4),
     ("AJG", "Arthur J. Gallagher", "FINANCIAL", "INSURANCE BROKERS", 0.5),
     ("ALL", "Allstate", "FINANCIAL", "INSURANCE - PROPERTY", 0.4),
     ("KKR", "KKR", "FINANCIAL", "ASSET MANAGEMENT", 0.6),

@@ -28,6 +28,7 @@ const API = {
   dashboardEquityHeatmap: "/api/v1/dashboard/equity-heatmap",
   dataHealth: "/api/v1/data/health",
   dataPrices: (ticker, limit = 252) => `/api/v1/data/prices/${encodeURIComponent(ticker)}?limit=${encodeURIComponent(limit)}`,
+  dataFundamentals: (ticker) => `/api/v1/data/fundamentals/${encodeURIComponent(ticker)}`,
   backtestRun: "/api/v1/backtest/run",
   quantFeatures: "/api/v1/quant/features/preview",
   quantSignals: "/api/v1/quant/signals/generate",
@@ -47,8 +48,29 @@ const API = {
   quantStrategies: "/api/v1/quant/strategy/list",
   quantStrategy: (strategyId) => `/api/v1/quant/strategy/${encodeURIComponent(strategyId)}`,
   quantStrategyDryRun: "/api/v1/quant/strategy/dry-run",
+  quantStrategyGenerate: "/api/v1/quant/strategy/generate",
   quantStrategySave: "/api/v1/quant/strategy/save",
+  quantUniverseResolve: "/api/v1/quant/universe/resolve",
   portfolioOptimize: "/api/v1/portfolio/optimize",
+  aiPortfolioInvestmentTypes: "/api/v1/ai-portfolio/investment-types",
+  aiPortfolioUniverses: "/api/v1/ai-portfolio/universes",
+  aiPortfolioStoreStatus: "/api/v1/ai-portfolio/store/status",
+  aiPortfolioOperations: "/api/v1/ai-portfolio/operations",
+  aiPortfolioHydrate: "/api/v1/ai-portfolio/operations/hydrate",
+  aiPortfolioSnapshotJob: "/api/v1/ai-portfolio/operations/snapshots",
+  aiPortfolioPolicies: "/api/v1/ai-portfolio/policies",
+  aiPortfolioPolicy: (policyId) => `/api/v1/ai-portfolio/policies/${encodeURIComponent(policyId)}`,
+  aiPortfolioActivate: (policyId) => `/api/v1/ai-portfolio/policies/${encodeURIComponent(policyId)}/activate`,
+  aiPortfolioDeactivate: (policyId) => `/api/v1/ai-portfolio/policies/${encodeURIComponent(policyId)}/deactivate`,
+  aiPortfolioGenerate: "/api/v1/ai-portfolio/generate",
+  aiPortfolioRecommendations: (policyId) => `/api/v1/ai-portfolio/recommendations?policy_id=${encodeURIComponent(policyId)}`,
+  aiPortfolioRecommendationDiff: (policyId) => `/api/v1/ai-portfolio/recommendations/${encodeURIComponent(policyId)}/diff`,
+  aiPortfolioRebalanceCheck: "/api/v1/ai-portfolio/rebalance/check",
+  aiPortfolioRebalanceSignals: (policyId) => `/api/v1/ai-portfolio/rebalance/signals?policy_id=${encodeURIComponent(policyId)}`,
+  aiPortfolioRebalanceAction: (signalId, action) => `/api/v1/ai-portfolio/rebalance/signals/${encodeURIComponent(signalId)}/${encodeURIComponent(action)}`,
+  aiPortfolioReportsGenerate: "/api/v1/ai-portfolio/reports",
+  aiPortfolioReports: (policyId) => `/api/v1/ai-portfolio/reports?policy_id=${encodeURIComponent(policyId)}`,
+  aiPortfolioHistory: (policyId) => `/api/v1/ai-portfolio/history?policy_id=${encodeURIComponent(policyId)}`,
 };
 
 const STORAGE = {
@@ -72,6 +94,7 @@ const els = {
   topk: document.getElementById("topk"),
   topkValue: document.getElementById("topkValue"),
   model: document.getElementById("model"),
+  fingptStatus: document.getElementById("fingptStatus"),
   runBtn: document.getElementById("runBtn"),
   loadLatestBtn: document.getElementById("loadLatestBtn"),
   clearHistoryBtn: document.getElementById("clearHistoryBtn"),
@@ -177,9 +200,11 @@ const els = {
   homeNewsList: document.getElementById("homeNewsList"),
   homeNewsCategories: document.getElementById("homeNewsCategories"),
   homeNewsRefresh: document.getElementById("homeNewsRefresh"),
+  homeDashboardTabs: document.getElementById("homeDashboardTabs"),
   homeSurfaceGrid: document.getElementById("homeSurfaceGrid"),
   marketDashboardTab: document.getElementById("marketDashboardTab"),
   quantLabTab: document.getElementById("quantLabTab"),
+  aiPortfolioTab: document.getElementById("aiPortfolioTab"),
   homeHeatmap: document.getElementById("homeHeatmap"),
   homeHeatmapMeta: document.getElementById("homeHeatmapMeta"),
   homeHeatmapRefresh: document.getElementById("homeHeatmapRefresh"),
@@ -187,6 +212,12 @@ const els = {
   dataHealthRefresh: document.getElementById("dataHealthRefresh"),
   homeDataHealth: document.getElementById("homeDataHealth"),
   assetDetailTicker: document.getElementById("assetDetailTicker"),
+  assetDetailRange: document.getElementById("assetDetailRange"),
+  assetDetailStartDate: document.getElementById("assetDetailStartDate"),
+  assetDetailEndDate: document.getElementById("assetDetailEndDate"),
+  assetDetailView: document.getElementById("assetDetailView"),
+  assetDetailBenchmark: document.getElementById("assetDetailBenchmark"),
+  assetDetailBenchmarkCompare: document.getElementById("assetDetailBenchmarkCompare"),
   assetDetailLoad: document.getElementById("assetDetailLoad"),
   assetDetailSurface: document.getElementById("assetDetailSurface"),
   backtestTicker: document.getElementById("backtestTicker"),
@@ -216,10 +247,13 @@ const els = {
   quantSignalSurface: document.getElementById("quantSignalSurface"),
   quantStrategyRefresh: document.getElementById("quantStrategyRefresh"),
   quantStrategyNewDraft: document.getElementById("quantStrategyNewDraft"),
+  quantStrategyGenerate: document.getElementById("quantStrategyGenerate"),
   quantStrategyDryRun: document.getElementById("quantStrategyDryRun"),
   quantStrategySave: document.getElementById("quantStrategySave"),
   quantStrategyDelete: document.getElementById("quantStrategyDelete"),
+  strategyPromptInput: document.getElementById("strategyPromptInput"),
   strategyDefinitionJson: document.getElementById("strategyDefinitionJson"),
+  strategyPromptReviewSurface: document.getElementById("strategyPromptReviewSurface"),
   quantStrategySurface: document.getElementById("quantStrategySurface"),
   quantStrategyResultSurface: document.getElementById("quantStrategyResultSurface"),
   quantRunHistoryRefresh: document.getElementById("quantRunHistoryRefresh"),
@@ -238,6 +272,63 @@ const els = {
   portfolioSyncBacktest: document.getElementById("portfolioSyncBacktest"),
   portfolioOptimize: document.getElementById("portfolioOptimize"),
   portfolioSurface: document.getElementById("portfolioSurface"),
+  aiPortfolioOverviewSurface: document.getElementById("aiPortfolioOverviewSurface"),
+  aiPortfolioOpsRefresh: document.getElementById("aiPortfolioOpsRefresh"),
+  aiPortfolioOpsSurface: document.getElementById("aiPortfolioOpsSurface"),
+  aiPortfolioRefreshPolicies: document.getElementById("aiPortfolioRefreshPolicies"),
+  aiPortfolioHydrateData: document.getElementById("aiPortfolioHydrateData"),
+  aiPortfolioRetryMissing: document.getElementById("aiPortfolioRetryMissing"),
+  aiPortfolioSnapshotJob: document.getElementById("aiPortfolioSnapshotJob"),
+  aiPortfolioPolicyListSurface: document.getElementById("aiPortfolioPolicyListSurface"),
+  aiPortfolioRecommendationDiffSurface: document.getElementById("aiPortfolioRecommendationDiffSurface"),
+  aiPortfolioOperationsSurface: document.getElementById("aiPortfolioOperationsSurface"),
+  aiPortfolioInvestmentTypes: document.getElementById("aiPortfolioInvestmentTypes"),
+  aiPortfolioName: document.getElementById("aiPortfolioName"),
+  aiPortfolioUniverse: document.getElementById("aiPortfolioUniverse"),
+  aiPortfolioCustomUniverseWrap: document.getElementById("aiPortfolioCustomUniverseWrap"),
+  aiPortfolioCustomUniverse: document.getElementById("aiPortfolioCustomUniverse"),
+  aiPortfolioUniverseStatus: document.getElementById("aiPortfolioUniverseStatus"),
+  aiPortfolioInitialCapital: document.getElementById("aiPortfolioInitialCapital"),
+  aiPortfolioMonthlyContribution: document.getElementById("aiPortfolioMonthlyContribution"),
+  aiPortfolioTargetReturn: document.getElementById("aiPortfolioTargetReturn"),
+  aiPortfolioBenchmark: document.getElementById("aiPortfolioBenchmark"),
+  aiPortfolioAutomation: document.getElementById("aiPortfolioAutomation"),
+  aiPortfolioAdvancedToggle: document.getElementById("aiPortfolioAdvancedToggle"),
+  aiPortfolioPolicyForm: document.getElementById("aiPortfolioPolicyForm"),
+  aiPortfolioTargetVolatility: document.getElementById("aiPortfolioTargetVolatility"),
+  aiPortfolioMaxDrawdown: document.getElementById("aiPortfolioMaxDrawdown"),
+  aiPortfolioMinCash: document.getElementById("aiPortfolioMinCash"),
+  aiPortfolioMaxSingle: document.getElementById("aiPortfolioMaxSingle"),
+  aiPortfolioMaxSector: document.getElementById("aiPortfolioMaxSector"),
+  aiPortfolioRebalanceFrequency: document.getElementById("aiPortfolioRebalanceFrequency"),
+  aiPortfolioDriftThreshold: document.getElementById("aiPortfolioDriftThreshold"),
+  aiPortfolioMaxTurnover: document.getElementById("aiPortfolioMaxTurnover"),
+  aiPortfolioOptimization: document.getElementById("aiPortfolioOptimization"),
+  aiPortfolioLookbackMonths: document.getElementById("aiPortfolioLookbackMonths"),
+  aiPortfolioRiskModel: document.getElementById("aiPortfolioRiskModel"),
+  aiPortfolioExpectedReturn: document.getElementById("aiPortfolioExpectedReturn"),
+  aiPortfolioEquityRange: document.getElementById("aiPortfolioEquityRange"),
+  aiPortfolioBondRange: document.getElementById("aiPortfolioBondRange"),
+  aiPortfolioCashRange: document.getElementById("aiPortfolioCashRange"),
+  aiPortfolioAlternativeRange: document.getElementById("aiPortfolioAlternativeRange"),
+  aiPortfolioGenerate: document.getElementById("aiPortfolioGenerate"),
+  aiPortfolioGenerateQuick: document.getElementById("aiPortfolioGenerateQuick"),
+  aiPortfolioCheckRebalanceQuick: document.getElementById("aiPortfolioCheckRebalanceQuick"),
+  aiPortfolioReportQuick: document.getElementById("aiPortfolioReportQuick"),
+  aiPortfolioRecommendationSurface: document.getElementById("aiPortfolioRecommendationSurface"),
+  aiPortfolioPerformanceSurface: document.getElementById("aiPortfolioPerformanceSurface"),
+  aiPortfolioComplianceSurface: document.getElementById("aiPortfolioComplianceSurface"),
+  aiPortfolioCurrentWeights: document.getElementById("aiPortfolioCurrentWeights"),
+  aiPortfolioCheckRebalance: document.getElementById("aiPortfolioCheckRebalance"),
+  aiPortfolioApproveRebalance: document.getElementById("aiPortfolioApproveRebalance"),
+  aiPortfolioRejectRebalance: document.getElementById("aiPortfolioRejectRebalance"),
+  aiPortfolioDeferRebalance: document.getElementById("aiPortfolioDeferRebalance"),
+  aiPortfolioRebalanceSurface: document.getElementById("aiPortfolioRebalanceSurface"),
+  aiPortfolioReportWeekly: document.getElementById("aiPortfolioReportWeekly"),
+  aiPortfolioReportMonthly: document.getElementById("aiPortfolioReportMonthly"),
+  aiPortfolioReportRebalance: document.getElementById("aiPortfolioReportRebalance"),
+  aiPortfolioReportsSurface: document.getElementById("aiPortfolioReportsSurface"),
+  aiPortfolioHistorySurface: document.getElementById("aiPortfolioHistorySurface"),
   tvOverviewWidget: document.getElementById("tvOverviewWidget"),
   tvOverviewFallback: document.getElementById("tvOverviewFallback"),
   tvHeatmapWidget: document.getElementById("tvHeatmapWidget"),
@@ -248,8 +339,11 @@ const els = {
   symbolPickerTabs: document.getElementById("symbolPickerTabs"),
   symbolPickerCountry: document.getElementById("symbolPickerCountry"),
   symbolPickerSector: document.getElementById("symbolPickerSector"),
+  symbolPickerSummary: document.getElementById("symbolPickerSummary"),
   symbolPickerSelected: document.getElementById("symbolPickerSelected"),
   symbolPickerList: document.getElementById("symbolPickerList"),
+  symbolPickerAddFiltered: document.getElementById("symbolPickerAddFiltered"),
+  symbolPickerRemoveFiltered: document.getElementById("symbolPickerRemoveFiltered"),
   symbolPickerClear: document.getElementById("symbolPickerClear"),
   symbolPickerApply: document.getElementById("symbolPickerApply"),
 };
@@ -284,44 +378,826 @@ const state = {
   lastBacktestResult: null,
   lastFeatureResult: null,
   lastSignalResult: null,
+  lastUniverseResolution: null,
+  lastStrategyGeneration: null,
   quantStrategiesLoaded: false,
   quantStrategyItems: [],
   activeStrategyId: "",
   symbolPickerType: "all",
+  symbolPickerFilteredSymbols: [],
   quantRunHistoryLoaded: false,
   lastCrossRunExportCleanupPreview: null,
+  chartTooltipBound: false,
+  aiPortfolioLoaded: false,
+  aiPortfolioOpsLoaded: false,
+  aiPortfolioInvestmentTypes: [],
+  aiPortfolioUniverses: [],
+  aiPortfolioPolicies: [],
+  aiPortfolioOperations: [],
+  aiPortfolioSelectedType: "balanced_growth",
+  aiPortfolioPolicy: null,
+  aiPortfolioRecommendation: null,
+  aiPortfolioSignal: null,
 };
 
-const SYMBOL_CATALOG = [
-  { symbol: "SPY", name: "SPDR S&P 500 ETF Trust", type: "etf", country: "US", sector: "macro", exchange: "NYSE Arca" },
-  { symbol: "QQQ", name: "Invesco QQQ Trust", type: "etf", country: "US", sector: "technology", exchange: "NASDAQ" },
-  { symbol: "DIA", name: "SPDR Dow Jones Industrial Average ETF", type: "etf", country: "US", sector: "macro", exchange: "NYSE Arca" },
-  { symbol: "IWM", name: "iShares Russell 2000 ETF", type: "etf", country: "US", sector: "macro", exchange: "NYSE Arca" },
-  { symbol: "TLT", name: "iShares 20+ Year Treasury Bond ETF", type: "etf", country: "US", sector: "macro", exchange: "NASDAQ" },
-  { symbol: "GLD", name: "SPDR Gold Shares", type: "etf", country: "US", sector: "macro", exchange: "NYSE Arca" },
-  { symbol: "AAPL", name: "Apple Inc.", type: "stock", country: "US", sector: "technology", exchange: "NASDAQ" },
-  { symbol: "MSFT", name: "Microsoft Corporation", type: "stock", country: "US", sector: "technology", exchange: "NASDAQ" },
-  { symbol: "NVDA", name: "NVIDIA Corporation", type: "stock", country: "US", sector: "ai_semis", exchange: "NASDAQ" },
-  { symbol: "TSLA", name: "Tesla, Inc.", type: "stock", country: "US", sector: "consumer", exchange: "NASDAQ" },
-  { symbol: "GOOGL", name: "Alphabet Inc.", type: "stock", country: "US", sector: "technology", exchange: "NASDAQ" },
-  { symbol: "AMZN", name: "Amazon.com, Inc.", type: "stock", country: "US", sector: "consumer", exchange: "NASDAQ" },
-  { symbol: "META", name: "Meta Platforms, Inc.", type: "stock", country: "US", sector: "technology", exchange: "NASDAQ" },
-  { symbol: "AMD", name: "Advanced Micro Devices, Inc.", type: "stock", country: "US", sector: "ai_semis", exchange: "NASDAQ" },
-  { symbol: "AVGO", name: "Broadcom Inc.", type: "stock", country: "US", sector: "ai_semis", exchange: "NASDAQ" },
-  { symbol: "MU", name: "Micron Technology, Inc.", type: "stock", country: "US", sector: "ai_semis", exchange: "NASDAQ" },
-  { symbol: "PLTR", name: "Palantir Technologies Inc. Class A", type: "stock", country: "US", sector: "technology", exchange: "NASDAQ" },
-  { symbol: "CRCL", name: "Circle Internet Group, Inc. Class A", type: "stock", country: "US", sector: "financials", exchange: "NYSE" },
-  { symbol: "IONQ", name: "IonQ, Inc.", type: "stock", country: "US", sector: "technology", exchange: "NYSE" },
-  { symbol: "MSTR", name: "Strategy Inc. Class A", type: "stock", country: "US", sector: "technology", exchange: "NASDAQ" },
-  { symbol: "JPM", name: "JPMorgan Chase & Co.", type: "stock", country: "US", sector: "financials", exchange: "NYSE" },
-  { symbol: "BRK-B", name: "Berkshire Hathaway Inc. Class B", type: "stock", country: "US", sector: "financials", exchange: "NYSE" },
-  { symbol: "005930", name: "Samsung Electronics Co., Ltd.", type: "stock", country: "KR", sector: "technology", exchange: "KRX" },
-  { symbol: "000660", name: "SK hynix Inc.", type: "stock", country: "KR", sector: "ai_semis", exchange: "KRX" },
-  { symbol: "BTC-USD", name: "Bitcoin USD", type: "crypto", country: "GLOBAL", sector: "crypto", exchange: "Crypto" },
-  { symbol: "ETH-USD", name: "Ethereum USD", type: "crypto", country: "GLOBAL", sector: "crypto", exchange: "Crypto" },
-  { symbol: "^GSPC", name: "S&P 500 Index", type: "index", country: "US", sector: "macro", exchange: "INDEX" },
-  { symbol: "^IXIC", name: "NASDAQ Composite", type: "index", country: "US", sector: "technology", exchange: "INDEX" },
-];
+function symbolList(text) {
+  return String(text || "").trim().split(/\s+/).filter(Boolean);
+}
+
+function symbolNameList(text) {
+  return String(text || "")
+    .trim()
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [symbol, ...nameParts] = line.split("|");
+      return [normalizeTickerToken(symbol), nameParts.join("|").trim()];
+    })
+    .filter(([symbol, name]) => symbol && name);
+}
+
+const US_LARGE_CAP_SYMBOLS = symbolList(`
+  MSFT AAPL NVDA AVGO ORCL CRM AMD CSCO ACN IBM INTU NOW PANW PLTR SNPS CRWD FTNT ADBE ADP ROP
+  CDNS PTC FICO TXN QCOM MU ADI AMAT LRCX KLAC INTC MCHP NXPI ANET DELL WDC STX GOOGL META NFLX DIS
+  TMUS VZ T CMCSA EA TTWO LYV WBD CHTR AMZN TSLA HD MCD LOW SBUX BKNG RCL CCL ABNB MAR HLT TJX ROST
+  LULU NKE ORLY AZO GM F CMG YUM DRI EBAY DASH WMT COST PG KO PEP PM MO CL KMB MDLZ MNST KDP EL TGT
+  DG KR ADM GIS HSY SYY KHC STZ BRK-B JPM V MA BAC WFC C AXP GS MS BLK SCHW SPGI ICE CME COF USB PNC
+  TFC CB PGR TRV AON AFL WELL AJG ALL KKR BX LLY JNJ UNH ABBV MRK TMO ABT ISRG DHR PFE AMGN MDT BSX
+  SYK CVS CI HUM BMY GILD REGN VRTX MCK COR HCA ELV BDX EW IQV ZTS GE RTX CAT DE BA LMT HON UPS ETN
+  PH MMM UNP CSX NSC WM RSG ITW EMR PCAR CMI FDX JCI TT AXON GEV CARR XOM CVX COP EOG SLB OXY MPC
+  PSX VLO KMI WMB HAL BKR FANG OKE DVN CTRA NEE SO
+`);
+
+const US_SYMBOL_NAMES = Object.fromEntries(symbolNameList(`
+AAPL|Apple Inc.
+ABBV|AbbVie Inc.
+ABNB|Airbnb, Inc.
+ABT|Abbott Laboratories
+ACN|Accenture plc
+ADBE|Adobe Inc.
+ADI|Analog Devices, Inc.
+ADM|Archer-Daniels-Midland Company
+ADP|Automatic Data Processing, Inc.
+AFL|Aflac Incorporated
+AJG|Arthur J. Gallagher & Co.
+ALL|The Allstate Corporation
+AMAT|Applied Materials, Inc.
+AMD|Advanced Micro Devices, Inc.
+AMGN|Amgen Inc.
+AMZN|Amazon.com, Inc.
+ANET|Arista Networks, Inc.
+AON|Aon plc
+AVGO|Broadcom Inc.
+AXON|Axon Enterprise, Inc.
+AXP|American Express Company
+AZO|AutoZone, Inc.
+BA|The Boeing Company
+BAC|Bank of America Corporation
+BDX|Becton, Dickinson and Company
+BKNG|Booking Holdings Inc.
+BKR|Baker Hughes Company
+BLK|BlackRock, Inc.
+BMY|Bristol-Myers Squibb Company
+BRK-B|Berkshire Hathaway Inc. Class B
+BSX|Boston Scientific Corporation
+BX|Blackstone Inc.
+C|Citigroup Inc.
+CARR|Carrier Global Corporation
+CAT|Caterpillar Inc.
+CB|Chubb Limited
+CCL|Carnival Corporation & plc
+CDNS|Cadence Design Systems, Inc.
+CHTR|Charter Communications, Inc.
+CI|The Cigna Group
+CL|Colgate-Palmolive Company
+CMCSA|Comcast Corporation
+CME|CME Group Inc.
+CMG|Chipotle Mexican Grill, Inc.
+CMI|Cummins Inc.
+COF|Capital One Financial Corporation
+COP|ConocoPhillips
+COR|Cencora, Inc.
+COST|Costco Wholesale Corporation
+CRM|Salesforce, Inc.
+CRWD|CrowdStrike Holdings, Inc.
+CSCO|Cisco Systems, Inc.
+CSX|CSX Corporation
+CTRA|Coterra Energy Inc.
+CVS|CVS Health Corporation
+CVX|Chevron Corporation
+DASH|DoorDash, Inc.
+DE|Deere & Company
+DELL|Dell Technologies Inc.
+DG|Dollar General Corporation
+DHR|Danaher Corporation
+DIS|The Walt Disney Company
+DRI|Darden Restaurants, Inc.
+DVN|Devon Energy Corporation
+EA|Electronic Arts Inc.
+EBAY|eBay Inc.
+EL|The Estée Lauder Companies Inc.
+ELV|Elevance Health, Inc.
+EMR|Emerson Electric Co.
+EOG|EOG Resources, Inc.
+ETN|Eaton Corporation plc
+EW|Edwards Lifesciences Corporation
+F|Ford Motor Company
+FANG|Diamondback Energy, Inc.
+FDX|FedEx Corporation
+FICO|Fair Isaac Corporation
+FTNT|Fortinet, Inc.
+GE|GE Aerospace
+GEV|GE Vernova Inc.
+GILD|Gilead Sciences, Inc.
+GIS|General Mills, Inc.
+GM|General Motors Company
+GOOGL|Alphabet Inc.
+GS|The Goldman Sachs Group, Inc.
+HAL|Halliburton Company
+HCA|HCA Healthcare, Inc.
+HD|The Home Depot, Inc.
+HLT|Hilton Worldwide Holdings Inc.
+HON|Honeywell International Inc.
+HSY|The Hershey Company
+HUM|Humana Inc.
+IBM|International Business Machines Corporation
+ICE|Intercontinental Exchange, Inc.
+INTC|Intel Corporation
+INTU|Intuit Inc.
+IQV|IQVIA Holdings Inc.
+ISRG|Intuitive Surgical, Inc.
+ITW|Illinois Tool Works Inc.
+JCI|Johnson Controls International plc
+JNJ|Johnson & Johnson
+JPM|JPMorgan Chase & Co.
+KDP|Keurig Dr Pepper Inc.
+KHC|The Kraft Heinz Company
+KKR|KKR & Co. Inc.
+KLAC|KLA Corporation
+KMB|Kimberly-Clark Corporation
+KMI|Kinder Morgan, Inc.
+KO|The Coca-Cola Company
+KR|The Kroger Co.
+LLY|Eli Lilly and Company
+LMT|Lockheed Martin Corporation
+LOW|Lowe's Companies, Inc.
+LRCX|Lam Research Corporation
+LULU|lululemon athletica inc.
+LYV|Live Nation Entertainment, Inc.
+MA|Mastercard Incorporated
+MAR|Marriott International, Inc.
+MCD|McDonald's Corporation
+MCHP|Microchip Technology Incorporated
+MCK|McKesson Corporation
+MDLZ|Mondelez International, Inc.
+MDT|Medtronic plc
+META|Meta Platforms, Inc.
+WELL|Welltower Inc.
+MMM|3M Company
+MNST|Monster Beverage Corporation
+MO|Altria Group, Inc.
+MPC|Marathon Petroleum Corporation
+MRK|Merck & Co., Inc.
+MS|Morgan Stanley
+MSFT|Microsoft Corporation
+MU|Micron Technology, Inc.
+NEE|NextEra Energy, Inc.
+NFLX|Netflix, Inc.
+NKE|NIKE, Inc.
+NOW|ServiceNow, Inc.
+NSC|Norfolk Southern Corporation
+NVDA|NVIDIA Corporation
+NXPI|NXP Semiconductors N.V.
+OKE|ONEOK, Inc.
+ORCL|Oracle Corporation
+ORLY|O'Reilly Automotive, Inc.
+OXY|Occidental Petroleum Corporation
+PANW|Palo Alto Networks, Inc.
+PCAR|PACCAR Inc
+PEP|PepsiCo, Inc.
+PFE|Pfizer Inc.
+PG|The Procter & Gamble Company
+PGR|The Progressive Corporation
+PH|Parker-Hannifin Corporation
+PLTR|Palantir Technologies Inc.
+PM|Philip Morris International Inc.
+PNC|The PNC Financial Services Group, Inc.
+PSX|Phillips 66
+PTC|PTC Inc.
+QCOM|QUALCOMM Incorporated
+RCL|Royal Caribbean Cruises Ltd.
+REGN|Regeneron Pharmaceuticals, Inc.
+ROP|Roper Technologies, Inc.
+ROST|Ross Stores, Inc.
+RSG|Republic Services, Inc.
+RTX|RTX Corporation
+SBUX|Starbucks Corporation
+SCHW|The Charles Schwab Corporation
+SLB|SLB N.V.
+SNPS|Synopsys, Inc.
+SO|The Southern Company
+SPGI|S&P Global Inc.
+STX|Seagate Technology Holdings plc
+STZ|Constellation Brands, Inc.
+SYK|Stryker Corporation
+SYY|Sysco Corporation
+T|AT&T Inc.
+TFC|Truist Financial Corporation
+TGT|Target Corporation
+TJX|The TJX Companies, Inc.
+TMO|Thermo Fisher Scientific Inc.
+TMUS|T-Mobile US, Inc.
+TRV|The Travelers Companies, Inc.
+TSLA|Tesla, Inc.
+TT|Trane Technologies plc
+TTWO|Take-Two Interactive Software, Inc.
+TXN|Texas Instruments Incorporated
+UNH|UnitedHealth Group Incorporated
+UNP|Union Pacific Corporation
+UPS|United Parcel Service, Inc.
+USB|U.S. Bancorp
+V|Visa Inc.
+VLO|Valero Energy Corporation
+VRTX|Vertex Pharmaceuticals Incorporated
+VZ|Verizon Communications Inc.
+WBD|Warner Bros. Discovery, Inc.
+WDC|Western Digital Corporation
+WFC|Wells Fargo & Company
+WM|Waste Management, Inc.
+WMB|The Williams Companies, Inc.
+WMT|Walmart Inc.
+XOM|Exxon Mobil Corporation
+YUM|Yum! Brands, Inc.
+ZTS|Zoetis Inc.
+`));
+
+const ETF_CORE_SYMBOLS = symbolList(`
+  SPY IVV VOO SPLG RSP QQQ QQQM DIA IWM IJR IJH VTI ITOT SCHB VT ACWI VXUS IXUS VEA IEFA VWO IEMG
+  EFA EEM EWJ EWU EWG EWC EWA EWH EWT EWY MCHI FXI INDA EWW EWZ XLK XLF XLV XLY XLP XLE XLI XLU XLB
+  XLRE XLC VGT VFH VHT VCR VDC VDE VIS VPU VAW VNQ IYR SMH SOXX XBI IBB KRE XRT ITB TAN ICLN URA
+  XOP AGG BND BSV BIV BLV IEF SHY TLT GOVT TIP VTIP LQD HYG JNK MUB EMB BIL SGOV SHV ICSH MBB GLD
+  IAU SLV USO UNG DBA DBC CPER UUP
+`);
+
+const ETF_SYMBOL_NAMES = Object.fromEntries(symbolNameList(`
+SPY|State Street SPDR S&P 500 ETF Trust
+IVV|iShares Core S&P 500 ETF
+VOO|Vanguard S&P 500 ETF
+SPLG|State Street SPDR Portfolio S&P 500 ETF
+RSP|Invesco S&P 500 Equal Weight ETF
+QQQ|Invesco QQQ Trust
+QQQM|Invesco NASDAQ 100 ETF
+DIA|State Street SPDR Dow Jones Industrial Average ETF Trust
+IWM|iShares Russell 2000 ETF
+IJR|iShares Core S&P Small-Cap ETF
+IJH|iShares Core S&P Mid-Cap ETF
+VTI|Vanguard Total Stock Market ETF
+ITOT|iShares Core S&P Total U.S. Stock Market ETF
+SCHB|Schwab U.S. Broad Market ETF
+VT|Vanguard Total World Stock ETF
+ACWI|iShares MSCI ACWI ETF
+VXUS|Vanguard Total International Stock ETF
+IXUS|iShares Core MSCI Total International Stock ETF
+VEA|Vanguard FTSE Developed Markets ETF
+IEFA|iShares Core MSCI EAFE ETF
+VWO|Vanguard Emerging Markets Stock ETF
+IEMG|iShares Core MSCI Emerging Markets ETF
+EFA|iShares MSCI EAFE ETF
+EEM|iShares MSCI Emerging Markets ETF
+EWJ|iShares MSCI Japan ETF
+EWU|iShares MSCI United Kingdom ETF
+EWG|iShares MSCI Germany ETF
+EWC|iShares MSCI Canada ETF
+EWA|iShares MSCI Australia ETF
+EWH|iShares MSCI Hong Kong ETF
+EWT|iShares MSCI Taiwan ETF
+EWY|iShares MSCI South Korea ETF
+MCHI|iShares MSCI China ETF
+FXI|iShares China Large-Cap ETF
+INDA|iShares MSCI India ETF
+EWW|iShares MSCI Mexico ETF
+EWZ|iShares MSCI Brazil ETF
+XLK|Technology Select Sector SPDR ETF
+XLF|Financial Select Sector SPDR ETF
+XLV|Health Care Select Sector SPDR ETF
+XLY|Consumer Discretionary Select Sector SPDR ETF
+XLP|Consumer Staples Select Sector SPDR ETF
+XLE|Energy Select Sector SPDR ETF
+XLI|Industrial Select Sector SPDR ETF
+XLU|Utilities Select Sector SPDR ETF
+XLB|Materials Select Sector SPDR ETF
+XLRE|Real Estate Select Sector SPDR ETF
+XLC|Communication Services Select Sector SPDR ETF
+VGT|Vanguard Information Technology ETF
+VFH|Vanguard Financials ETF
+VHT|Vanguard Health Care ETF
+VCR|Vanguard Consumer Discretionary ETF
+VDC|Vanguard Consumer Staples ETF
+VDE|Vanguard Energy ETF
+VIS|Vanguard Industrials ETF
+VPU|Vanguard Utilities ETF
+VAW|Vanguard Materials ETF
+VNQ|Vanguard Real Estate ETF
+IYR|iShares U.S. Real Estate ETF
+SMH|VanEck Semiconductor ETF
+SOXX|iShares Semiconductor ETF
+XBI|SPDR S&P Biotech ETF
+IBB|iShares Biotechnology ETF
+KRE|SPDR S&P Regional Banking ETF
+XRT|SPDR S&P Retail ETF
+ITB|iShares U.S. Home Construction ETF
+TAN|Invesco Solar ETF
+ICLN|iShares Global Clean Energy ETF
+URA|Global X Uranium ETF
+XOP|SPDR S&P Oil & Gas Exploration & Production ETF
+AGG|iShares Core U.S. Aggregate Bond ETF
+BND|Vanguard Total Bond Market ETF
+BSV|Vanguard Short-Term Bond ETF
+BIV|Vanguard Intermediate-Term Bond ETF
+BLV|Vanguard Long-Term Bond ETF
+IEF|iShares 7-10 Year Treasury Bond ETF
+SHY|iShares 1-3 Year Treasury Bond ETF
+TLT|iShares 20+ Year Treasury Bond ETF
+GOVT|iShares U.S. Treasury Bond ETF
+TIP|iShares TIPS Bond ETF
+VTIP|Vanguard Short-Term Inflation-Protected Securities ETF
+LQD|iShares iBoxx Investment Grade Corporate Bond ETF
+HYG|iShares iBoxx High Yield Corporate Bond ETF
+JNK|SPDR Bloomberg High Yield Bond ETF
+MUB|iShares National Muni Bond ETF
+EMB|iShares J.P. Morgan USD Emerging Markets Bond ETF
+BIL|SPDR Bloomberg 1-3 Month T-Bill ETF
+SGOV|iShares 0-3 Month Treasury Bond ETF
+SHV|iShares Short Treasury Bond ETF
+ICSH|iShares Ultra Short Duration Bond ETF
+MBB|iShares MBS ETF
+GLD|SPDR Gold Shares
+IAU|iShares Gold Trust
+SLV|iShares Silver Trust
+USO|United States Oil Fund
+UNG|United States Natural Gas Fund
+DBA|Invesco DB Agriculture Fund
+DBC|Invesco DB Commodity Index Tracking Fund
+CPER|United States Copper Index Fund
+UUP|Invesco DB US Dollar Index Bullish Fund
+`));
+
+const KOSPI200_SYMBOLS = symbolList(`
+  000080 000087 000100 000120 000150 000210 000240 000270 000660 000670 000720 000810 000880 000990
+  001040 001120 001230 001430 001440 001450 001530 001680 001740 001800 002380 002710 002790 002840
+  003000 003030 003090 003230 003240 267250 003490 003520 003530 003550 003670 003850 004000 004020
+  004170 004370 004490 004690 004700 004800 004990 005070 005180 005250 005300 005380 005420 005440
+  005490 005830 005850 005930 005940 006040 006110 006120 006260 006280 006360 006400 006650 006800
+  007070 007310 007340 007570 271560 008730 008770 008930 009150 009240 009420 009540 009830 009970
+  010060 010120 010130 010140 272210 010690 010780 010950 011070 011170 011200 011210 011780 011790
+  012330 012450 012510 012750 013890 014680 014820 014830 015760 016360 017670 017800 018260 018670
+  018880 019170 020000 020150 021240 023530 023590 024110 025540 025860 026960 027410 028050 028260
+  029780 030000 030200 032350 032640 032830 033780 034020 034220 034730 035250 035420 035720 036460
+  036570 036580 039490 042660 047040 047050 047810 282330 051600 051900 051910 052690 055550 057050
+  058650 064350 064960 066570 068270 069260 069620 069960 071050 071320 071840 073240 078930 079550
+  081660 084010 086280 086790 088350 089590 090430 093050 093370 096770 097950 103140 103590 105560
+  108670 111770 112610 114090 117580 120110 128940 137310 138040 138930 139130 139480 145720 161390
+  161890 170900 175330 180640
+`);
+
+const KOSDAQ100_SYMBOLS = symbolList(`
+  000250 017000 019550 025900 028300 032190 032500 033640 035760 035900 036200 036540 036810 036830
+  039030 039200 039440 041510 042000 277810 048410 048530 049070 050890 053030 053610 053800 058470
+  058610 058970 060250 060720 061970 064240 064260 064290 064550 064760 067160 067310 067900 068760
+  069080 073570 078130 078340 078600 078890 079370 082270 084370 085660 086520 086900 088800 089030
+  089790 089980 357780 092040 095340 095610 095660 095700 096530 099190 101490 108320 112040 121600
+  122640 122870 131970 137400 140410 145020 178320 183300 196170 200130 214150 214370 214450 215200
+  220260 222800 225570 226950 237690 240810 241710 247540 253450 263750 290650 293490 299030 299900
+  376300 950220
+`);
+
+const KOREAN_SYMBOL_NAMES = Object.fromEntries(symbolNameList(`
+000080|하이트진로
+000087|하이트진로2우B
+000100|유한양행
+000120|CJ대한통운
+000150|두산
+000210|DL
+000240|한국앤컴퍼니
+000250|삼천당제약
+000270|기아
+000660|SK하이닉스
+000670|영풍
+000720|현대건설
+000810|삼성화재
+000880|한화
+000990|DB하이텍
+001040|CJ
+001120|LX인터내셔널
+001230|동국홀딩스
+001430|세아베스틸지주
+001440|대한전선
+001450|현대해상
+001530|DI동일
+001680|대상
+001740|SK네트웍스
+001800|오리온홀딩스
+002380|KCC
+002710|TCC스틸
+002790|아모레퍼시픽홀딩스
+002840|미원상사
+003000|부광약품
+003030|세아제강지주
+003090|대웅
+003230|삼양식품
+003240|태광산업
+267250|HD현대
+003490|대한항공
+003520|영진약품
+003530|한화투자증권
+003550|LG
+003670|포스코퓨처엠
+003850|보령
+004000|롯데정밀화학
+004020|현대제철
+004170|신세계
+004370|농심
+004490|세방전지
+004690|삼천리
+004700|조광피혁
+004800|효성
+004990|롯데지주
+005070|코스모신소재
+005180|빙그레
+005250|녹십자홀딩스
+005300|롯데칠성
+005380|현대차
+005420|코스모화학
+005440|현대지에프홀딩스
+005490|POSCO홀딩스
+005830|DB손해보험
+005850|에스엘
+005930|삼성전자
+005940|NH투자증권
+006040|동원산업
+006110|삼아알미늄
+006120|SK디스커버리
+006260|LS
+006280|녹십자
+006360|GS건설
+006400|삼성SDI
+006650|대한유화
+006800|미래에셋증권
+007070|GS리테일
+007310|오뚜기
+007340|DN오토모티브
+007570|일양약품
+271560|오리온
+008730|율촌화학
+008770|호텔신라
+008930|한미사이언스
+009150|삼성전기
+009240|한샘
+009420|한올바이오파마
+009540|HD한국조선해양
+009830|한화솔루션
+009970|영원무역홀딩스
+010060|OCI홀딩스
+010120|LS ELECTRIC
+010130|고려아연
+010140|삼성중공업
+272210|한화시스템
+010690|화신
+010780|아이에스동서
+010950|S-Oil
+011070|LG이노텍
+011170|롯데케미칼
+011200|HMM
+011210|현대위아
+011780|금호석유화학
+011790|SKC
+012330|현대모비스
+012450|한화에어로스페이스
+012510|더존비즈온
+012750|에스원
+013890|지누스
+014680|한솔케미칼
+014820|동원시스템즈
+014830|유니드
+015760|한국전력
+016360|삼성증권
+017000|신원종합개발
+017670|SK텔레콤
+017800|현대엘리베이터
+018260|삼성에스디에스
+018670|SK가스
+018880|한온시스템
+019170|신풍제약
+019550|SBI인베스트먼트
+020000|한섬
+020150|롯데에너지머티리얼즈
+021240|코웨이
+023530|롯데쇼핑
+023590|다우기술
+024110|기업은행
+025540|한국단자
+025860|남해화학
+025900|동화기업
+026960|동서
+027410|BGF
+028050|삼성E&A
+028260|삼성물산
+028300|HLB
+029780|삼성카드
+030000|제일기획
+030200|KT
+032190|다우데이타
+032350|롯데관광개발
+032500|케이엠더블유
+032640|LG유플러스
+032830|삼성생명
+033640|네패스
+033780|KT&G
+034020|두산에너빌리티
+034220|LG디스플레이
+034730|SK
+035250|강원랜드
+035420|NAVER
+035720|카카오
+035760|CJ ENM
+035900|JYP Ent.
+036200|유니셈
+036460|한국가스공사
+036540|SFA반도체
+036570|NC
+036580|팜스코
+036810|에프에스티
+036830|솔브레인홀딩스
+039030|이오테크닉스
+039200|오스코텍
+039440|에스티아이
+039490|키움증권
+041510|에스엠
+042000|카페24
+042660|한화오션
+047040|대우건설
+047050|포스코인터내셔널
+047810|한국항공우주
+277810|레인보우로보틱스
+048410|현대바이오
+048530|인트론바이오
+049070|인탑스
+282330|BGF리테일
+050890|쏠리드
+051600|한전KPS
+051900|LG생활건강
+051910|LG화학
+052690|한전기술
+053030|바이넥스
+053610|프로텍
+053800|안랩
+055550|신한지주
+057050|현대홈쇼핑
+058470|리노공업
+058610|에스피지
+058650|세아홀딩스
+058970|엠로
+060250|NHN KCP
+060720|KH바텍
+061970|LB세미콘
+064240|홈캐스트
+064260|다날
+064290|인텍플러스
+064350|현대로템
+064550|바이오니아
+064760|티씨케이
+064960|SNT모티브
+066570|LG전자
+067160|SOOP
+067310|하나마이크론
+067900|와이엔텍
+068270|셀트리온
+068760|셀트리온제약
+069080|웹젠
+069260|TKG휴켐스
+069620|대웅제약
+069960|현대백화점
+071050|한국금융지주
+071320|지역난방공사
+071840|롯데하이마트
+073240|금호타이어
+073570|리튬포어스
+078130|국일제지
+078340|컴투스
+078600|대주전자재료
+078890|가온그룹
+078930|GS
+079370|제우스
+079550|LIG디펜스앤에어로스페이스
+081660|미스토홀딩스
+082270|젬백스
+084010|대한제강
+084370|유진테크
+085660|차바이오텍
+086280|현대글로비스
+086520|에코프로
+086790|하나금융지주
+086900|메디톡스
+088350|한화생명
+088800|에이스테크
+089030|테크윙
+089590|제주항공
+089790|제이티
+089980|상아프론테크
+090430|아모레퍼시픽
+357780|솔브레인
+092040|아미코젠
+093050|LF
+093370|후성
+095340|ISC
+095610|테스
+095660|네오위즈
+095700|제넥신
+096530|씨젠
+096770|SK이노베이션
+097950|CJ제일제당
+099190|아이센스
+101490|에스앤에스텍
+103140|풍산
+103590|일진전기
+105560|KB금융
+108320|LX세미콘
+108670|LX하우시스
+111770|영원무역
+112040|위메이드
+112610|씨에스윈드
+114090|GKL
+117580|대성에너지
+120110|코오롱인더
+121600|나노신소재
+122640|예스티
+122870|와이지엔터테인먼트
+128940|한미약품
+131970|두산테스나
+137310|에스디바이오센서
+137400|피엔티
+138040|메리츠금융지주
+138930|BNK금융지주
+139130|iM금융지주
+139480|이마트
+140410|메지온
+145020|휴젤
+145720|덴티움
+161390|한국타이어앤테크놀로지
+161890|한국콜마
+170900|동아에스티
+175330|JB금융지주
+178320|서진시스템
+180640|한진칼
+183300|코미코
+196170|알테오젠
+200130|콜마비앤에이치
+214150|클래시스
+214370|케어젠
+214450|파마리서치
+215200|메가스터디교육
+220260|켐트로스
+222800|심텍
+225570|넥슨게임즈
+226950|올릭스
+237690|에스티팜
+240810|원익IPS
+241710|코스메카코리아
+247540|에코프로비엠
+253450|스튜디오드래곤
+263750|펄어비스
+290650|엘앤씨바이오
+293490|카카오게임즈
+299030|하나기술
+299900|위지윅스튜디오
+376300|디어유
+950220|네오이뮨텍
+`));
+
+const CRYPTO_SYMBOLS = ["BTC-USD", "ETH-USD"];
+
+const SYMBOL_NAME_OVERRIDES = {
+  AAPL: "Apple Inc.",
+  MSFT: "Microsoft Corporation",
+  NVDA: "NVIDIA Corporation",
+  GOOGL: "Alphabet Inc.",
+  AMZN: "Amazon.com, Inc.",
+  META: "Meta Platforms, Inc.",
+  TSLA: "Tesla, Inc.",
+  JPM: "JPMorgan Chase & Co.",
+  "BRK-B": "Berkshire Hathaway Inc. Class B",
+  SPY: "SPDR S&P 500 ETF Trust",
+  QQQ: "Invesco QQQ Trust",
+  TLT: "iShares 20+ Year Treasury Bond ETF",
+  GLD: "SPDR Gold Shares",
+  "005930.KS": "삼성전자 (005930 · KOSPI 200)",
+  "000660.KS": "SK하이닉스 (000660 · KOSPI 200)",
+  "035420.KS": "NAVER (035420 · KOSPI 200)",
+  "035720.KS": "카카오 (035720 · KOSPI 200)",
+  "357780.KQ": "솔브레인 (357780 · KOSDAQ 100)",
+  "247540.KQ": "에코프로비엠 (247540 · KOSDAQ 100)",
+  "BTC-USD": "Bitcoin USD",
+  "ETH-USD": "Ethereum USD",
+};
+
+const ETF_GROUPS = {
+  etf_bond: new Set(symbolList("AGG BND BSV BIV BLV IEF SHY TLT GOVT TIP VTIP LQD HYG JNK MUB EMB BIL SGOV SHV ICSH MBB")),
+  etf_commodity: new Set(symbolList("GLD IAU SLV USO UNG DBA DBC CPER UUP")),
+  etf_sector: new Set(symbolList("XLK XLF XLV XLY XLP XLE XLI XLU XLB XLRE XLC VGT VFH VHT VCR VDC VDE VIS VPU VAW VNQ IYR SMH SOXX XBI IBB KRE XRT ITB TAN ICLN URA XOP")),
+};
+
+function etfScope(symbol) {
+  if (ETF_GROUPS.etf_bond.has(symbol)) return "etf_bond";
+  if (ETF_GROUPS.etf_commodity.has(symbol)) return "etf_commodity";
+  if (ETF_GROUPS.etf_sector.has(symbol)) return "etf_sector";
+  return "etf_index";
+}
+
+function pushCatalogItem(rows, seen, item) {
+  const symbol = normalizeTickerToken(item.symbol);
+  if (!symbol || seen.has(symbol)) return;
+  seen.add(symbol);
+  rows.push({
+    symbol,
+    name: item.name || SYMBOL_NAME_OVERRIDES[symbol] || symbol,
+    type: item.type,
+    country: item.country,
+    sector: item.sector || item.universe || "general",
+    exchange: item.exchange || "",
+    universe: item.universe || "custom",
+    rank: item.rank || rows.length + 1,
+  });
+}
+
+function buildSymbolCatalog() {
+  const rows = [];
+  const seen = new Set();
+  US_LARGE_CAP_SYMBOLS.forEach((symbol, idx) => pushCatalogItem(rows, seen, {
+    symbol,
+    name: SYMBOL_NAME_OVERRIDES[symbol] || US_SYMBOL_NAMES[symbol] || `${symbol} · S&P 500 상위 200`,
+    type: "stock",
+    country: "US",
+    sector: "us_large_cap",
+    exchange: "US",
+    universe: "us_large_cap",
+    rank: idx + 1,
+  }));
+  ETF_CORE_SYMBOLS.forEach((symbol, idx) => {
+    const scope = etfScope(symbol);
+    pushCatalogItem(rows, seen, {
+      symbol,
+      name: SYMBOL_NAME_OVERRIDES[symbol] || ETF_SYMBOL_NAMES[symbol] || `${symbol} · 주요 ETF 100`,
+      type: "etf",
+      country: "US",
+      sector: scope,
+      exchange: "US ETF",
+      universe: "etf_core",
+      rank: idx + 1,
+    });
+  });
+  KOSPI200_SYMBOLS.forEach((code, idx) => {
+    const symbol = `${code}.KS`;
+    const companyName = KOREAN_SYMBOL_NAMES[code] || code;
+    pushCatalogItem(rows, seen, {
+      symbol,
+      name: SYMBOL_NAME_OVERRIDES[symbol] || `${companyName} (${code} · KOSPI 200)`,
+      type: "stock",
+      country: "KR",
+      sector: "kr_kospi200",
+      exchange: "KRX",
+      universe: "kr_kospi200",
+      rank: idx + 1,
+    });
+  });
+  KOSDAQ100_SYMBOLS.forEach((code, idx) => {
+    const symbol = `${code}.KQ`;
+    const companyName = KOREAN_SYMBOL_NAMES[code] || code;
+    pushCatalogItem(rows, seen, {
+      symbol,
+      name: SYMBOL_NAME_OVERRIDES[symbol] || `${companyName} (${code} · KOSDAQ 100)`,
+      type: "stock",
+      country: "KR",
+      sector: "kr_kosdaq100",
+      exchange: "KRX",
+      universe: "kr_kosdaq100",
+      rank: idx + 1,
+    });
+  });
+  CRYPTO_SYMBOLS.forEach((symbol, idx) => pushCatalogItem(rows, seen, {
+    symbol,
+    name: SYMBOL_NAME_OVERRIDES[symbol] || symbol,
+    type: "crypto",
+    country: "GLOBAL",
+    sector: "crypto",
+    exchange: "Crypto",
+    universe: "crypto_major",
+    rank: idx + 1,
+  }));
+  return rows;
+}
+
+const SYMBOL_CATALOG = buildSymbolCatalog();
 
 // ---------- Utilities ----------
 const fmtDate = (iso) => {
@@ -334,7 +1210,9 @@ const fmtDate = (iso) => {
 const escapeHtml = (s) => String(s ?? "")
   .replace(/&/g, "&amp;")
   .replace(/</g, "&lt;")
-  .replace(/>/g, "&gt;");
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&#39;");
 
 const statusClass = (s) => ({ success: "success", partial: "partial", failed: "failed" }[s] || "muted");
 
@@ -346,19 +1224,24 @@ const sourceStatusClass = (s) => {
   return "muted";
 };
 
-const KNOWN_TICKERS = [
-  "GOOGL", "SOXX", "AAPL", "MSFT", "NVDA", "TSLA", "GOOG", "AMZN",
-  "META", "ASML", "AMAT", "KLAC", "INTC", "SPY", "QQQ", "XLK",
-  "SMH", "TLT", "USO", "GLD", "JPM", "AMD", "GS",
-  "IEF", "SHY", "AGG", "LQD", "HYG", "SLV", "DXY",
-];
-const TICKER_PREFIX_RE = new RegExp(`^(${KNOWN_TICKERS.join("|")})(?=$|[^A-Za-z0-9])`, "i");
+const KNOWN_TICKERS = SYMBOL_CATALOG
+  .map((item) => normalizeTickerToken(item.symbol))
+  .filter(Boolean)
+  .sort((a, b) => b.length - a.length || a.localeCompare(b));
+const UNREGISTERED_TICKER_STOPWORDS = new Set([
+  "AI", "API", "APP", "CEO", "CFO", "CPU", "CPI", "ETF", "EPS", "FED", "FOMC",
+  "GDP", "GPU", "IPO", "KRX", "LLM", "MDD", "NAV", "NYSE", "PBR", "PER", "ROA",
+  "ROE", "SEC", "USD",
+]);
 
 function normalizeTickerToken(value) {
-  return String(value || "")
+  const clean = String(value || "")
     .trim()
     .replace(/^\$/, "")
     .toUpperCase();
+  const classShare = clean.match(/^([A-Z]{1,5})\.([A-Z])$/);
+  if (classShare) return `${classShare[1]}-${classShare[2]}`;
+  return clean;
 }
 
 function parseTickerInput(raw) {
@@ -373,6 +1256,17 @@ function parseTickerInput(raw) {
     });
 }
 
+function isSupportedExplicitTickerToken(ticker, { marked = false } = {}) {
+  const clean = normalizeTickerToken(ticker);
+  if (!clean) return false;
+  if (KNOWN_TICKERS.includes(clean)) return true;
+  if (!marked && UNREGISTERED_TICKER_STOPWORDS.has(clean)) return false;
+  if (/^(?:[A-Z]{3,5}(?:[.-][A-Z0-9]{1,4})?|[A-Z]{2,8}-USD|[A-Z]{6}=X|[A-Z]{1,3}=F|\d{6}\.(?:KS|KQ))$/.test(clean)) {
+    return true;
+  }
+  return marked && /^[A-Z]{1,2}(?:[.-][A-Z0-9]{1,4})?$/.test(clean);
+}
+
 function setBacktestUniverse(tickers) {
   const clean = [];
   const seen = new Set();
@@ -381,6 +1275,7 @@ function setBacktestUniverse(tickers) {
     seen.add(ticker);
     clean.push(ticker);
   });
+  state.lastUniverseResolution = null;
   if (els.backtestTicker) els.backtestTicker.value = clean.join(",");
   renderBacktestUniverseChips();
 }
@@ -389,13 +1284,132 @@ function selectedBacktestUniverse() {
   return parseTickerInput(els.backtestTicker?.value || "");
 }
 
+function renderUniverseResolutionNotice(data) {
+  if (!data || typeof data !== "object") return "";
+  const available = Array.isArray(data.available) ? data.available : [];
+  const unavailable = Array.isArray(data.unavailable) ? data.unavailable : [];
+  const hydration = data.hydration || {};
+  const hydratedCount = Number(hydration.hydrated_count || (Array.isArray(hydration.hydrated) ? hydration.hydrated.length : 0));
+  const status = unavailable.length ? "warn" : "ok";
+  const hidden = Math.max(0, unavailable.length - 12);
+  let summary = unavailable.length
+    ? `실행 가능 ${_fmtNumber(available.length)}개 · 보강 후에도 가격 이력이 부족한 종목 ${_fmtNumber(unavailable.length)}개가 남았습니다.`
+    : `실행 가능 ${_fmtNumber(available.length)}개 · 선택 종목의 저장 가격을 확인했습니다.`;
+  if (hydratedCount > 0) {
+    summary = unavailable.length
+      ? `가격 이력 ${_fmtNumber(hydratedCount)}개 자동 보강 · 실행 가능 ${_fmtNumber(available.length)}개 · 추가 확인 필요 ${_fmtNumber(unavailable.length)}개`
+      : `가격 이력 ${_fmtNumber(hydratedCount)}개 자동 보강 완료 · 실행 가능 ${_fmtNumber(available.length)}개`;
+  }
+  return `
+    <div class="decision-summary ${escapeHtml(decisionStatusClass(status))}">
+      ${escapeHtml(summary)}
+      ${unavailable.length ? `<br><span class="muted small">확인 필요: ${escapeHtml(unavailable.slice(0, 12).join(", "))}${hidden ? ` 외 ${escapeHtml(_fmtNumber(hidden))}개` : ""}</span>` : ""}
+    </div>
+  `;
+}
+
+async function resolveQuantUniverseForTickers(tickers, options = {}) {
+  const clean = Array.isArray(tickers) ? tickers.map(normalizeTickerToken).filter(Boolean) : [];
+  if (!clean.length) return null;
+  const res = await fetch(API.quantUniverseResolve, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      tickers: clean,
+      start_date: options.startDate || null,
+      end_date: options.endDate || null,
+      min_rows: options.minRows || 2,
+      hydrate_missing: options.hydrateMissing !== false,
+      max_hydrate_assets: options.maxHydrateAssets || 750,
+      hydrate_batch_size: options.hydrateBatchSize || 40,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+  state.lastUniverseResolution = data;
+  return data;
+}
+
+async function resolveBacktestUniverseAvailability(surface = null, options = {}) {
+  const tickers = selectedBacktestUniverse();
+  if (!tickers.length) return { ok: false, tickers: [], data: null };
+  if (surface && !options.silent) {
+    surface.innerHTML = decisionEmpty(`${tickers.length}개 종목의 저장 가격을 확인하고, 누락된 가격 이력은 자동 보강하는 중입니다.`);
+  }
+  try {
+    const requiredRows = Math.max(
+      2,
+      numberInputValue(els.backtestShortWindow, 20, { min: 1, max: 5000 }) + 2,
+      numberInputValue(els.backtestLongWindow, 50, { min: 2, max: 5000 }) + 2,
+      options.minRows || 2,
+    );
+    const data = await resolveQuantUniverseForTickers(tickers, {
+      startDate: textInputValue(els.backtestStartDate),
+      endDate: textInputValue(els.backtestEndDate),
+      minRows: requiredRows,
+      hydrateMissing: options.hydrateMissing !== false,
+    });
+    const available = Array.isArray(data?.available) ? data.available : [];
+    const unavailable = Array.isArray(data?.unavailable) ? data.unavailable : [];
+    if (available.length && unavailable.length) {
+      setBacktestUniverse(available);
+      if (els.portfolioTickers) els.portfolioTickers.value = available.join(",");
+      renderSymbolPicker();
+    }
+    if (!available.length) {
+      if (surface) {
+        surface.innerHTML = decisionEmpty("선택한 종목 중 저장 가격이 있는 종목이 없습니다. 데이터 마트 업데이트 후 다시 실행하세요.");
+      }
+      return { ok: false, tickers: [], data };
+    }
+    return { ok: true, tickers: available, data };
+  } catch (err) {
+    if (surface) surface.innerHTML = decisionEmpty(`종목 데이터 확인 실패: ${err.message || err}`);
+    return { ok: false, tickers: [], data: null, error: err };
+  }
+}
+
+async function resolvePortfolioUniverseAvailability(surface = null) {
+  const tickers = parseTickerInput(els.portfolioTickers?.value || "");
+  if (!tickers.length) return { ok: false, tickers: [], data: null };
+  if (surface) surface.innerHTML = decisionEmpty(`${tickers.length}개 종목의 포트폴리오 가격 이력을 확인하고 자동 보강하는 중입니다.`);
+  try {
+    const requiredRows = Math.max(2, Math.min(52, numberInputValue(els.portfolioLookbackDays, 756, { min: 2, max: 5000 })));
+    const data = await resolveQuantUniverseForTickers(tickers, {
+      startDate: textInputValue(els.portfolioStartDate),
+      endDate: textInputValue(els.portfolioEndDate),
+      minRows: requiredRows,
+      hydrateMissing: true,
+    });
+    const available = Array.isArray(data?.available) ? data.available : [];
+    const unavailable = Array.isArray(data?.unavailable) ? data.unavailable : [];
+    if (available.length && unavailable.length && els.portfolioTickers) {
+      els.portfolioTickers.value = available.join(",");
+    }
+    if (!available.length) {
+      if (surface) surface.innerHTML = decisionEmpty("포트폴리오 최적화에 사용할 가격 이력이 있는 종목이 없습니다.");
+      return { ok: false, tickers: [], data };
+    }
+    return { ok: true, tickers: available, data };
+  } catch (err) {
+    if (surface) surface.innerHTML = decisionEmpty(`포트폴리오 종목 확인 실패: ${err.message || err}`);
+    return { ok: false, tickers: [], data: null, error: err };
+  }
+}
+
 function renderBacktestUniverseChips() {
   if (!els.backtestUniverseChips) return;
   const tickers = selectedBacktestUniverse();
+  const visibleTickers = tickers.slice(0, 48);
+  const hiddenCount = Math.max(0, tickers.length - visibleTickers.length);
   els.backtestUniverseChips.innerHTML = tickers.length
-    ? tickers.map((ticker) => `
+    ? `
+        <span class="selected-symbol-count">선택 ${escapeHtml(_fmtNumber(tickers.length))}개</span>
+        ${visibleTickers.map((ticker) => `
         <button type="button" data-universe-remove="${escapeHtml(ticker)}" title="${escapeHtml(ticker)} 제거">${escapeHtml(ticker)}</button>
-      `).join("")
+      `).join("")}
+        ${hiddenCount ? `<span class="selected-symbol-more">+${escapeHtml(_fmtNumber(hiddenCount))}개 더 있음</span>` : ""}
+      `
     : '<span>선택된 심볼 없음</span>';
   els.backtestUniverseChips.querySelectorAll("[data-universe-remove]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -408,27 +1422,89 @@ function symbolPickerMatches(item, query, selectedType, country, sector) {
   if (!item) return false;
   if (selectedType !== "all" && item.type !== selectedType) return false;
   if (country !== "all" && item.country !== country) return false;
-  if (sector !== "all" && item.sector !== sector) return false;
+  if (sector !== "all" && item.sector !== sector && item.universe !== sector) return false;
   if (!query) return true;
-  const haystack = `${item.symbol} ${item.name} ${item.exchange} ${item.type} ${item.country}`.toLowerCase();
+  const haystack = `${item.symbol} ${item.name} ${item.exchange} ${item.type} ${item.country} ${item.sector} ${item.universe}`.toLowerCase();
   return haystack.includes(query.toLowerCase());
+}
+
+function currentSymbolPickerItems() {
+  const query = els.symbolPickerSearch?.value.trim() || "";
+  const type = state.symbolPickerType || "all";
+  const country = els.symbolPickerCountry?.value || "all";
+  const sector = els.symbolPickerSector?.value || "all";
+  return SYMBOL_CATALOG.filter((item) => symbolPickerMatches(item, query, type, country, sector));
+}
+
+function symbolPickerScopeCount(scope) {
+  if (scope === "kr_equity") return SYMBOL_CATALOG.filter((item) => item.country === "KR").length;
+  return SYMBOL_CATALOG.filter((item) => item.universe === scope).length;
+}
+
+function renderSymbolPickerSummary(filteredCount, selectedCount) {
+  if (!els.symbolPickerSummary) return;
+  const summaryItems = [
+    ["미국 대형주", symbolPickerScopeCount("us_large_cap"), "us_large_cap"],
+    ["ETF", symbolPickerScopeCount("etf_core"), "etf_core"],
+    ["한국", symbolPickerScopeCount("kr_equity"), "kr_equity"],
+    ["암호화폐", symbolPickerScopeCount("crypto_major"), "crypto_major"],
+  ];
+  els.symbolPickerSummary.innerHTML = `
+    ${summaryItems.map(([label, count, scope]) => `
+      <button type="button" data-symbol-scope="${escapeHtml(scope)}">${escapeHtml(label)} <strong>${escapeHtml(_fmtNumber(count))}</strong></button>
+    `).join("")}
+    <span>현재 필터 <strong>${escapeHtml(_fmtNumber(filteredCount))}</strong></span>
+    <span>선택 <strong>${escapeHtml(_fmtNumber(selectedCount))}</strong></span>
+  `;
+}
+
+function setSymbolPickerType(type) {
+  state.symbolPickerType = type || "all";
+  els.symbolPickerTabs?.querySelectorAll("[data-symbol-type]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.symbolType === state.symbolPickerType);
+  });
+}
+
+function applySymbolPickerScope(scope) {
+  const presets = {
+    us_large_cap: { type: "stock", country: "US", sector: "us_large_cap" },
+    etf_core: { type: "etf", country: "all", sector: "all" },
+    kr_equity: { type: "stock", country: "KR", sector: "all" },
+    crypto_major: { type: "crypto", country: "GLOBAL", sector: "crypto" },
+  };
+  const preset = presets[scope];
+  if (!preset) return;
+  setSymbolPickerType(preset.type);
+  if (els.symbolPickerCountry) els.symbolPickerCountry.value = preset.country;
+  if (els.symbolPickerSector) els.symbolPickerSector.value = preset.sector;
+  if (els.symbolPickerSearch) els.symbolPickerSearch.value = "";
+  renderSymbolPicker();
 }
 
 function renderSymbolPicker() {
   if (!els.symbolPickerList) return;
   const selected = new Set(selectedBacktestUniverse());
-  const query = els.symbolPickerSearch?.value.trim() || "";
-  const type = state.symbolPickerType || "all";
-  const country = els.symbolPickerCountry?.value || "all";
-  const sector = els.symbolPickerSector?.value || "all";
-  const items = SYMBOL_CATALOG
-    .filter((item) => symbolPickerMatches(item, query, type, country, sector))
+  const items = currentSymbolPickerItems()
     .sort((a, b) => Number(selected.has(b.symbol)) - Number(selected.has(a.symbol)) || a.symbol.localeCompare(b.symbol));
+  state.symbolPickerFilteredSymbols = items.map((item) => item.symbol);
+  renderSymbolPickerSummary(items.length, selected.size);
 
   if (els.symbolPickerSelected) {
+    const selectedItems = Array.from(selected);
+    const visibleSelected = selectedItems.slice(0, 36);
+    const hiddenSelected = Math.max(0, selectedItems.length - visibleSelected.length);
     els.symbolPickerSelected.innerHTML = selected.size
-      ? Array.from(selected).map((ticker) => `<span>${escapeHtml(ticker)}</span>`).join("")
-      : '<span>백테스트에 사용할 심볼을 선택하세요.</span>';
+      ? `
+          <span class="symbol-picker-count">선택 ${escapeHtml(_fmtNumber(selected.size))}개</span>
+          ${visibleSelected.map((ticker) => `<span>${escapeHtml(ticker)}</span>`).join("")}
+          ${hiddenSelected ? `<span>+${escapeHtml(_fmtNumber(hiddenSelected))}개</span>` : ""}
+          <button type="button" class="symbol-picker-inline-action" data-symbol-select-all>전체 선택</button>
+          <button type="button" class="symbol-picker-inline-action muted" data-symbol-clear-selected>선택 해제</button>
+        `
+      : `
+          <span>백테스트에 사용할 심볼을 선택하세요.</span>
+          <button type="button" class="symbol-picker-inline-action" data-symbol-select-all>전체 선택</button>
+        `;
   }
   els.symbolPickerList.innerHTML = items.length
     ? items.map((item) => {
@@ -446,10 +1522,7 @@ function renderSymbolPicker() {
 
 function openSymbolPicker() {
   if (!els.symbolPickerModal) return;
-  state.symbolPickerType = "all";
-  els.symbolPickerTabs?.querySelectorAll("[data-symbol-type]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.symbolType === "all");
-  });
+  setSymbolPickerType("all");
   if (els.symbolPickerSearch) els.symbolPickerSearch.value = "";
   if (els.symbolPickerCountry) els.symbolPickerCountry.value = "all";
   if (els.symbolPickerSector) els.symbolPickerSector.value = "all";
@@ -474,6 +1547,20 @@ function toggleSymbolPickerItem(symbol) {
   renderSymbolPicker();
 }
 
+async function addFilteredSymbolsToBacktestUniverse() {
+  const symbols = currentSymbolPickerItems().map((item) => item.symbol);
+  if (!symbols.length) return;
+  setBacktestUniverse([...selectedBacktestUniverse(), ...symbols]);
+  renderSymbolPicker();
+}
+
+function removeFilteredSymbolsFromBacktestUniverse() {
+  const filtered = new Set(currentSymbolPickerItems().map((item) => item.symbol));
+  if (!filtered.size) return;
+  setBacktestUniverse(selectedBacktestUniverse().filter((ticker) => !filtered.has(ticker)));
+  renderSymbolPicker();
+}
+
 function inferTickerFromQuestion(question) {
   const text = String(question || "").trimStart();
   if (!text) return null;
@@ -484,13 +1571,40 @@ function inferTickerFromQuestion(question) {
   if (marked) return { ticker: normalizeTickerToken(marked[1]), source: "question_marker" };
 
   const colon = text.match(/^([A-Za-z][A-Za-z0-9]{0,9}(?:[.\-=][A-Za-z0-9]{1,8})?)\s*[:：]/);
-  if (colon) return { ticker: normalizeTickerToken(colon[1]), source: "question_prefix" };
+  if (colon) {
+    const ticker = normalizeTickerToken(colon[1]);
+    if (isSupportedExplicitTickerToken(ticker)) return { ticker, source: "question_prefix" };
+  }
 
   // Plain leading words are restricted to known symbols to avoid treating
   // "What" or "AI" as a ticker.
-  const known = text.match(TICKER_PREFIX_RE);
-  if (known) return { ticker: normalizeTickerToken(known[1]), source: "known_prefix" };
+  const known = matchKnownTickerPrefix(text);
+  if (known) return { ticker: known, source: "known_prefix" };
+  const explicit = matchExplicitTickerPrefix(text);
+  if (explicit) return { ticker: explicit, source: "explicit_prefix" };
   return null;
+}
+
+function matchKnownTickerPrefix(text) {
+  const raw = String(text || "").trimStart();
+  const upper = raw.toUpperCase();
+  for (const ticker of KNOWN_TICKERS) {
+    if (!upper.startsWith(ticker)) continue;
+    const next = raw.charAt(ticker.length);
+    if (next && /[A-Za-z0-9]/.test(next)) continue;
+    const original = raw.slice(0, ticker.length);
+    if (/^[A-Z]{1,3}$/.test(ticker) && original !== ticker) continue;
+    return ticker;
+  }
+  return "";
+}
+
+function matchExplicitTickerPrefix(text) {
+  const raw = String(text || "").trimStart();
+  const match = raw.match(/^([A-Z][A-Z0-9]{0,9}(?:[.\-=][A-Z0-9]{1,8})?|\d{6}\.(?:KS|KQ))(?=$|[^A-Za-z0-9])/);
+  if (!match) return "";
+  const ticker = normalizeTickerToken(match[1]);
+  return isSupportedExplicitTickerToken(ticker) ? ticker : "";
 }
 
 function normalizeResearchIntent({ tickerRaw, question, modeHint, compare }) {
@@ -872,15 +1986,20 @@ async function runQdrantPurge(dryRun) {
 async function loadConfig() {
   try {
     const res = await fetch(API.config);
-    if (!res.ok) return;
+    if (!res.ok) {
+      renderFinGPTStatus(null);
+      return;
+    }
     state.config = await res.json();
     renderModelOptions(state.config.models || []);
     renderPresets(state.config.presets || []);
     applyLimits(state.config.limits || {});
+    renderFinGPTStatus(state.config);
   } catch (e) {
     console.warn("config fetch failed", e);
     renderModelOptions([]);
     renderPresets([]);
+    renderFinGPTStatus(null);
   }
 }
 
@@ -903,7 +2022,7 @@ function renderModelOptions(models) {
   const rawOptions = Array.isArray(models) && models.length
     ? models.map((m) => (typeof m === "string" ? { id: m, label: m } : m))
     : [{ id: "qwen", label: "qwen2.5:7b (Ollama · 기본)" }];
-  const options = rawOptions.filter((m) => m && m.id && (m.id === "qwen" || m.role === "fallback"));
+  const options = rawOptions.filter((m) => m && m.id && (m.id === "qwen" || m.role === "fallback" || m.role === "experimental"));
   if (!options.length) options.push({ id: "qwen", label: "qwen2.5:7b (Ollama · 기본)" });
   els.model.innerHTML = "";
   options.forEach((m) => {
@@ -913,6 +2032,21 @@ function renderModelOptions(models) {
       els.model.appendChild(opt);
     });
   els.model.value = Array.from(els.model.options).some((opt) => opt.value === current) ? current : "qwen";
+}
+
+function renderFinGPTStatus(config) {
+  if (!els.fingptStatus) return;
+  const fingpt = config?.fingpt || {};
+  const enabled = !!(fingpt.datasets_enabled || fingpt.task_model_enabled);
+  els.fingptStatus.classList.toggle("is-enabled", enabled);
+  if (!enabled) {
+    els.fingptStatus.textContent = "FinGPT 보조 기능 비활성 · 기본 분석 경로에는 영향 없음";
+    return;
+  }
+  const tasks = Array.isArray(fingpt.tasks) && fingpt.tasks.length
+    ? fingpt.tasks.join(", ")
+    : "sentiment, headline, ner, relation, fiqa_qa, forecaster";
+  els.fingptStatus.textContent = `FinGPT 보조 기능 활성: ${tasks}`;
 }
 
 function renderPresets(presets) {
@@ -1034,8 +2168,20 @@ function setText(selector, text) {
   if (el) el.textContent = text;
 }
 
-function setDashboardTab(tab = "market") {
-  const active = tab === "quant" ? "quant" : "market";
+function dashboardTabFromLocation() {
+  const params = new URLSearchParams(window.location.search);
+  const fromParam = params.get("tab") || params.get("dashboard");
+  if (fromParam === "ai-portfolio" || fromParam === "ai") return "ai-portfolio";
+  if (fromParam === "quant") return "quant";
+  if (fromParam === "market") return "market";
+  if (window.location.hash === "#ai-portfolio" || window.location.hash === "#ai") return "ai-portfolio";
+  if (window.location.hash === "#quant-lab" || window.location.hash === "#quant") return "quant";
+  if (window.location.hash === "#market-dashboard" || window.location.hash === "#market") return "market";
+  return "";
+}
+
+function setDashboardTab(tab = "market", options = {}) {
+  const active = tab === "quant" ? "quant" : (tab === "ai-portfolio" || tab === "ai" ? "ai-portfolio" : "market");
   state.activeDashboardTab = active;
   if (els.homeSurfaceGrid) {
     els.homeSurfaceGrid.dataset.dashboardTab = active;
@@ -1043,6 +2189,7 @@ function setDashboardTab(tab = "market") {
   const buttons = [
     { el: els.marketDashboardTab, tab: "market" },
     { el: els.quantLabTab, tab: "quant" },
+    { el: els.aiPortfolioTab, tab: "ai-portfolio" },
   ];
   buttons.forEach(({ el, tab: buttonTab }) => {
     if (!el) return;
@@ -1057,14 +2204,24 @@ function setDashboardTab(tab = "market") {
     if (homeCopy) homeCopy.textContent = "저장 가격 기반 리스크, 전략 검증, 포트폴리오 배분을 같은 조건으로 점검합니다.";
     loadQuantRunHistory(false);
     loadQuantStrategies(false);
+  } else if (active === "ai-portfolio") {
+    if (homeTitle) homeTitle.textContent = "AI Portfolio";
+    if (homeCopy) homeCopy.textContent = "투자형과 정책을 선택하고, 정량 엔진이 계산한 포트폴리오를 AI가 설명하는 사용자 승인 기반 워크플로우입니다.";
+    loadAiPortfolio(false);
   } else {
     if (homeTitle) homeTitle.textContent = "시장 대시보드";
     if (homeCopy) homeCopy.textContent = "티커를 입력하면 종목 분석으로, 비워두고 질문만 입력하면 금리·신용·FX·원자재·테마 topic 분석으로 라우팅합니다.";
+  }
+  if (options.updateUrl && window.history?.replaceState) {
+    const hash = active === "quant" ? "#quant-lab" : (active === "ai-portfolio" ? "#ai-portfolio" : "#market-dashboard");
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${hash}`);
   }
 }
 
 function applyUrlUiMode() {
   const params = new URLSearchParams(window.location.search);
+  const requestedTab = dashboardTabFromLocation();
+  if (requestedTab) setDashboardTab(requestedTab);
   if (params.get("focus") !== "heatmap") return;
   document.body.classList.add("heatmap-focus-mode");
   setDashboardTab("market");
@@ -1100,6 +2257,20 @@ function normalizeStaticLabels() {
   setText(".asset-detail-card .home-card-head h3", "자산 상세");
   setText(".backtest-card .home-card-head h3", "백테스트");
   setText(".portfolio-card .home-card-head h3", "포트폴리오");
+  setText(".ai-portfolio-overview-card .home-card-head h3", "AI Portfolio");
+  setText(".ai-portfolio-overview-card .home-card-head span", "정책 기반 포트폴리오 관리");
+  setText(".ai-portfolio-ops-card .home-card-head h3", "운영 상태");
+  setText(".ai-portfolio-create-card .home-card-head h3", "Create Portfolio");
+  setText(".ai-portfolio-create-card .home-card-head span", "투자형 · 유니버스 · 정책");
+  setText(".ai-portfolio-recommendation-card .home-card-head span", "정량 결과 · AI 설명 분리");
+  setText(".ai-portfolio-performance-card .home-card-head span", "성과 · 벤치마크 · 위험");
+  setText(".ai-portfolio-compliance-card .home-card-head span", "제약조건 검사");
+  setText(".ai-portfolio-rebalance-card .home-card-head span", "사용자 승인 기반");
+  setText(".ai-portfolio-reports-card .home-card-head span", "성과 · 리밸런싱 리포트");
+  setText(".ai-portfolio-history-card .home-card-head span", "정책 · 추천 · 신호 이력");
+  if (els.aiPortfolioGenerateQuick) els.aiPortfolioGenerateQuick.textContent = "새 포트폴리오 생성";
+  if (els.aiPortfolioCheckRebalanceQuick) els.aiPortfolioCheckRebalanceQuick.textContent = "리밸런싱 점검";
+  if (els.aiPortfolioReportQuick) els.aiPortfolioReportQuick.textContent = "리포트 생성";
   setText(".home-news-card .home-card-head h3", "주요 뉴스");
   const runMeta = document.querySelector(".meta-row");
   if (runMeta) runMeta.innerHTML = '<span class="kbd">Ctrl</span> + <span class="kbd">Enter</span> 실행';
@@ -1872,28 +3043,156 @@ function metricStatusForPct(value, inverse = false) {
   return n >= 0 ? "ok" : "warn";
 }
 
+function paddedChartDomain(values, includeValues = []) {
+  const nums = [...values, ...includeValues].map(Number).filter(Number.isFinite);
+  if (!nums.length) return { min: 0, max: 1 };
+  let min = Math.min(...nums);
+  let max = Math.max(...nums);
+  if (min === max) {
+    const pad = Math.abs(max) * 0.02 || 1;
+    return { min: min - pad, max: max + pad };
+  }
+  const pad = (max - min) * 0.08;
+  min -= pad;
+  max += pad;
+  return { min, max };
+}
+
+function chartY(min, max, value, height, padTop, padBottom) {
+  const span = max - min || 1;
+  return height - padBottom - ((value - min) / span) * (height - padTop - padBottom);
+}
+
+function chartTicks(min, max, count = 4) {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || count < 2) return [];
+  const step = (max - min) / (count - 1 || 1);
+  return Array.from({ length: count }, (_, index) => min + step * index).reverse();
+}
+
+function renderChartYAxis({ width, height, padLeft, padRight, padTop, padBottom, min, max, formatter }) {
+  const ticks = chartTicks(min, max, 4);
+  return `
+    <g class="chart-y-axis" aria-hidden="true">
+      ${ticks.map((value) => {
+        const y = chartY(min, max, value, height, padTop, padBottom);
+        return `
+          <line class="chart-grid-line" x1="${padLeft}" x2="${width - padRight}" y1="${y.toFixed(2)}" y2="${y.toFixed(2)}"></line>
+          <text class="chart-y-label" x="${padLeft - 8}" y="${(y + 3).toFixed(2)}" text-anchor="end">${escapeHtml(formatter(value))}</text>
+        `;
+      }).join("")}
+      <line class="chart-axis-line" x1="${padLeft}" x2="${padLeft}" y1="${padTop}" y2="${height - padBottom}"></line>
+      <line class="chart-axis-line" x1="${padLeft}" x2="${width - padRight}" y1="${height - padBottom}" y2="${height - padBottom}"></line>
+    </g>
+  `;
+}
+
+function lineChartPoints(values, width, height, padLeft, padRight, padTop, padBottom, min, max) {
+  return values.map((row, index) => {
+    const x = padLeft + (index / Math.max(1, values.length - 1)) * (width - padLeft - padRight);
+    const y = chartY(min, max, row.value, height, padTop, padBottom);
+    return { ...row, x, y };
+  });
+}
+
+function svgPolylinePoints(points) {
+  return points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(" ");
+}
+
+function renderChartHoverTargets(points, tooltipFormatter) {
+  return points.map((point) => {
+    const tooltip = tooltipFormatter(point);
+    return `
+      <circle class="chart-data-point" cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="2.4"></circle>
+      <circle class="chart-hover-point" cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="8" data-chart-tooltip="${escapeHtml(tooltip)}">
+        <title>${escapeHtml(tooltip)}</title>
+      </circle>
+    `;
+  }).join("");
+}
+
+function formatCurveReturn(value, base) {
+  const n = Number(value);
+  const b = Number(base);
+  if (!Number.isFinite(n) || !Number.isFinite(b) || b === 0) return "-";
+  return fmtPct((n / b - 1) * 100);
+}
+
+function formatCurveAxisValue(value, mode, base) {
+  if (mode === "return") return formatCurveReturn(value, base);
+  if (mode === "ratio") return formatQuantValue(value);
+  return fmtDecimal(value, Math.abs(Number(value)) >= 100 ? 0 : 2);
+}
+
+function ensureChartTooltip() {
+  let tooltip = document.getElementById("chartTooltip");
+  if (!tooltip) {
+    tooltip = document.createElement("div");
+    tooltip.id = "chartTooltip";
+    tooltip.className = "chart-tooltip";
+    tooltip.setAttribute("role", "tooltip");
+    document.body.appendChild(tooltip);
+  }
+  return tooltip;
+}
+
+function hideChartTooltip() {
+  const tooltip = document.getElementById("chartTooltip");
+  if (tooltip) tooltip.classList.remove("visible");
+}
+
+function showChartTooltip(event, text) {
+  if (!text) {
+    hideChartTooltip();
+    return;
+  }
+  const tooltip = ensureChartTooltip();
+  tooltip.textContent = text;
+  tooltip.classList.add("visible");
+  const offset = 14;
+  const rect = tooltip.getBoundingClientRect();
+  let left = event.clientX + offset;
+  let top = event.clientY + offset;
+  if (left + rect.width > window.innerWidth - 8) left = event.clientX - rect.width - offset;
+  if (top + rect.height > window.innerHeight - 8) top = event.clientY - rect.height - offset;
+  tooltip.style.left = `${Math.max(8, left)}px`;
+  tooltip.style.top = `${Math.max(8, top)}px`;
+}
+
+function initChartTooltips() {
+  if (state.chartTooltipBound) return;
+  state.chartTooltipBound = true;
+  document.addEventListener("pointermove", (event) => {
+    const rawTarget = event.target;
+    const target = rawTarget?.closest ? rawTarget.closest("[data-chart-tooltip]") : null;
+    if (!target) {
+      hideChartTooltip();
+      return;
+    }
+    showChartTooltip(event, target.dataset.chartTooltip || "");
+  });
+  document.addEventListener("pointerleave", hideChartTooltip);
+  document.addEventListener("scroll", hideChartTooltip, true);
+}
+
 function renderMiniPriceLineChart(rows) {
   const points = rows
     .slice(-80)
     .map((row) => ({ date: row.date || "", value: priceValue(row) }))
     .filter((row) => row.value !== null);
   if (points.length < 2) return "";
-  const width = 640;
-  const height = 132;
-  const padX = 14;
-  const padY = 16;
+  const width = 720;
+  const height = 200;
+  const padLeft = 64;
+  const padRight = 16;
+  const padTop = 18;
+  const padBottom = 26;
   const values = points.map((point) => point.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const xStep = (width - padX * 2) / Math.max(1, points.length - 1);
-  const xy = points.map((point, index) => {
-    const x = padX + index * xStep;
-    const y = height - padY - ((point.value - min) / range) * (height - padY * 2);
-    return { ...point, x, y };
-  });
-  const linePoints = xy.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
-  const areaPoints = `${padX},${height - padY} ${linePoints} ${width - padX},${height - padY}`;
+  const actualMin = Math.min(...values);
+  const actualMax = Math.max(...values);
+  const { min, max } = paddedChartDomain(values);
+  const xy = lineChartPoints(points, width, height, padLeft, padRight, padTop, padBottom, min, max);
+  const linePoints = svgPolylinePoints(xy);
+  const areaPoints = `${padLeft},${height - padBottom} ${linePoints} ${width - padRight},${height - padBottom}`;
   const first = points[0];
   const last = points[points.length - 1];
   const changePct = first.value ? (last.value / first.value - 1) * 100 : null;
@@ -1905,13 +3204,28 @@ function renderMiniPriceLineChart(rows) {
         <strong class="${escapeHtml(changeClass)}">${escapeHtml(changePct === null ? "-" : fmtPct(changePct))}</strong>
       </div>
       <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="최근 ${escapeHtml(String(points.length))}개 가격 추이">
+        ${renderChartYAxis({
+          width,
+          height,
+          padLeft,
+          padRight,
+          padTop,
+          padBottom,
+          min,
+          max,
+          formatter: (value) => fmtDecimal(value, Math.abs(value) >= 100 ? 0 : 2),
+        })}
         <polygon points="${areaPoints}" class="mini-price-area"></polygon>
         <polyline points="${linePoints}" class="mini-price-stroke"></polyline>
         <circle cx="${xy[xy.length - 1].x.toFixed(1)}" cy="${xy[xy.length - 1].y.toFixed(1)}" r="4" class="mini-price-last"></circle>
+        ${renderChartHoverTargets(xy, (point) => {
+          const periodReturn = first.value ? ` · 기간수익률 ${formatCurveReturn(point.value, first.value)}` : "";
+          return `${point.date || "-"} · 종가 ${fmtDecimal(point.value, 2)}${periodReturn}`;
+        })}
       </svg>
       <div class="mini-price-line-foot">
-        <span>저점 ${escapeHtml(fmtDecimal(min, 2))}</span>
-        <span>고점 ${escapeHtml(fmtDecimal(max, 2))}</span>
+        <span>저점 ${escapeHtml(fmtDecimal(actualMin, 2))}</span>
+        <span>고점 ${escapeHtml(fmtDecimal(actualMax, 2))}</span>
         <span>최근 ${escapeHtml(fmtDecimal(last.value, 2))}</span>
       </div>
     </div>
@@ -1936,6 +3250,262 @@ function renderRecentPriceRows(rows) {
       </table>
     </div>
   `;
+}
+
+function isoDateOffset(dateText, { months = 0, years = 0 } = {}) {
+  if (!dateText) return "";
+  const date = new Date(`${dateText}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  if (years) date.setFullYear(date.getFullYear() - years);
+  if (months) date.setMonth(date.getMonth() - months);
+  return date.toISOString().slice(0, 10);
+}
+
+function assetDetailOptionsFromControls() {
+  return {
+    range: els.assetDetailRange?.value || "1y",
+    startDate: textInputValue(els.assetDetailStartDate),
+    endDate: textInputValue(els.assetDetailEndDate),
+    view: els.assetDetailView?.value || "overview",
+    benchmark: normalizeTickerToken(els.assetDetailBenchmark?.value || "SPY") || "SPY",
+    compareBenchmark: !!els.assetDetailBenchmarkCompare?.checked,
+  };
+}
+
+function assetDetailRangeStart(latestDate, range) {
+  if (!latestDate || range === "all") return "";
+  if (range === "3m") return isoDateOffset(latestDate, { months: 3 });
+  if (range === "6m") return isoDateOffset(latestDate, { months: 6 });
+  if (range === "3y") return isoDateOffset(latestDate, { years: 3 });
+  return isoDateOffset(latestDate, { years: 1 });
+}
+
+function filterPriceRowsByAssetOptions(rows, options) {
+  const clean = (Array.isArray(rows) ? rows : [])
+    .filter((row) => row?.date && priceValue(row) !== null)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const latestDate = clean[clean.length - 1]?.date || "";
+  const rangeStart = assetDetailRangeStart(latestDate, options.range);
+  const start = options.startDate || rangeStart;
+  const end = options.endDate || latestDate;
+  return clean.filter((row) => {
+    const date = row.date || "";
+    if (start && date < start) return false;
+    if (end && date > end) return false;
+    return true;
+  });
+}
+
+function assetDailyReturnRows(rows) {
+  const out = [];
+  for (let i = 1; i < rows.length; i += 1) {
+    const prev = priceValue(rows[i - 1]);
+    const current = priceValue(rows[i]);
+    if (prev && current !== null) out.push({ date: rows[i].date || "", value: current / prev - 1 });
+  }
+  return out;
+}
+
+function assetReturnCurve(rows) {
+  const base = priceValue(rows[0]);
+  if (!base) return [];
+  return rows
+    .map((row) => {
+      const value = priceValue(row);
+      return value === null ? null : { date: row.date || "", value: value / base - 1 };
+    })
+    .filter(Boolean);
+}
+
+function assetNavCurve(rows) {
+  const base = priceValue(rows[0]);
+  if (!base) return [];
+  return rows
+    .map((row) => {
+      const value = priceValue(row);
+      return value === null ? null : { date: row.date || "", value: value / base };
+    })
+    .filter(Boolean);
+}
+
+function assetDrawdownCurve(rows) {
+  let peak = -Infinity;
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      const value = priceValue(row);
+      if (value === null) return null;
+      peak = Math.max(peak, value);
+      return { date: row.date || "", value: peak > 0 ? value / peak - 1 : 0 };
+    })
+    .filter(Boolean);
+}
+
+function assetSourceSummary(rows) {
+  const counts = new Map();
+  rows.forEach((row) => {
+    const source = row.source || "unknown";
+    counts.set(source, (counts.get(source) || 0) + 1);
+  });
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+}
+
+function assetDetailMetrics(rows, latest) {
+  const firstPrice = priceValue(rows[0]);
+  const lastPrice = priceValue(rows[rows.length - 1] || latest);
+  const values = rows.map(priceValue).filter((value) => value !== null);
+  const daily = assetDailyReturnRows(rows);
+  const best = daily.length ? daily.reduce((a, b) => (b.value > a.value ? b : a), daily[0]) : null;
+  const worst = daily.length ? daily.reduce((a, b) => (b.value < a.value ? b : a), daily[0]) : null;
+  const positiveRatio = daily.length ? daily.filter((row) => row.value > 0).length / daily.length : null;
+  const periodReturn = firstPrice && lastPrice ? lastPrice / firstPrice - 1 : null;
+  const high = values.length ? Math.max(...values) : null;
+  const low = values.length ? Math.min(...values) : null;
+  const currentDrawdown = high && lastPrice ? lastPrice / high - 1 : null;
+  const avgVolumeRows = rows.map((row) => Number(row.volume)).filter(Number.isFinite);
+  const avgVolume = avgVolumeRows.length
+    ? avgVolumeRows.reduce((sum, value) => sum + value, 0) / avgVolumeRows.length
+    : null;
+  return {
+    firstPrice,
+    lastPrice,
+    periodReturn,
+    high,
+    low,
+    currentDrawdown,
+    daily,
+    best,
+    worst,
+    positiveRatio,
+    avgVolume,
+    vol20: annualizedVol(rows, 21),
+    vol60: annualizedVol(rows, 63),
+    mdd: maxDrawdownPct(rows),
+  };
+}
+
+function renderAssetInsightPanel(ticker, rows, metrics, latest, options) {
+  const startDate = rows[0]?.date || "-";
+  const endDate = rows[rows.length - 1]?.date || "-";
+  const sourceRows = assetSourceSummary(rows);
+  return `
+    <div class="decision-section-title">실무 요약</div>
+    <div class="decision-action-list asset-insight-list">
+      <div>
+        <strong>기간 성과</strong>
+        <span>${escapeHtml(ticker)} · ${escapeHtml(startDate)} -> ${escapeHtml(endDate)} · 누적 ${escapeHtml(metrics.periodReturn === null ? "-" : fmtMetricRatio(metrics.periodReturn))}</span>
+      </div>
+      <div>
+        <strong>위험 상태</strong>
+        <span>현재 낙폭 ${escapeHtml(metrics.currentDrawdown === null ? "-" : fmtMetricRatio(metrics.currentDrawdown))} · 최악 낙폭 ${escapeHtml(fmtPct(metrics.mdd))} · 60D 변동성 ${escapeHtml(metrics.vol60 === null ? "-" : fmtPct(metrics.vol60))}</span>
+      </div>
+      <div>
+        <strong>데이터 범위</strong>
+        <span>선택 ${escapeHtml(_fmtNumber(rows.length))}행 · 보기 ${escapeHtml(options.view)} · 소스 ${escapeHtml(sourceRows.map(([source, count]) => `${source} ${count}`).join(", ") || "unknown")}</span>
+      </div>
+    </div>
+    <div class="decision-list compact">
+      <div class="decision-list-row"><span>최고가 / 최저가</span><strong>${escapeHtml(fmtDecimal(metrics.high, 2))} / ${escapeHtml(fmtDecimal(metrics.low, 2))}</strong></div>
+      <div class="decision-list-row"><span>최고 일간 수익률</span><strong class="ok">${escapeHtml(metrics.best ? `${metrics.best.date} ${fmtMetricRatio(metrics.best.value)}` : "-")}</strong></div>
+      <div class="decision-list-row"><span>최악 일간 수익률</span><strong class="warn">${escapeHtml(metrics.worst ? `${metrics.worst.date} ${fmtMetricRatio(metrics.worst.value)}` : "-")}</strong></div>
+      <div class="decision-list-row"><span>상승일 비중</span><strong>${escapeHtml(metrics.positiveRatio === null ? "-" : fmtMetricRatio(metrics.positiveRatio))}</strong></div>
+      <div class="decision-list-row"><span>평균 거래량</span><strong>${escapeHtml(metrics.avgVolume === null ? "-" : _fmtNumber(Math.round(metrics.avgVolume)))}</strong></div>
+      <div class="decision-list-row"><span>최근 수집</span><strong>${escapeHtml(latest.collected_at || "-")}</strong></div>
+    </div>
+  `;
+}
+
+function renderAssetMetricPanel(rows, metrics, latest) {
+  const returns = {
+    "1D": pctReturnFromRows(rows, 1),
+    "1W": pctReturnFromRows(rows, 5),
+    "1M": pctReturnFromRows(rows, 21),
+    "3M": pctReturnFromRows(rows, 63),
+    "6M": pctReturnFromRows(rows, 126),
+    "1Y": pctReturnFromRows(rows, 252),
+  };
+  return `
+    <div class="decision-metric-grid dense">
+      ${decisionMetric("기준일", latest.date || rows[rows.length - 1]?.date || "-", "ok")}
+      ${decisionMetric("종가", fmtDecimal(metrics.lastPrice, 2), "ok")}
+      ${decisionMetric("기간 수익률", metrics.periodReturn === null ? "-" : fmtMetricRatio(metrics.periodReturn), metricStatusForPct(metrics.periodReturn))}
+      ${decisionMetric("거래량", _fmtNumber(latest.volume), "ok")}
+      ${decisionMetric("선택 범위", `${fmtDecimal(metrics.low, 2)} / ${fmtDecimal(metrics.high, 2)}`, metrics.high ? "ok" : "warn")}
+      ${Object.entries(returns).map(([label, value]) => decisionMetric(label, value === null ? "-" : fmtPct(value), metricStatusForPct(value))).join("")}
+      ${decisionMetric("20D Vol", metrics.vol20 === null ? "-" : fmtPct(metrics.vol20), metrics.vol20 === null ? "warn" : "ok")}
+      ${decisionMetric("60D Vol", metrics.vol60 === null ? "-" : fmtPct(metrics.vol60), metrics.vol60 === null ? "warn" : "ok")}
+      ${decisionMetric("MDD", fmtPct(metrics.mdd), metricStatusForPct(metrics.mdd, true))}
+      ${decisionMetric("현재 낙폭", metrics.currentDrawdown === null ? "-" : fmtMetricRatio(metrics.currentDrawdown), metricStatusForPct(metrics.currentDrawdown, true))}
+    </div>
+  `;
+}
+
+function renderAssetReturnLineChart(rows) {
+  const curve = assetReturnCurve(rows);
+  return renderDecisionLineChart(curve, "return", "수익률 곡선", "ok");
+}
+
+function renderAssetDrawdownLineChart(rows) {
+  const curve = assetDrawdownCurve(rows);
+  return renderDecisionLineChart(curve, "drawdown", "낙폭 곡선", "ok");
+}
+
+function renderAssetBenchmarkComparison(ticker, rows, benchmarkTicker, benchmarkRows) {
+  const primary = assetNavCurve(rows);
+  const benchmark = assetNavCurve(benchmarkRows);
+  if (primary.length < 2 || benchmark.length < 2) return "";
+  return renderNormalizedComparisonChart({
+    primary,
+    benchmark,
+    primaryLabel: ticker,
+    benchmarkLabel: benchmarkTicker,
+    title: "자산 수익률 비교",
+    status: "ok",
+  });
+}
+
+function renderAssetDataPanel(rows, allRows, latest) {
+  const sources = assetSourceSummary(rows);
+  return `
+    <div class="decision-section-title">데이터 품질</div>
+    <div class="decision-metric-grid">
+      ${decisionMetric("선택 행", _fmtNumber(rows.length), rows.length ? "ok" : "warn")}
+      ${decisionMetric("전체 저장 행", _fmtNumber(allRows.length), allRows.length ? "ok" : "warn")}
+      ${decisionMetric("최근 기준일", latest.date || rows[rows.length - 1]?.date || "-", "ok")}
+      ${decisionMetric("최근 소스", latest.source || rows[rows.length - 1]?.source || "-", "ok")}
+    </div>
+    <div class="decision-list compact">
+      ${sources.map(([source, count]) => `
+        <div class="decision-list-row">
+          <span>${escapeHtml(source)}</span>
+          <strong>${escapeHtml(_fmtNumber(count))}행</strong>
+        </div>
+      `).join("") || '<div class="muted small">소스 정보가 없습니다.</div>'}
+    </div>
+  `;
+}
+
+function renderAssetDetailSections({ ticker, rows, allRows, latest, metrics, options, benchmarkRows }) {
+  const chartGrid = `
+    <div class="decision-chart-grid asset-detail-chart-grid">
+      ${renderMiniPriceLineChart(rows)}
+      ${renderAssetReturnLineChart(rows)}
+      ${renderAssetDrawdownLineChart(rows)}
+      ${options.compareBenchmark ? renderAssetBenchmarkComparison(ticker, rows, options.benchmark, benchmarkRows || []) : ""}
+    </div>
+  `;
+  if (options.view === "price") {
+    return `${renderAssetMetricPanel(rows, metrics, latest)}${renderMiniPriceLineChart(rows)}${renderRecentPriceRows(rows)}`;
+  }
+  if (options.view === "returns") {
+    return `${renderAssetMetricPanel(rows, metrics, latest)}<div class="decision-chart-grid asset-detail-chart-grid">${renderAssetReturnLineChart(rows)}${options.compareBenchmark ? renderAssetBenchmarkComparison(ticker, rows, options.benchmark, benchmarkRows || []) : ""}</div>${renderRecentPriceRows(rows)}`;
+  }
+  if (options.view === "risk") {
+    return `${renderAssetMetricPanel(rows, metrics, latest)}<div class="decision-chart-grid asset-detail-chart-grid">${renderAssetDrawdownLineChart(rows)}${renderAssetReturnLineChart(rows)}</div>${renderAssetInsightPanel(ticker, rows, metrics, latest, options)}`;
+  }
+  if (options.view === "data") {
+    return `${renderAssetDataPanel(rows, allRows, latest)}${renderRecentPriceRows(rows)}`;
+  }
+  return `${renderAssetMetricPanel(rows, metrics, latest)}${chartGrid}${renderAssetInsightPanel(ticker, rows, metrics, latest, options)}${renderRecentPriceRows(rows)}${renderAssetDataPanel(rows, allRows, latest)}`;
 }
 
 function renderMetricGrid(metrics, status = "ok") {
@@ -2028,6 +3598,7 @@ async function loadDataHealth(force = false) {
       </div>
       <div class="decision-metric-grid">
         ${decisionMetric("가격 행", _fmtNumber(counts.prices_daily), status)}
+        ${decisionMetric("재무 스냅샷", _fmtNumber(counts.fundamentals_snapshots || 0), counts.fundamentals_snapshots ? "ok" : "warn")}
         ${decisionMetric("거시 관측치", _fmtNumber(counts.macro_observations), status)}
         ${decisionMetric("뉴스 evidence", _fmtNumber(counts.news_articles), counts.news_articles ? "ok" : "warn")}
         ${decisionMetric("공시 evidence", _fmtNumber(counts.filings), counts.filings ? "ok" : "warn")}
@@ -2053,20 +3624,21 @@ async function loadDataHealth(force = false) {
     `;
     state.dataHealthLoaded = true;
   } catch (err) {
-    els.homeDataHealth.innerHTML = decisionEmpty(`Data health failed: ${err.message || err}`);
+    els.homeDataHealth.innerHTML = decisionEmpty(`데이터 마트 상태 조회 실패: ${err.message || err}`);
   }
 }
 
 async function loadAssetDetail() {
   if (!els.assetDetailSurface || !els.assetDetailTicker) return;
   const ticker = normalizeTickerToken(els.assetDetailTicker.value || "");
+  const options = assetDetailOptionsFromControls();
   if (!ticker) {
     els.assetDetailSurface.innerHTML = decisionEmpty("티커를 입력해야 합니다.");
     return;
   }
-  els.assetDetailSurface.innerHTML = decisionEmpty(`${ticker} 저장 가격과 리스크 지표를 계산하는 중입니다.`);
+  els.assetDetailSurface.innerHTML = decisionEmpty(`${ticker} 선택 기간의 가격, 수익률 곡선, 리스크 지표를 계산하는 중입니다.`);
   try {
-    const res = await fetch(API.dataPrices(ticker, 756));
+    const res = await fetch(API.dataPrices(ticker, 5000));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const latest = data.latest || {};
@@ -2074,40 +3646,41 @@ async function loadAssetDetail() {
       els.assetDetailSurface.innerHTML = decisionEmpty(`${ticker} 저장 가격이 없습니다. daily_update를 먼저 실행해야 합니다.`);
       return;
     }
-    const rows = Array.isArray(data.items) ? data.items : [];
-    const lastPrice = priceValue(rows[rows.length - 1] || latest);
-    const returns = {
-      "1D": pctReturnFromRows(rows, 1),
-      "1W": pctReturnFromRows(rows, 5),
-      "1M": pctReturnFromRows(rows, 21),
-      "3M": pctReturnFromRows(rows, 63),
-      "6M": pctReturnFromRows(rows, 126),
-      "1Y": pctReturnFromRows(rows, 252),
-    };
-    const vol20 = annualizedVol(rows, 21);
-    const vol60 = annualizedVol(rows, 63);
-    const mdd = maxDrawdownPct(rows);
-    const values = rows.map(priceValue).filter((value) => value !== null);
-    const high = values.length ? Math.max(...values.slice(-252)) : null;
-    const low = values.length ? Math.min(...values.slice(-252)) : null;
-    const latestDate = latest.date || rows[rows.length - 1]?.date || "-";
+    const allRows = Array.isArray(data.items) ? data.items : [];
+    const rows = filterPriceRowsByAssetOptions(allRows, options);
+    if (rows.length < 2) {
+      els.assetDetailSurface.innerHTML = decisionEmpty(`${ticker} 선택 날짜 범위에 계산 가능한 가격 행이 부족합니다. 기간을 넓히거나 전체 범위를 선택하세요.`);
+      return;
+    }
+    const scopedLatest = rows[rows.length - 1] || latest;
+    const metrics = assetDetailMetrics(rows, scopedLatest);
+    let benchmarkRows = [];
+    let benchmarkWarning = "";
+    if (options.compareBenchmark && options.benchmark && options.benchmark !== ticker) {
+      try {
+        const benchmarkRes = await fetch(API.dataPrices(options.benchmark, 5000));
+        if (!benchmarkRes.ok) throw new Error(`HTTP ${benchmarkRes.status}`);
+        const benchmarkData = await benchmarkRes.json();
+        benchmarkRows = filterPriceRowsByAssetOptions(Array.isArray(benchmarkData.items) ? benchmarkData.items : [], options);
+        if (benchmarkRows.length < 2) benchmarkWarning = `${options.benchmark} 벤치마크 가격 행이 부족해 비교 곡선을 숨겼습니다.`;
+      } catch (err) {
+        benchmarkWarning = `${options.benchmark} 벤치마크 조회 실패: ${err.message || err}`;
+      }
+    }
     els.assetDetailSurface.innerHTML = `
       <div class="decision-status-row">
         <span class="decision-badge ok">정상</span>
-        <span>${escapeHtml(String(data.count))}행 · ${escapeHtml(latest.source || "소스 미확인")} · 수집 ${escapeHtml(latest.collected_at || "-")}</span>
+        <span>선택 ${escapeHtml(_fmtNumber(rows.length))}/${escapeHtml(_fmtNumber(allRows.length))}행 · ${escapeHtml(rows[0]?.date || "-")} -> ${escapeHtml(scopedLatest.date || "-")} · ${escapeHtml(scopedLatest.source || latest.source || "소스 미확인")}</span>
       </div>
-      <div class="decision-metric-grid dense">
-        ${decisionMetric("기준일", latestDate, "ok")}
-        ${decisionMetric("종가", fmtDecimal(lastPrice, 2), "ok")}
-        ${decisionMetric("거래량", _fmtNumber(latest.volume), "ok")}
-        ${decisionMetric("52W 범위", `${fmtDecimal(low, 2)} / ${fmtDecimal(high, 2)}`, high ? "ok" : "warn")}
-        ${Object.entries(returns).map(([label, value]) => decisionMetric(label, value === null ? "-" : fmtPct(value), metricStatusForPct(value))).join("")}
-        ${decisionMetric("20D Vol", vol20 === null ? "-" : fmtPct(vol20), vol20 === null ? "warn" : "ok")}
-        ${decisionMetric("60D Vol", vol60 === null ? "-" : fmtPct(vol60), vol60 === null ? "warn" : "ok")}
-        ${decisionMetric("MDD", fmtPct(mdd), metricStatusForPct(mdd, true))}
+      <div class="decision-chip-row">
+        <span>보기 ${escapeHtml(options.view)}</span>
+        <span>범위 ${escapeHtml(options.range)}</span>
+        <span>시작 ${escapeHtml(options.startDate || "자동")}</span>
+        <span>종료 ${escapeHtml(options.endDate || "최신")}</span>
+        ${options.compareBenchmark ? `<span>벤치마크 ${escapeHtml(options.benchmark)}</span>` : ""}
       </div>
-      ${renderMiniPriceLineChart(rows)}
-      ${renderRecentPriceRows(rows)}
+      ${benchmarkWarning ? `<div class="decision-warning">${escapeHtml(benchmarkWarning)}</div>` : ""}
+      ${renderAssetDetailSections({ ticker, rows, allRows, latest: scopedLatest, metrics, options, benchmarkRows })}
     `;
   } catch (err) {
     els.assetDetailSurface.innerHTML = decisionEmpty(`자산 상세 조회 실패: ${err.message || err}`);
@@ -2203,6 +3776,33 @@ function renderDiagnosticsChips(values) {
   const items = Array.isArray(values) ? values : [];
   if (!items.length) return '<span>진단 없음</span>';
   return items.slice(0, 6).map((item) => `<span>${escapeHtml(String(item))}</span>`).join("");
+}
+
+function formatQuantWarning(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (text.startsWith("excluded_unavailable_assets:")) {
+    return `데이터 없는 종목 자동 제외: ${text.replace("excluded_unavailable_assets:", "")}`;
+  }
+  if (text.startsWith("missing_assets:")) {
+    return `데이터 없는 종목: ${text.replace("missing_assets:", "")}`;
+  }
+  if (text.startsWith("stale_assets:")) {
+    return `오래된 가격: ${text.replace("stale_assets:", "")}`;
+  }
+  if (text === "strict_freshness_violation") return "엄격한 데이터 신선도 조건을 통과하지 못했습니다.";
+  if (text === "ticker_universe_empty") return "선택된 종목 유니버스가 없습니다.";
+  if (text === "executable_price_universe_empty") return "실행 가능한 가격 이력 종목이 없습니다.";
+  if (text.startsWith("local_llm_generation_failed:")) return "로컬 LLM 응답이 불안정해 규칙 기반 초안을 표시했습니다.";
+  if (text === "strategy_prompt_required") return "전략 프롬프트가 필요합니다.";
+  return text;
+}
+
+function formatQuantWarnings(values) {
+  return (Array.isArray(values) ? values : [])
+    .map(formatQuantWarning)
+    .filter(Boolean)
+    .join(" ");
 }
 
 function renderResearchProvenancePanel(provenance) {
@@ -2400,23 +4000,24 @@ function renderQuantExportControls(runId) {
 
 function renderDecisionLineChart(rows, key, label, status = "ok") {
   const values = (Array.isArray(rows) ? rows : [])
-    .map((row) => ({ date: row.date || "", value: Number(row[key]) }))
+    .map((row) => ({ date: row.date || "", value: Number(row[key] ?? row.value) }))
     .filter((row) => Number.isFinite(row.value));
   if (values.length < 2) return "";
-  const width = 320;
-  const height = 88;
-  const pad = 8;
+  const width = 620;
+  const height = 190;
+  const padLeft = 64;
+  const padRight = 18;
+  const padTop = 18;
+  const padBottom = 28;
   const nums = values.map((row) => row.value);
-  const min = Math.min(...nums);
-  const max = Math.max(...nums);
-  const span = max - min || 1;
-  const points = values.map((row, idx) => {
-    const x = pad + (idx / Math.max(1, values.length - 1)) * (width - pad * 2);
-    const y = height - pad - ((row.value - min) / span) * (height - pad * 2);
-    return `${x.toFixed(2)},${y.toFixed(2)}`;
-  }).join(" ");
+  const mode = key === "equity" ? "return" : ["drawdown", "return"].includes(key) ? "ratio" : "number";
+  const base = key === "equity" ? (values[0]?.value || 1) : 1;
+  const include = key === "equity" ? [base] : ["drawdown", "return"].includes(key) ? [0] : [];
+  const { min, max } = paddedChartDomain(nums, include);
+  const points = lineChartPoints(values, width, height, padLeft, padRight, padTop, padBottom, min, max);
+  const polyline = svgPolylinePoints(points);
   const latest = values[values.length - 1];
-  const latestValue = key === "equity" ? fmtDecimal(latest.value, 3) : formatQuantValue(latest.value);
+  const latestValue = formatCurveAxisValue(latest.value, mode, base);
   return `
     <div class="decision-chart">
       <div class="decision-chart-head">
@@ -2424,7 +4025,24 @@ function renderDecisionLineChart(rows, key, label, status = "ok") {
         <strong class="${escapeHtml(decisionStatusClass(status))}">${escapeHtml(latestValue)}</strong>
       </div>
       <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(label)} curve">
-        <polyline points="${points}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"></polyline>
+        ${renderChartYAxis({
+          width,
+          height,
+          padLeft,
+          padRight,
+          padTop,
+          padBottom,
+          min,
+          max,
+          formatter: (value) => formatCurveAxisValue(value, mode, base),
+        })}
+        <polyline points="${polyline}" fill="none" stroke="currentColor" stroke-width="2.4" vector-effect="non-scaling-stroke"></polyline>
+        ${renderChartHoverTargets(points, (point) => {
+          if (key === "equity") return `${point.date || "-"} · 수익률 ${formatCurveReturn(point.value, base)} · NAV ${fmtDecimal(point.value, 4)}`;
+          if (key === "return") return `${point.date || "-"} · 누적 수익률 ${formatQuantValue(point.value)}`;
+          if (key === "drawdown") return `${point.date || "-"} · MDD ${formatQuantValue(point.value)}`;
+          return `${point.date || "-"} · ${label} ${fmtDecimal(point.value, 4)}`;
+        })}
       </svg>
       <div class="decision-chart-foot">
         <span>${escapeHtml(values[0].date)}</span>
@@ -2443,41 +4061,77 @@ function normalizedCurve(rows, key = "equity") {
   return values.map((row) => ({ date: row.date, value: row.value / base }));
 }
 
+function renderNormalizedComparisonChart({
+  primary,
+  benchmark,
+  primaryLabel = "전략",
+  benchmarkLabel = "SPY",
+  title = "수익 곡선 비교",
+  status = "ok",
+} = {}) {
+  const primaryRows = (Array.isArray(primary) ? primary : [])
+    .map((row) => ({ date: row.date || "", value: Number(row.value) }))
+    .filter((row) => row.date && Number.isFinite(row.value) && row.value > 0);
+  const benchmarkRows = (Array.isArray(benchmark) ? benchmark : [])
+    .map((row) => ({ date: row.date || "", value: Number(row.value) }))
+    .filter((row) => row.date && Number.isFinite(row.value) && row.value > 0);
+  if (primaryRows.length < 2 || benchmarkRows.length < 2) return "";
+  const width = 760;
+  const height = 230;
+  const padLeft = 64;
+  const padRight = 18;
+  const padTop = 18;
+  const padBottom = 30;
+  const allValues = [...primaryRows, ...benchmarkRows].map((row) => row.value);
+  const { min, max } = paddedChartDomain(allValues, [1]);
+  const primaryPoints = lineChartPoints(primaryRows, width, height, padLeft, padRight, padTop, padBottom, min, max);
+  const benchmarkPoints = lineChartPoints(benchmarkRows, width, height, padLeft, padRight, padTop, padBottom, min, max);
+  const primaryLatest = primaryRows[primaryRows.length - 1]?.value ?? 1;
+  const benchmarkLatest = benchmarkRows[benchmarkRows.length - 1]?.value ?? 1;
+  return `
+    <div class="decision-chart decision-chart-wide">
+      <div class="decision-chart-head">
+        <span>${escapeHtml(title)}</span>
+        <strong class="${escapeHtml(decisionStatusClass(status))}">${escapeHtml(primaryLabel)} ${escapeHtml(fmtPct((primaryLatest - 1) * 100))} · ${escapeHtml(benchmarkLabel)} ${escapeHtml(fmtPct((benchmarkLatest - 1) * 100))}</strong>
+      </div>
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}">
+        ${renderChartYAxis({
+          width,
+          height,
+          padLeft,
+          padRight,
+          padTop,
+          padBottom,
+          min,
+          max,
+          formatter: (value) => fmtPct((value - 1) * 100),
+        })}
+        <polyline points="${svgPolylinePoints(benchmarkPoints)}" fill="none" stroke="#60a5fa" stroke-width="2.2" vector-effect="non-scaling-stroke"></polyline>
+        <polyline points="${svgPolylinePoints(primaryPoints)}" fill="none" stroke="#34d399" stroke-width="2.6" vector-effect="non-scaling-stroke"></polyline>
+        ${renderChartHoverTargets(benchmarkPoints, (point) => `${point.date || "-"} · ${benchmarkLabel} 수익률 ${fmtPct((point.value - 1) * 100)} · NAV ${fmtDecimal(point.value, 4)}`)}
+        ${renderChartHoverTargets(primaryPoints, (point) => `${point.date || "-"} · ${primaryLabel} 수익률 ${fmtPct((point.value - 1) * 100)} · NAV ${fmtDecimal(point.value, 4)}`)}
+      </svg>
+      <div class="decision-chart-foot">
+        <span><i class="legend-line strategy"></i>${escapeHtml(primaryLabel)}</span>
+        <span><i class="legend-line benchmark"></i>${escapeHtml(benchmarkLabel)}</span>
+      </div>
+    </div>
+  `;
+}
+
 function renderBenchmarkComparisonChart(data, status = "ok") {
   const strategy = normalizedCurve(data.equity_curve, "equity");
   const benchmark = normalizedCurve(data.benchmark_curve, "equity");
   if (strategy.length < 2 || benchmark.length < 2) return "";
-  const width = 640;
-  const height = 112;
-  const pad = 10;
-  const allValues = [...strategy, ...benchmark].map((row) => row.value);
-  const min = Math.min(...allValues);
-  const max = Math.max(...allValues);
-  const span = max - min || 1;
-  const toPoints = (rows) => rows.map((row, idx) => {
-    const x = pad + (idx / Math.max(1, rows.length - 1)) * (width - pad * 2);
-    const y = height - pad - ((row.value - min) / span) * (height - pad * 2);
-    return `${x.toFixed(2)},${y.toFixed(2)}`;
-  }).join(" ");
-  const strategyLatest = strategy[strategy.length - 1]?.value ?? 1;
-  const benchmarkLatest = benchmark[benchmark.length - 1]?.value ?? 1;
   const benchmarkTicker = data.benchmark_ticker || data.benchmark || "SPY";
-  return `
-    <div class="decision-chart decision-chart-wide">
-      <div class="decision-chart-head">
-        <span>수익 곡선 비교</span>
-        <strong class="${escapeHtml(decisionStatusClass(status))}">전략 ${escapeHtml(fmtPct((strategyLatest - 1) * 100))} · ${escapeHtml(benchmarkTicker)} ${escapeHtml(fmtPct((benchmarkLatest - 1) * 100))}</strong>
-      </div>
-      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="백테스트 벤치마크 비교">
-        <polyline points="${toPoints(benchmark)}" fill="none" stroke="#60a5fa" stroke-width="2" vector-effect="non-scaling-stroke"></polyline>
-        <polyline points="${toPoints(strategy)}" fill="none" stroke="#34d399" stroke-width="2.4" vector-effect="non-scaling-stroke"></polyline>
-      </svg>
-      <div class="decision-chart-foot">
-        <span><i class="legend-line strategy"></i>전략</span>
-        <span><i class="legend-line benchmark"></i>${escapeHtml(benchmarkTicker)} 벤치마크</span>
-      </div>
-    </div>
-  `;
+  return renderNormalizedComparisonChart({
+    primary: strategy,
+    benchmark,
+    primaryLabel: "전략",
+    benchmarkLabel: benchmarkTicker,
+    title: "수익 곡선 비교",
+    status,
+  });
 }
 
 async function attachBenchmarkComparison(data, request = {}) {
@@ -2529,9 +4183,10 @@ function renderQuantDiagnosticsPanel(data) {
   return `
     <div class="decision-section-title">진단</div>
     <div class="decision-chip-row">${chips.map((chip) => `<span>${escapeHtml(chip)}</span>`).join("")}</div>
-    ${(diagnostics.missing_assets || []).length ? `<div class="decision-warning">누락 종목: ${escapeHtml(diagnostics.missing_assets.join(", "))}</div>` : ""}
+    ${(diagnostics.excluded_assets || []).length ? `<div class="decision-warning">데이터 없는 종목 자동 제외: ${escapeHtml(diagnostics.excluded_assets.join(", "))}</div>` : ""}
+    ${(diagnostics.missing_assets || []).length ? `<div class="decision-warning">데이터 없는 종목: ${escapeHtml(diagnostics.missing_assets.join(", "))}</div>` : ""}
     ${(diagnostics.stale_assets || []).length ? `<div class="decision-warning">오래된 가격: ${escapeHtml(diagnostics.stale_assets.join(", "))}</div>` : ""}
-    ${(diagnostics.warnings || []).length ? `<div class="decision-warning">${escapeHtml(diagnostics.warnings.join(" "))}</div>` : ""}
+    ${(diagnostics.warnings || []).length ? `<div class="decision-warning">${escapeHtml(formatQuantWarnings(diagnostics.warnings))}</div>` : ""}
     ${renderFreshnessAuditPanel(diagnostics)}
     <div class="decision-section-title">산출물</div>
     <div class="decision-list compact">
@@ -2887,7 +4542,7 @@ function renderQuantReplayComparison(data) {
     </div>
     <div class="decision-section-title">Replay report history</div>
     ${renderReplayReportHistoryTable(data.report_history || {})}
-    ${(data.diagnostics?.warnings || []).length ? `<div class="decision-warning">${escapeHtml(data.diagnostics.warnings.join(" "))}</div>` : ""}
+    ${(data.diagnostics?.warnings || []).length ? `<div class="decision-warning">${escapeHtml(formatQuantWarnings(data.diagnostics.warnings))}</div>` : ""}
   `;
 }
 
@@ -2904,7 +4559,7 @@ async function runQuantBacktestReplay(runId) {
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
     renderQuantReplayComparison(data);
   } catch (err) {
-    els.backtestSurface.innerHTML = decisionEmpty(`Replay comparison failed: ${err.message || err}`);
+    els.backtestSurface.innerHTML = decisionEmpty(`리플레이 비교 실패: ${err.message || err}`);
   }
 }
 
@@ -2927,7 +4582,7 @@ async function loadQuantReplayReports(runId) {
       ${renderReplayReportHistoryTable(data)}
     `;
   } catch (err) {
-    els.backtestSurface.innerHTML = decisionEmpty(`Replay report history failed: ${err.message || err}`);
+    els.backtestSurface.innerHTML = decisionEmpty(`리플레이 리포트 이력 조회 실패: ${err.message || err}`);
   }
 }
 
@@ -2948,7 +4603,7 @@ async function exportQuantBacktestArtifact(runId, format = "jsonl") {
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
     els.backtestSurface.innerHTML = renderArtifactExportSummary(data);
   } catch (err) {
-    els.backtestSurface.innerHTML = decisionEmpty(`Artifact export failed: ${err.message || err}`);
+    els.backtestSurface.innerHTML = decisionEmpty(`백테스트 산출물 내보내기 실패: ${err.message || err}`);
   }
 }
 
@@ -2967,7 +4622,7 @@ async function loadQuantExportHistory(runId) {
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
     els.backtestSurface.innerHTML = renderArtifactExportHistory(data);
   } catch (err) {
-    els.backtestSurface.innerHTML = decisionEmpty(`Export history failed: ${err.message || err}`);
+    els.backtestSurface.innerHTML = decisionEmpty(`내보내기 이력 조회 실패: ${err.message || err}`);
   }
 }
 
@@ -2982,7 +4637,7 @@ async function previewQuantExportCleanup(runId) {
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
     els.backtestSurface.innerHTML = renderArtifactExportCleanupPlan(data);
   } catch (err) {
-    els.backtestSurface.innerHTML = decisionEmpty(`Export cleanup preview failed: ${err.message || err}`);
+    els.backtestSurface.innerHTML = decisionEmpty(`내보내기 정리 미리보기 실패: ${err.message || err}`);
   }
 }
 
@@ -3001,7 +4656,7 @@ async function applyQuantExportCleanup(runId, keepLast = 5) {
     els.backtestSurface.innerHTML = renderArtifactExportCleanupPlan(data);
     loadQuantRunHistory(true);
   } catch (err) {
-    els.backtestSurface.innerHTML = decisionEmpty(`Export cleanup failed: ${err.message || err}`);
+    els.backtestSurface.innerHTML = decisionEmpty(`내보내기 정리 실행 실패: ${err.message || err}`);
   }
 }
 
@@ -3019,12 +4674,14 @@ async function verifyQuantExport(runId, manifestPath = "") {
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
     els.backtestSurface.innerHTML = renderArtifactExportVerification(data);
   } catch (err) {
-    els.backtestSurface.innerHTML = decisionEmpty(`Export verification failed: ${err.message || err}`);
+    els.backtestSurface.innerHTML = decisionEmpty(`내보내기 무결성 검증 실패: ${err.message || err}`);
   }
 }
 
 async function runQuantFeaturePreview() {
   if (!els.quantFeatureSurface) return;
+  const resolution = await resolveBacktestUniverseAvailability(els.quantFeatureSurface);
+  if (!resolution.ok) return;
   const request = quantFeatureRequestFromControls();
   if (!request.tickers.length) {
     els.quantFeatureSurface.innerHTML = decisionEmpty("퀀트 랩 유니버스에 종목을 하나 이상 입력하세요.");
@@ -3048,6 +4705,7 @@ async function runQuantFeaturePreview() {
         <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(decisionStatusLabel(status))}</span>
         <span>${escapeHtml(data.as_of || "알 수 없음")} · ${escapeHtml(request.benchmark)} 벤치마크 · 데이터 마트</span>
       </div>
+      ${(resolution.data?.unavailable || []).length ? renderUniverseResolutionNotice(resolution.data) : ""}
       <div class="decision-table-wrap">
         <table class="decision-table">
           <thead><tr><th>종목</th><th>기준일</th><th>신선도</th><th>모멘텀</th><th>변동성</th><th>낙폭</th><th>추세</th><th>상대강도</th></tr></thead>
@@ -3074,7 +4732,8 @@ async function runQuantFeaturePreview() {
         ${Object.entries(diagnostics.price_counts || {}).map(([ticker, count]) => `<span>${escapeHtml(ticker)} ${escapeHtml(_fmtNumber(count))}행</span>`).join("")}
       </div>
       ${renderFreshnessAuditPanel(diagnostics)}
-      ${(diagnostics.missing_assets || []).length ? `<div class="decision-warning">누락 종목: ${escapeHtml(diagnostics.missing_assets.join(", "))}</div>` : ""}
+      ${(diagnostics.excluded_assets || []).length ? `<div class="decision-warning">데이터 없는 종목 자동 제외: ${escapeHtml(diagnostics.excluded_assets.join(", "))}</div>` : ""}
+      ${(diagnostics.missing_assets || []).length ? `<div class="decision-warning">데이터 없는 종목: ${escapeHtml(diagnostics.missing_assets.join(", "))}</div>` : ""}
       ${(diagnostics.stale_assets || []).length ? `<div class="decision-warning">오래된 가격: ${escapeHtml(diagnostics.stale_assets.join(", "))}</div>` : ""}
     `;
   } catch (err) {
@@ -3118,6 +4777,8 @@ function renderSignalDecisionBrief(rows, diagnostics, template) {
 
 async function runQuantSignalPreview() {
   if (!els.quantSignalSurface) return;
+  const resolution = await resolveBacktestUniverseAvailability(els.quantSignalSurface);
+  if (!resolution.ok) return;
   const base = quantFeatureRequestFromControls();
   const template = quantSignalTemplateFromStrategy(els.backtestStrategy?.value);
   if (!base.tickers.length) {
@@ -3142,6 +4803,7 @@ async function runQuantSignalPreview() {
         <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(decisionStatusLabel(status))}</span>
         <span>${escapeHtml(quantTemplateLabel(template))} · ${escapeHtml(diagnostics.execution_assumption || "next_bar_close")} · ${escapeHtml(String(diagnostics.signal_shift_bars || 1))}봉 지연</span>
       </div>
+      ${(resolution.data?.unavailable || []).length ? renderUniverseResolutionNotice(resolution.data) : ""}
       ${renderSignalDecisionBrief(rows, diagnostics, template)}
       <div class="decision-table-wrap">
         <table class="decision-table">
@@ -3162,7 +4824,7 @@ async function runQuantSignalPreview() {
       </div>
       ${renderResearchProvenancePanel(diagnostics.research_score_provenance)}
       ${renderFreshnessAuditPanel(diagnostics)}
-      ${(data.warnings || []).length ? `<div class="decision-warning">${escapeHtml(data.warnings.join(" "))}</div>` : ""}
+      ${(data.warnings || []).length ? `<div class="decision-warning">${escapeHtml(formatQuantWarnings(data.warnings))}</div>` : ""}
     `;
   } catch (err) {
     els.quantSignalSurface.innerHTML = decisionEmpty(`시그널 생성 실패: ${err.message || err}`);
@@ -3174,8 +4836,6 @@ function quantStrategyDraftFromControls() {
   return {
     strategy_id: "custom_momentum_review_v1",
     name: "Custom Momentum Review",
-    universe: request.tickers.length ? request.tickers : ["SPY", "QQQ", "TLT"],
-    benchmark: request.benchmark || "SPY",
     frequency: "daily",
     features: {
       momentum_63d: { id: "momentum_63d", lookback: 63 },
@@ -3197,16 +4857,107 @@ function quantStrategyDraftFromControls() {
   };
 }
 
+function strategyCodeOnlyPayload(strategy) {
+  const clean = { ...(strategy || quantStrategyDraftFromControls()) };
+  delete clean.universe;
+  delete clean.benchmark;
+  delete clean.created_at;
+  delete clean.updated_at;
+  delete clean.source;
+  delete clean.migration_history;
+  return clean;
+}
+
 function setStrategyEditor(strategy) {
   if (!els.strategyDefinitionJson) return;
-  els.strategyDefinitionJson.value = JSON.stringify(strategy || quantStrategyDraftFromControls(), null, 2);
+  els.strategyDefinitionJson.value = JSON.stringify(strategyCodeOnlyPayload(strategy), null, 2);
   state.activeStrategyId = String(strategy?.strategy_id || "");
+}
+
+function strategyGenerationContextFromControls() {
+  const request = quantBacktestRequestFromControls();
+  return {
+    template: request.template,
+    top_n: request.top_n,
+    lookback: request.lookback,
+    vol_lookback: numberInputValue(els.backtestShortWindow, 21, { min: 1, max: 252 }),
+    rebalance_every: request.rebalance_every,
+    portfolio_method: request.portfolio_method,
+    transaction_cost_bps: request.transaction_cost_bps,
+    slippage_bps: request.slippage_bps,
+    freshness_profile: request.freshness_profile,
+    require_fresh_prices: !!request.require_fresh_prices,
+    use_research_score: !!request.use_research_score,
+    research_max_age_days: 7,
+  };
+}
+
+function renderStrategyPromptReview(data) {
+  if (!els.strategyPromptReviewSurface) return;
+  const advantages = Array.isArray(data?.advantages) ? data.advantages : [];
+  const disadvantages = Array.isArray(data?.disadvantages) ? data.disadvantages : [];
+  const warnings = Array.isArray(data?.warnings) ? data.warnings : [];
+  const listHtml = (items, empty) => items.length
+    ? `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+    : `<p>${escapeHtml(empty)}</p>`;
+  els.strategyPromptReviewSurface.innerHTML = `
+    <div class="strategy-review-card">
+      <strong>장점</strong>
+      ${listHtml(advantages, "생성된 전략의 장점이 없습니다. 프롬프트를 더 구체화하세요.")}
+    </div>
+    <div class="strategy-review-card warn">
+      <strong>단점</strong>
+      ${listHtml(disadvantages, "검증 전에는 과최적화, 데이터 공백, 비용 민감도를 확인해야 합니다.")}
+      ${warnings.length ? `<p class="muted small">주의: ${escapeHtml(formatQuantWarnings(warnings))}</p>` : ""}
+    </div>
+  `;
+}
+
+async function runQuantStrategyGenerate() {
+  if (!els.strategyPromptInput || !els.strategyDefinitionJson) return;
+  const prompt = els.strategyPromptInput.value.trim();
+  if (!prompt) {
+    showQuantStrategyMessage("전략 프롬프트를 먼저 작성하세요.", "failed");
+    return;
+  }
+  const button = els.quantStrategyGenerate;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "생성 중";
+  }
+  showQuantStrategyMessage("로컬 LLM이 전략 정의(JSON)를 생성하는 중입니다.", "partial");
+  try {
+    const res = await fetch(API.quantStrategyGenerate, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt,
+        context: strategyGenerationContextFromControls(),
+        use_local_llm: true,
+        timeout_s: 45,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    if (!data.strategy) throw new Error("생성된 전략 코드가 없습니다.");
+    state.lastStrategyGeneration = data;
+    setStrategyEditor(data.strategy);
+    renderStrategyPromptReview(data);
+    await runQuantStrategyDryRun(data.strategy);
+  } catch (err) {
+    showQuantStrategyMessage(`전략 생성 실패: ${err.message || err}`, "failed");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "로컬 LLM 생성";
+    }
+  }
 }
 
 function strategyPayloadFromEditor() {
   const raw = els.strategyDefinitionJson?.value || "";
   if (!raw.trim()) return quantStrategyDraftFromControls();
-  return JSON.parse(raw);
+  return strategyCodeOnlyPayload(JSON.parse(raw));
 }
 
 function applyStrategyToControls(strategy) {
@@ -3340,24 +5091,24 @@ function renderQuantStrategyResult(data) {
   els.quantStrategyResultSurface.innerHTML = `
     <div class="decision-status-row">
       <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(decisionStatusLabel(status))}</span>
-      <span>${escapeHtml(strategy.strategy_id || state.activeStrategyId || "strategy")} · valid ${data.valid ? "yes" : "no"}</span>
+      <span>${escapeHtml(strategy.strategy_id || state.activeStrategyId || "전략")} · 검증 ${data.valid ? "통과" : "점검 필요"}</span>
     </div>
     <div class="decision-chip-row">
-      <span>trade_at ${escapeHtml(diagnostics.execution_trade_at || "-")}</span>
-      <span>lookahead ${diagnostics.lookahead_safe ? "safe" : "check"}</span>
-      <span>schema ${escapeHtml(diagnostics.schema_version || strategy.schema_version || "-")}</span>
-      <span>version ${escapeHtml(diagnostics.strategy_version || strategy.strategy_version || "-")}</span>
+      <span>체결 ${escapeHtml(diagnostics.execution_trade_at || "-")}</span>
+      <span>룩어헤드 ${diagnostics.lookahead_safe ? "안전" : "점검"}</span>
+      <span>스키마 ${escapeHtml(diagnostics.schema_version || strategy.schema_version || "-")}</span>
+      <span>버전 ${escapeHtml(diagnostics.strategy_version || strategy.strategy_version || "-")}</span>
       ${(diagnostics.feature_ids || []).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
     </div>
-    ${(diagnostics.migration_history || []).length ? `<div class="decision-warning">Migrated strategy schema: ${escapeHtml(diagnostics.migration_history.map((item) => item.migration || item.to_schema_version || "migration").join(", "))}</div>` : ""}
-    ${(diagnostics.missing_features || []).length ? `<div class="decision-warning">Missing features: ${escapeHtml(diagnostics.missing_features.join(", "))}</div>` : ""}
-    ${(data.warnings || []).length ? `<div class="decision-warning">${escapeHtml(data.warnings.join(" "))}</div>` : ""}
+    ${(diagnostics.migration_history || []).length ? `<div class="decision-warning">전략 스키마 자동 마이그레이션: ${escapeHtml(diagnostics.migration_history.map((item) => item.migration || item.to_schema_version || "migration").join(", "))}</div>` : ""}
+    ${(diagnostics.missing_features || []).length ? `<div class="decision-warning">누락 팩터: ${escapeHtml(diagnostics.missing_features.join(", "))}</div>` : ""}
+    ${(data.warnings || []).length ? `<div class="decision-warning">${escapeHtml(formatQuantWarnings(data.warnings))}</div>` : ""}
   `;
 }
 
 async function loadQuantStrategies(force = false) {
   if (!els.quantStrategySurface || (state.quantStrategiesLoaded && !force)) return;
-  els.quantStrategySurface.innerHTML = decisionEmpty("Loading strategy registry.");
+  els.quantStrategySurface.innerHTML = decisionEmpty("저장된 전략 목록을 불러오는 중입니다.");
   try {
     const res = await fetch(API.quantStrategies);
     const data = await res.json();
@@ -3369,7 +5120,7 @@ async function loadQuantStrategies(force = false) {
       setStrategyEditor(state.quantStrategyItems[0] || quantStrategyDraftFromControls());
     }
   } catch (err) {
-    els.quantStrategySurface.innerHTML = decisionEmpty(`Strategy registry failed: ${err.message || err}`);
+    els.quantStrategySurface.innerHTML = decisionEmpty(`전략 목록 조회 실패: ${err.message || err}`);
   }
 }
 
@@ -3378,7 +5129,7 @@ async function fetchQuantStrategy(strategyId) {
   const res = await fetch(API.quantStrategy(strategyId));
   const data = await res.json();
   if (!res.ok) {
-    showQuantStrategyMessage(`Strategy load failed: ${data.detail || `HTTP ${res.status}`}`, "failed");
+    showQuantStrategyMessage(`전략 불러오기 실패: ${data.detail || `HTTP ${res.status}`}`, "failed");
     return null;
   }
   return data;
@@ -3390,7 +5141,7 @@ async function loadQuantStrategyDetail(strategyId) {
   setStrategyEditor(strategy);
   applyStrategyToControls(strategy);
   populateBacktestStrategyRegistry();
-  showQuantStrategyMessage(`${strategy.strategy_id || "strategy"} loaded into the workbench controls.`, "success");
+  showQuantStrategyMessage(`${strategy.strategy_id || "전략"}을 작업 영역에 불러왔습니다.`, "success");
 }
 
 async function runQuantStrategyDryRun(strategy = null) {
@@ -3399,10 +5150,10 @@ async function runQuantStrategyDryRun(strategy = null) {
   try {
     payload = payload || strategyPayloadFromEditor();
   } catch (err) {
-    showQuantStrategyMessage(`Strategy JSON is invalid: ${err.message || err}`, "failed");
+    showQuantStrategyMessage(`전략 코드 JSON이 올바르지 않습니다: ${err.message || err}`, "failed");
     return;
   }
-  els.quantStrategyResultSurface.innerHTML = decisionEmpty("Strategy dry-run is checking features and execution policy.");
+  els.quantStrategyResultSurface.innerHTML = decisionEmpty("전략 검증이 팩터와 다음 봉 체결 정책을 확인하는 중입니다.");
   try {
     const res = await fetch(API.quantStrategyDryRun, {
       method: "POST",
@@ -3417,7 +5168,7 @@ async function runQuantStrategyDryRun(strategy = null) {
     }
     renderQuantStrategyResult(data);
   } catch (err) {
-    showQuantStrategyMessage(`Strategy dry-run failed: ${err.message || err}`, "failed");
+    showQuantStrategyMessage(`전략 검증 실패: ${err.message || err}`, "failed");
   }
 }
 
@@ -3426,10 +5177,10 @@ async function saveQuantStrategy() {
   try {
     payload = strategyPayloadFromEditor();
   } catch (err) {
-    showQuantStrategyMessage(`Strategy JSON is invalid: ${err.message || err}`, "failed");
+    showQuantStrategyMessage(`전략 코드 JSON이 올바르지 않습니다: ${err.message || err}`, "failed");
     return;
   }
-  els.quantStrategyResultSurface.innerHTML = decisionEmpty("Saving strategy definition.");
+  els.quantStrategyResultSurface.innerHTML = decisionEmpty("전략 정의를 저장하는 중입니다.");
   try {
     const res = await fetch(API.quantStrategySave, {
       method: "POST",
@@ -3439,11 +5190,11 @@ async function saveQuantStrategy() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
     if (data.strategy) setStrategyEditor(data.strategy);
-    showQuantStrategyMessage(`Saved ${data.strategy?.strategy_id || payload.strategy_id}.`, "success");
+    showQuantStrategyMessage(`${data.strategy?.strategy_id || payload.strategy_id} 저장 완료.`, "success");
     state.quantStrategiesLoaded = false;
     await loadQuantStrategies(true);
   } catch (err) {
-    showQuantStrategyMessage(`Strategy save failed: ${err.message || err}`, "failed");
+    showQuantStrategyMessage(`전략 저장 실패: ${err.message || err}`, "failed");
   }
 }
 
@@ -3452,18 +5203,18 @@ async function deleteQuantStrategy(strategyId = "") {
   try {
     if (!id) id = strategyPayloadFromEditor().strategy_id || "";
     if (!id) {
-      showQuantStrategyMessage("No saved strategy id is selected.", "failed");
+      showQuantStrategyMessage("삭제할 저장 전략이 선택되지 않았습니다.", "failed");
       return;
     }
     const res = await fetch(API.quantStrategy(id), { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-    showQuantStrategyMessage(`Deleted ${data.strategy_id || id}.`, "success");
+    showQuantStrategyMessage(`${data.strategy_id || id} 삭제 완료.`, "success");
     setStrategyEditor(quantStrategyDraftFromControls());
     state.quantStrategiesLoaded = false;
     await loadQuantStrategies(true);
   } catch (err) {
-    showQuantStrategyMessage(`Strategy delete failed: ${err.message || err}`, "failed");
+    showQuantStrategyMessage(`전략 삭제 실패: ${err.message || err}`, "failed");
   }
 }
 
@@ -3479,6 +5230,8 @@ function showQuantStrategyMessage(message, status = "success") {
 
 async function runHomeBacktest() {
   if (!els.backtestSurface || !els.backtestTicker) return;
+  const resolution = await resolveBacktestUniverseAvailability(els.backtestSurface);
+  if (!resolution.ok) return;
   const legacyRequest = backtestRequestFromControls();
   const request = quantBacktestRequestFromControls();
   if (!request.tickers.length) {
@@ -3500,9 +5253,12 @@ async function runHomeBacktest() {
     state.lastBacktestResult = enriched;
     syncPortfolioFromBacktest();
     renderQuantBacktestResult(enriched, { ...request, ...legacyRequest });
+    if (resolution.data && (resolution.data.unavailable || []).length) {
+      els.backtestSurface.insertAdjacentHTML("afterbegin", renderUniverseResolutionNotice(resolution.data));
+    }
     loadQuantRunHistory(true);
   } catch (err) {
-    els.backtestSurface.innerHTML = decisionEmpty(`Backtest failed: ${err.message || err}`);
+    els.backtestSurface.innerHTML = decisionEmpty(`백테스트 실패: ${err.message || err}`);
   }
 }
 
@@ -3553,7 +5309,7 @@ async function loadQuantBacktestArtifact(runId) {
     renderQuantBacktestResult(enriched, artifactRequest);
     syncPortfolioFromBacktest();
   } catch (err) {
-    els.backtestSurface.innerHTML = decisionEmpty(`Artifact load failed: ${err.message || err}`);
+    els.backtestSurface.innerHTML = decisionEmpty(`백테스트 산출물 불러오기 실패: ${err.message || err}`);
   }
 }
 
@@ -3672,14 +5428,14 @@ async function previewCrossRunExportCleanup(keepLast = 1, staleAfterDays = 0) {
     stale_after_days: String(staleAfterDays ?? 0),
     limit: "50",
   });
-  els.quantRunHistorySurface.innerHTML = decisionEmpty("Loading cross-run export cleanup preview.");
+    els.quantRunHistorySurface.innerHTML = decisionEmpty("실행 간 내보내기 정리 미리보기를 불러오는 중입니다.");
   try {
     const res = await fetch(`${API.quantExportCleanupPreview}?${params.toString()}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
     els.quantRunHistorySurface.innerHTML = renderCrossRunExportCleanupPlan(data);
   } catch (err) {
-    els.quantRunHistorySurface.innerHTML = decisionEmpty(`Cross-run export cleanup preview failed: ${err.message || err}`);
+    els.quantRunHistorySurface.innerHTML = decisionEmpty(`실행 간 내보내기 정리 미리보기 실패: ${err.message || err}`);
   }
 }
 
@@ -3705,13 +5461,13 @@ async function applyCrossRunExportCleanup() {
     state.lastCrossRunExportCleanupPreview = null;
     els.quantRunHistorySurface.innerHTML = renderCrossRunExportCleanupPlan(data);
   } catch (err) {
-    els.quantRunHistorySurface.innerHTML = decisionEmpty(`Cross-run export cleanup failed: ${err.message || err}`);
+    els.quantRunHistorySurface.innerHTML = decisionEmpty(`실행 간 내보내기 정리 실행 실패: ${err.message || err}`);
   }
 }
 
 async function loadQuantExportStorageReport() {
   if (!els.quantRunHistorySurface) return;
-  els.quantRunHistorySurface.innerHTML = decisionEmpty("Loading cross-run export storage report.");
+    els.quantRunHistorySurface.innerHTML = decisionEmpty("실행 간 내보내기 저장소 리포트를 불러오는 중입니다.");
   try {
     const res = await fetch(`${API.quantExportStorage}?limit=20&stale_after_days=30`);
     const data = await res.json();
@@ -3721,7 +5477,7 @@ async function loadQuantExportStorageReport() {
       button.addEventListener("click", () => loadQuantBacktestArtifact(button.dataset.quantRunId || ""));
     });
   } catch (err) {
-    els.quantRunHistorySurface.innerHTML = decisionEmpty(`Export storage report failed: ${err.message || err}`);
+    els.quantRunHistorySurface.innerHTML = decisionEmpty(`내보내기 저장소 리포트 조회 실패: ${err.message || err}`);
   }
 }
 
@@ -3794,11 +5550,14 @@ async function loadQuantRunHistory(force = false) {
 
 async function runPortfolioOptimize() {
   if (!els.portfolioSurface || !els.portfolioTickers) return;
-  const tickers = parseTickerInput(els.portfolioTickers.value || "");
+  let tickers = parseTickerInput(els.portfolioTickers.value || "");
   if (!tickers.length) {
     els.portfolioSurface.innerHTML = decisionEmpty("최적화할 티커를 하나 이상 입력해야 합니다.");
     return;
   }
+  const resolution = await resolvePortfolioUniverseAvailability(els.portfolioSurface);
+  if (!resolution.ok) return;
+  tickers = resolution.tickers;
   const startDate = textInputValue(els.portfolioStartDate);
   const endDate = textInputValue(els.portfolioEndDate);
   const lookbackDays = numberInputValue(els.portfolioLookbackDays, 756, { min: 2, max: 5000 });
@@ -3838,6 +5597,7 @@ async function runPortfolioOptimize() {
         <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(decisionStatusLabel(status))}</span>
         <span>${escapeHtml(portfolioMethodLabel(data.method || ""))} · ${escapeHtml(data.benchmark || benchmark)} 벤치마크 · 비중 합계 ${escapeHtml(String(data.sum_weights ?? "-"))}</span>
       </div>
+      ${renderUniverseResolutionNotice(resolution.data)}
       <div class="decision-summary ok">
         ${escapeHtml(tickers.join(", "))} · ${escapeHtml(startDate || "조회 기간")} -> ${escapeHtml(endDate || "최근")} · ${escapeHtml(String(lookbackDays))}일 가격 기준
       </div>
@@ -3857,7 +5617,7 @@ async function runPortfolioOptimize() {
             <div><i style="width:${Math.max(2, Math.min(100, Number(weight) * 100))}%"></i></div>
             <strong>${escapeHtml(fmtPct(Number(weight) * 100))}</strong>
           </div>
-        `).join("") : '<div class="muted small">No weights available.</div>'}
+        `).join("") : '<div class="muted small">사용 가능한 비중 결과가 없습니다.</div>'}
       </div>
       <div class="decision-metric-grid dense">
         ${decisionMetric("자산 수", _fmtNumber(diagnostics.asset_count || entries.length), status)}
@@ -3867,9 +5627,9 @@ async function runPortfolioOptimize() {
         ${decisionMetric("기대수익", fmtMetricRatio(portfolioMetrics.expected_annual_return), status)}
         ${decisionMetric("예상 변동성", fmtMetricRatio(portfolioMetrics.annualized_volatility), status)}
         ${decisionMetric("예상 Sharpe", fmtDecimal(portfolioMetrics.sharpe, 2), status)}
-        ${decisionMetric("Active return", fmtMetricRatio(portfolioMetrics.active_annual_return), status)}
-        ${decisionMetric("Tracking error", fmtMetricRatio(portfolioMetrics.tracking_error), status)}
-        ${decisionMetric("Info ratio", fmtDecimal(portfolioMetrics.information_ratio, 2), status)}
+        ${decisionMetric("초과수익", fmtMetricRatio(portfolioMetrics.active_annual_return), status)}
+        ${decisionMetric("추적오차", fmtMetricRatio(portfolioMetrics.tracking_error), status)}
+        ${decisionMetric("정보비율", fmtDecimal(portfolioMetrics.information_ratio, 2), status)}
         ${decisionMetric("베타", fmtDecimal(portfolioMetrics.beta_to_benchmark, 2), status)}
         ${decisionMetric("공분산", `${diagnostics.covariance_method || "sample"}${diagnostics.covariance_shrinkage_used ? ` ${fmtDecimal(diagnostics.shrinkage_alpha, 2)}` : ""}`, diagnostics.uses_covariance ? "ok" : "warn")}
         ${decisionMetric("효과 포지션", fmtDecimal(diagnostics.effective_number_of_positions, 2), status)}
@@ -3886,10 +5646,1079 @@ async function runPortfolioOptimize() {
         </div>
       ` : ""}
       ${(data.missing_assets || []).length ? `<div class="decision-warning">누락 데이터: ${escapeHtml(data.missing_assets.join(", "))}</div>` : ""}
-      ${(data.warnings || []).length ? `<div class="decision-warning">${escapeHtml(data.warnings.join(" "))}</div>` : ""}
+      ${(data.warnings || []).length ? `<div class="decision-warning">${escapeHtml(formatQuantWarnings(data.warnings))}</div>` : ""}
     `;
   } catch (err) {
     els.portfolioSurface.innerHTML = decisionEmpty(`포트폴리오 최적화 실패: ${err.message || err}`);
+  }
+}
+
+function aiNum(el, fallback = 0, options = {}) {
+  return numberInputValue(el, fallback, options);
+}
+
+function aiRangeFromInput(el, fallbackMin, fallbackMax) {
+  const parts = String(el?.value || "").split(/[,\s/]+/).map((item) => Number(item)).filter(Number.isFinite);
+  const min = parts.length ? parts[0] : fallbackMin;
+  const max = parts.length > 1 ? parts[1] : fallbackMax;
+  return [Math.max(0, Math.min(min, 100)), Math.max(0, Math.min(max, 100))].sort((a, b) => a - b);
+}
+
+function aiSetRangeInput(el, range) {
+  if (!el || !range) return;
+  const min = range.min ?? (Array.isArray(range) ? range[0] : 0);
+  const max = range.max ?? (Array.isArray(range) ? range[1] : 0);
+  el.value = `${min},${max}`;
+}
+
+function aiSelectedUniverseId() {
+  const value = els.aiPortfolioUniverse?.value || "default_multi_asset";
+  if (value === "custom") {
+    return `custom:${els.aiPortfolioCustomUniverse?.value || "SPY,TLT,GLD,SGOV"}`;
+  }
+  return value;
+}
+
+function aiPolicyPayload() {
+  return {
+    portfolio_name: els.aiPortfolioName?.value || "AI Portfolio",
+    investment_type: state.aiPortfolioSelectedType || "balanced_growth",
+    universe_id: aiSelectedUniverseId(),
+    initial_capital: aiNum(els.aiPortfolioInitialCapital, 10000000, { min: 0 }),
+    monthly_contribution: aiNum(els.aiPortfolioMonthlyContribution, 0, { min: 0 }),
+    target_return: aiNum(els.aiPortfolioTargetReturn, 0),
+    benchmark: normalizeTickerToken(els.aiPortfolioBenchmark?.value || "SPY") || "SPY",
+    automation_level: els.aiPortfolioAutomation?.value || "alert_only",
+    policy_overrides: {
+      target_volatility: aiNum(els.aiPortfolioTargetVolatility, 12, { min: 0, max: 100 }),
+      max_drawdown_alert: aiNum(els.aiPortfolioMaxDrawdown, -15, { max: 0 }),
+      min_cash_weight: aiNum(els.aiPortfolioMinCash, 5, { min: 0, max: 100 }),
+      max_single_asset_weight: aiNum(els.aiPortfolioMaxSingle, 30, { min: 1, max: 100 }),
+      max_sector_weight: aiNum(els.aiPortfolioMaxSector, 40, { min: 1, max: 100 }),
+      rebalance_frequency: els.aiPortfolioRebalanceFrequency?.value || "monthly",
+      weight_drift_threshold: aiNum(els.aiPortfolioDriftThreshold, 5, { min: 0, max: 100 }),
+      max_turnover: aiNum(els.aiPortfolioMaxTurnover, 20, { min: 0, max: 100 }),
+      optimization_method: els.aiPortfolioOptimization?.value || "risk_parity_max_sharpe_blend",
+      lookback_window_months: aiNum(els.aiPortfolioLookbackMonths, 12, { min: 1, max: 120 }),
+      risk_model: els.aiPortfolioRiskModel?.value || "diagonal_shrinkage",
+      expected_return_model: els.aiPortfolioExpectedReturn?.value || "momentum_adjusted_historical",
+      asset_allocation_ranges: {
+        equity: aiRangeFromInput(els.aiPortfolioEquityRange, 50, 75),
+        bond: aiRangeFromInput(els.aiPortfolioBondRange, 15, 35),
+        cash: aiRangeFromInput(els.aiPortfolioCashRange, 0, 15),
+        alternative: aiRangeFromInput(els.aiPortfolioAlternativeRange, 0, 15),
+      },
+    },
+  };
+}
+
+function renderAiInvestmentTypes() {
+  if (!els.aiPortfolioInvestmentTypes) return;
+  const items = state.aiPortfolioInvestmentTypes || [];
+  if (!items.length) {
+    els.aiPortfolioInvestmentTypes.innerHTML = decisionEmpty("투자형 템플릿을 불러오지 못했습니다.");
+    return;
+  }
+  els.aiPortfolioInvestmentTypes.innerHTML = items.map((item) => {
+    const ranges = item.asset_allocation_ranges || {};
+    const allocation = ["equity", "bond", "cash", "alternative"]
+      .map((key) => `${key} ${ranges[key]?.min ?? "-"}-${ranges[key]?.max ?? "-"}%`)
+      .join(" · ");
+    return `
+      <button type="button" class="ai-investment-card ${state.aiPortfolioSelectedType === item.id ? "active" : ""}" data-ai-investment-type="${escapeHtml(item.id)}">
+        <strong>${escapeHtml(item.display_name || item.id)}</strong>
+        <span>${escapeHtml(item.description || "")}</span>
+        <small>${escapeHtml(item.risk_level || "-")} · ${escapeHtml(item.suitable_horizon || "-")}</small>
+        <small>${escapeHtml(allocation)}</small>
+      </button>
+    `;
+  }).join("");
+  els.aiPortfolioInvestmentTypes.querySelectorAll("[data-ai-investment-type]").forEach((button) => {
+    button.addEventListener("click", () => selectAiInvestmentType(button.dataset.aiInvestmentType || "balanced_growth"));
+  });
+}
+
+function selectAiInvestmentType(typeId) {
+  const item = (state.aiPortfolioInvestmentTypes || []).find((candidate) => candidate.id === typeId);
+  if (!item) return;
+  state.aiPortfolioSelectedType = item.id;
+  const risk = item.risk_limits || {};
+  const rebalance = item.rebalance_policy || {};
+  const quant = item.quant_settings || {};
+  if (els.aiPortfolioTargetVolatility) els.aiPortfolioTargetVolatility.value = String(risk.target_volatility ?? 12);
+  if (els.aiPortfolioMaxDrawdown) els.aiPortfolioMaxDrawdown.value = String(risk.max_drawdown_alert ?? -15);
+  if (els.aiPortfolioMinCash) els.aiPortfolioMinCash.value = String(risk.min_cash_weight ?? 5);
+  if (els.aiPortfolioMaxSingle) els.aiPortfolioMaxSingle.value = String(risk.max_single_asset_weight ?? 30);
+  if (els.aiPortfolioMaxSector) els.aiPortfolioMaxSector.value = String(risk.max_sector_weight ?? 40);
+  if (els.aiPortfolioRebalanceFrequency) els.aiPortfolioRebalanceFrequency.value = rebalance.frequency || "monthly";
+  if (els.aiPortfolioDriftThreshold) els.aiPortfolioDriftThreshold.value = String(rebalance.weight_drift_threshold ?? 5);
+  if (els.aiPortfolioMaxTurnover) els.aiPortfolioMaxTurnover.value = String(rebalance.max_turnover ?? 20);
+  if (els.aiPortfolioOptimization) els.aiPortfolioOptimization.value = quant.optimization_method || "risk_parity";
+  if (els.aiPortfolioLookbackMonths) els.aiPortfolioLookbackMonths.value = String(quant.lookback_window_months ?? 12);
+  if (els.aiPortfolioRiskModel) els.aiPortfolioRiskModel.value = quant.risk_model || "diagonal_shrinkage";
+  if (els.aiPortfolioExpectedReturn) els.aiPortfolioExpectedReturn.value = quant.expected_return_model || "historical";
+  const ranges = item.asset_allocation_ranges || {};
+  aiSetRangeInput(els.aiPortfolioEquityRange, ranges.equity);
+  aiSetRangeInput(els.aiPortfolioBondRange, ranges.bond);
+  aiSetRangeInput(els.aiPortfolioCashRange, ranges.cash);
+  aiSetRangeInput(els.aiPortfolioAlternativeRange, ranges.alternative);
+  renderAiInvestmentTypes();
+}
+
+async function loadAiPortfolio(force = false) {
+  if (!els.aiPortfolioInvestmentTypes || (state.aiPortfolioLoaded && !force)) return;
+  els.aiPortfolioInvestmentTypes.innerHTML = decisionEmpty("투자형 템플릿을 불러오는 중입니다.");
+  try {
+    const res = await fetch(API.aiPortfolioInvestmentTypes);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    state.aiPortfolioInvestmentTypes = Array.isArray(data.items) ? data.items : [];
+    state.aiPortfolioLoaded = true;
+    if (!state.aiPortfolioInvestmentTypes.find((item) => item.id === state.aiPortfolioSelectedType)) {
+      state.aiPortfolioSelectedType = state.aiPortfolioInvestmentTypes[0]?.id || "balanced_growth";
+    }
+    renderAiInvestmentTypes();
+    selectAiInvestmentType(state.aiPortfolioSelectedType);
+  } catch (err) {
+    els.aiPortfolioInvestmentTypes.innerHTML = decisionEmpty(`AI Portfolio 템플릿 로드 실패: ${err.message || err}`);
+  }
+}
+
+function aiStatusRow(status, text) {
+  const normalized = String(status || "").toLowerCase();
+  const uiStatus = normalized === "pass" || normalized === "active" || normalized === "generated" ? "ok" : (normalized === "warning" ? "warn" : normalized);
+  return `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(uiStatus))}">${escapeHtml(decisionStatusLabel(uiStatus))}</span>
+      <span>${escapeHtml(text || "")}</span>
+    </div>
+  `;
+}
+
+function renderAiOverview(policy, recommendation) {
+  if (!els.aiPortfolioOverviewSurface) return;
+  if (!policy) {
+    els.aiPortfolioOverviewSurface.innerHTML = decisionEmpty("활성 또는 생성된 AI Portfolio가 없습니다. 투자형과 정책을 선택한 뒤 생성하세요.");
+    return;
+  }
+  const metrics = recommendation?.backtest_metrics || {};
+  const dataQuality = recommendation?.data_quality || {};
+  const check = recommendation?.constraint_check || {};
+  els.aiPortfolioOverviewSurface.innerHTML = `
+    ${aiStatusRow(policy.status || "draft", `${policy.portfolio_name} · ${policy.investment_type} · ${policy.automation_level}`)}
+    <div class="decision-metric-grid dense">
+      ${decisionMetric("현재 가치", _fmtNumber(policy.initial_capital), "ok")}
+      ${decisionMetric("총수익률", metrics.status === "available" ? `${fmtDecimal(metrics.total_return_pct, 2)}%` : "unavailable", metrics.status === "available" ? "ok" : "warn")}
+      ${decisionMetric("벤치마크", metrics.benchmark_return_pct !== null && metrics.benchmark_return_pct !== undefined ? `${fmtDecimal(metrics.benchmark_return_pct, 2)}%` : "unavailable", metrics.benchmark_return_pct !== null && metrics.benchmark_return_pct !== undefined ? "ok" : "warn")}
+      ${decisionMetric("리스크 상태", check.status || "unchecked", check.status || "warn")}
+      ${decisionMetric("리밸런싱", state.aiPortfolioSignal?.rebalance_required ? "필요" : "대기", state.aiPortfolioSignal?.rebalance_required ? "warn" : "ok")}
+      ${decisionMetric("마지막 업데이트", recommendation?.created_at || policy.updated_at || "-", "ok")}
+      ${decisionMetric("다음 점검", policy.rebalance_frequency || "manual", "ok")}
+      ${decisionMetric("누락 데이터", _fmtNumber((dataQuality.missing_assets || []).length), (dataQuality.missing_assets || []).length ? "warn" : "ok")}
+    </div>
+  `;
+}
+
+function renderAiAllocation(weights) {
+  const rows = Array.isArray(weights) ? weights : [];
+  if (!rows.length) return decisionEmpty("표시할 추천 비중이 없습니다.");
+  return `
+    <div class="ai-allocation-layout">
+      <div class="ai-allocation-bars">
+        ${rows.map((item) => `
+          <div class="ai-allocation-row">
+            <span>${escapeHtml(item.ticker)}</span>
+            <div><i style="width:${Math.max(1, Math.min(100, Number(item.weight || 0)))}%"></i></div>
+            <strong>${escapeHtml(fmtDecimal(item.weight, 2))}%</strong>
+          </div>
+        `).join("")}
+      </div>
+      <div class="decision-table-wrap">
+        <table class="decision-table">
+          <thead><tr><th>Ticker</th><th>Name</th><th>Asset Class</th><th>Weight</th><th>Role</th><th>Key Risk</th><th>Status</th></tr></thead>
+          <tbody>
+            ${rows.map((item) => `
+              <tr>
+                <td>${escapeHtml(item.ticker)}</td>
+                <td>${escapeHtml(item.name || "-")}</td>
+                <td>${escapeHtml(item.asset_class || "-")}</td>
+                <td>${escapeHtml(fmtDecimal(item.weight, 2))}%</td>
+                <td>${escapeHtml(item.role || "-")}</td>
+                <td>${escapeHtml(item.key_risk || "-")}</td>
+                <td><span class="table-status ${escapeHtml(decisionStatusClass(item.constraint_status || "ok"))}">${escapeHtml(item.constraint_status || "-")}</span></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderAiRecommendation(policy, recommendation) {
+  if (!els.aiPortfolioRecommendationSurface) return;
+  if (!recommendation) {
+    els.aiPortfolioRecommendationSurface.innerHTML = decisionEmpty("아직 추천 결과가 없습니다.");
+    return;
+  }
+  const dq = recommendation.data_quality || {};
+  const warnings = [...(dq.warnings || []), ...((recommendation.constraint_check?.violations || []).map((item) => item.message))];
+  els.aiPortfolioRecommendationSurface.innerHTML = `
+    ${aiStatusRow(recommendation.status || "unknown", `${recommendation.method || "-"} · ${recommendation.universe_id || "-"} · ${recommendation.created_at || "-"}`)}
+    ${(warnings || []).length ? `<div class="decision-warning">${escapeHtml(warnings.slice(0, 6).join(" "))}</div>` : ""}
+    ${renderAiAllocation(recommendation.weights || [])}
+    <div class="decision-section-title">AI 설명</div>
+    <div class="ai-explanation-box">${escapeHtml(recommendation.ai_explanation || "AI explanation unavailable")}</div>
+  `;
+}
+
+function renderAiPerformance(recommendation) {
+  if (!els.aiPortfolioPerformanceSurface) return;
+  const metrics = recommendation?.backtest_metrics || {};
+  if (metrics.status !== "available") {
+    els.aiPortfolioPerformanceSurface.innerHTML = decisionEmpty(`성과 지표 unavailable: ${metrics.reason || "insufficient data"}`);
+    return;
+  }
+  els.aiPortfolioPerformanceSurface.innerHTML = `
+    <div class="decision-metric-grid dense">
+      ${decisionMetric("총수익률", `${fmtDecimal(metrics.total_return_pct, 2)}%`, "ok")}
+      ${decisionMetric("연환산", `${fmtDecimal(metrics.annualized_return_pct, 2)}%`, "ok")}
+      ${decisionMetric("변동성", `${fmtDecimal(metrics.annualized_volatility_pct, 2)}%`, "ok")}
+      ${decisionMetric("MDD", `${fmtDecimal(metrics.max_drawdown_pct, 2)}%`, metrics.max_drawdown_pct < -15 ? "warn" : "ok")}
+      ${decisionMetric("Sharpe", fmtDecimal(metrics.sharpe, 2), "ok")}
+      ${decisionMetric("Sortino", fmtDecimal(metrics.sortino, 2), "ok")}
+      ${decisionMetric("벤치마크", metrics.benchmark_return_pct === null || metrics.benchmark_return_pct === undefined ? "unavailable" : `${fmtDecimal(metrics.benchmark_return_pct, 2)}%`, metrics.benchmark_return_pct === null || metrics.benchmark_return_pct === undefined ? "warn" : "ok")}
+      ${decisionMetric("샘플", _fmtNumber(metrics.sample_count), "ok")}
+    </div>
+    ${renderDecisionLineChart((metrics.equity_curve || []).map((row) => ({ date: row.date, value: row.equity - 1 })), "return", "AI Portfolio 수익 곡선", "ok")}
+  `;
+}
+
+function renderAiCompliance(recommendation) {
+  if (!els.aiPortfolioComplianceSurface) return;
+  const check = recommendation?.constraint_check;
+  if (!check) {
+    els.aiPortfolioComplianceSurface.innerHTML = decisionEmpty("제약조건 검사 결과가 없습니다.");
+    return;
+  }
+  const allocations = check.allocation_by_asset_class || {};
+  els.aiPortfolioComplianceSurface.innerHTML = `
+    ${aiStatusRow(check.status, `제약조건 ${check.status}`)}
+    <div class="decision-metric-grid dense">
+      ${decisionMetric("Equity", `${fmtDecimal(allocations.equity, 2)}%`, "ok")}
+      ${decisionMetric("Bond", `${fmtDecimal(allocations.bond, 2)}%`, "ok")}
+      ${decisionMetric("Cash", `${fmtDecimal(allocations.cash, 2)}%`, "ok")}
+      ${decisionMetric("Alternative", `${fmtDecimal(allocations.alternative, 2)}%`, "ok")}
+      ${decisionMetric("위반 수", _fmtNumber((check.violations || []).length), (check.violations || []).length ? check.status : "ok")}
+    </div>
+    <div class="decision-list compact">
+      ${(check.violations || []).length ? check.violations.map((item) => `
+        <div class="decision-list-row">
+          <span>${escapeHtml(item.rule)}</span>
+          <strong class="${escapeHtml(item.severity === "fail" ? "fail" : "warn")}">${escapeHtml(item.message)}</strong>
+        </div>
+      `).join("") : '<div class="muted small">정책 위반이 없습니다.</div>'}
+    </div>
+  `;
+}
+
+function parseAiCurrentWeights() {
+  const text = String(els.aiPortfolioCurrentWeights?.value || "").trim();
+  if (!text) {
+    const rec = state.aiPortfolioRecommendation;
+    return Object.fromEntries((rec?.weights || []).map((item) => [item.ticker, item.weight]));
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return Object.fromEntries(Object.entries(parsed).map(([key, value]) => [normalizeTickerToken(key), Number(value)]).filter(([key, value]) => key && Number.isFinite(value)));
+    }
+  } catch { /* fall through */ }
+  const out = {};
+  text.split(/[,;\n]+/).forEach((part) => {
+    const match = part.trim().match(/^([A-Za-z0-9.-]+)\s+(-?\d+(?:\.\d+)?)$/);
+    if (match) out[normalizeTickerToken(match[1])] = Number(match[2]);
+  });
+  return out;
+}
+
+function renderAiRebalance(signal) {
+  if (!els.aiPortfolioRebalanceSurface) return;
+  if (!signal) {
+    els.aiPortfolioRebalanceSurface.innerHTML = decisionEmpty("리밸런싱 신호가 없습니다.");
+    return;
+  }
+  els.aiPortfolioRebalanceSurface.innerHTML = `
+    ${aiStatusRow(signal.rebalance_required ? "warn" : "success", signal.rebalance_required ? "리밸런싱 필요" : "리밸런싱 불필요")}
+    <div class="decision-chip-row">
+      ${(signal.trigger_type || []).map((item) => `<span>${escapeHtml(item)}</span>`).join("") || "<span>trigger 없음</span>"}
+      <span>${escapeHtml(signal.status || "-")}</span>
+    </div>
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead><tr><th>Ticker</th><th>Current</th><th>Target</th><th>Change</th><th>Action</th></tr></thead>
+        <tbody>
+          ${(signal.recommended_changes || []).map((item) => `
+            <tr><td>${escapeHtml(item.ticker)}</td><td>${escapeHtml(fmtDecimal(item.current_weight, 2))}%</td><td>${escapeHtml(fmtDecimal(item.target_weight, 2))}%</td><td>${escapeHtml(fmtDecimal(item.change, 2))}%</td><td>${escapeHtml(item.action)}</td></tr>
+          `).join("") || '<tr><td colspan="5">변경 제안이 없습니다.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+    <div class="ai-explanation-box">${escapeHtml(signal.ai_explanation || "")}</div>
+  `;
+  [els.aiPortfolioApproveRebalance, els.aiPortfolioRejectRebalance, els.aiPortfolioDeferRebalance].forEach((button) => {
+    if (button) button.disabled = !signal.signal_id || !signal.rebalance_required;
+  });
+}
+
+async function renderAiHistory(policyId) {
+  if (!els.aiPortfolioHistorySurface || !policyId) return;
+  try {
+    const res = await fetch(API.aiPortfolioHistory(policyId));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    const items = Array.isArray(data.items) ? data.items.slice(-12).reverse() : [];
+    els.aiPortfolioHistorySurface.innerHTML = items.length ? `
+      <div class="ai-history-list">
+        ${items.map((item) => `
+          <div class="ai-history-event">
+            <strong>${escapeHtml(item.event_type || "-")}</strong>
+            <span>${escapeHtml(item.event_time || "-")} · ${escapeHtml(item.summary || "")}</span>
+          </div>
+        `).join("")}
+      </div>
+    ` : decisionEmpty("아직 AI Portfolio 이력이 없습니다.");
+  } catch (err) {
+    els.aiPortfolioHistorySurface.innerHTML = decisionEmpty(`이력 로드 실패: ${err.message || err}`);
+  }
+}
+
+function renderAiPortfolioResponse(data) {
+  state.aiPortfolioPolicy = data.policy || null;
+  state.aiPortfolioRecommendation = data.recommendation || null;
+  renderAiOverview(state.aiPortfolioPolicy, state.aiPortfolioRecommendation);
+  renderAiRecommendation(state.aiPortfolioPolicy, state.aiPortfolioRecommendation);
+  renderAiPerformance(state.aiPortfolioRecommendation);
+  renderAiCompliance(state.aiPortfolioRecommendation);
+  if (els.aiPortfolioCurrentWeights && state.aiPortfolioRecommendation?.weights?.length) {
+    els.aiPortfolioCurrentWeights.placeholder = JSON.stringify(Object.fromEntries(state.aiPortfolioRecommendation.weights.map((item) => [item.ticker, item.weight])), null, 2);
+  }
+  renderAiHistory(state.aiPortfolioPolicy?.policy_id);
+}
+
+async function runAiPortfolioGenerate() {
+  await loadAiPortfolio(false);
+  if (!els.aiPortfolioRecommendationSurface) return;
+  els.aiPortfolioRecommendationSurface.innerHTML = decisionEmpty("정량 엔진이 정책 기반 비중을 계산하는 중입니다.");
+  try {
+    const res = await fetch(API.aiPortfolioGenerate, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(aiPolicyPayload()),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    renderAiPortfolioResponse(data);
+  } catch (err) {
+    els.aiPortfolioRecommendationSurface.innerHTML = decisionEmpty(`AI Portfolio 생성 실패: ${err.message || err}`);
+  }
+}
+
+async function checkAiPortfolioRebalance() {
+  if (!state.aiPortfolioPolicy?.policy_id) {
+    if (els.aiPortfolioRebalanceSurface) els.aiPortfolioRebalanceSurface.innerHTML = decisionEmpty("먼저 AI Portfolio를 생성해야 합니다.");
+    return;
+  }
+  if (els.aiPortfolioRebalanceSurface) els.aiPortfolioRebalanceSurface.innerHTML = decisionEmpty("현재 비중과 목표 비중의 정책 이탈을 점검하는 중입니다.");
+  try {
+    const res = await fetch(API.aiPortfolioRebalanceCheck, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ policy_id: state.aiPortfolioPolicy.policy_id, current_weights: parseAiCurrentWeights() }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    state.aiPortfolioSignal = data.signal || null;
+    renderAiRebalance(state.aiPortfolioSignal);
+    renderAiOverview(state.aiPortfolioPolicy, state.aiPortfolioRecommendation);
+    renderAiHistory(state.aiPortfolioPolicy.policy_id);
+  } catch (err) {
+    if (els.aiPortfolioRebalanceSurface) els.aiPortfolioRebalanceSurface.innerHTML = decisionEmpty(`리밸런싱 점검 실패: ${err.message || err}`);
+  }
+}
+
+async function updateAiPortfolioRebalance(action) {
+  const signalId = state.aiPortfolioSignal?.signal_id;
+  if (!signalId) return;
+  try {
+    const res = await fetch(API.aiPortfolioRebalanceAction(signalId, action), { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    state.aiPortfolioSignal = data;
+    renderAiRebalance(state.aiPortfolioSignal);
+    renderAiHistory(state.aiPortfolioPolicy?.policy_id);
+  } catch (err) {
+    if (els.aiPortfolioRebalanceSurface) els.aiPortfolioRebalanceSurface.innerHTML += `<div class="decision-warning">리밸런싱 ${escapeHtml(action)} 실패: ${escapeHtml(err.message || err)}</div>`;
+  }
+}
+
+async function generateAiPortfolioReport(reportType = "weekly") {
+  if (!state.aiPortfolioPolicy?.policy_id) {
+    if (els.aiPortfolioReportsSurface) els.aiPortfolioReportsSurface.innerHTML = decisionEmpty("먼저 AI Portfolio를 생성해야 리포트를 만들 수 있습니다.");
+    return;
+  }
+  if (els.aiPortfolioReportsSurface) els.aiPortfolioReportsSurface.innerHTML = decisionEmpty(`${reportType} 리포트를 생성하는 중입니다.`);
+  try {
+    const res = await fetch(API.aiPortfolioReportsGenerate, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ policy_id: state.aiPortfolioPolicy.policy_id, report_type: reportType }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    els.aiPortfolioReportsSurface.innerHTML = `<div class="ai-report-box">${escapeHtml(data.markdown || "report unavailable")}</div>`;
+    renderAiHistory(state.aiPortfolioPolicy.policy_id);
+  } catch (err) {
+    if (els.aiPortfolioReportsSurface) els.aiPortfolioReportsSurface.innerHTML = decisionEmpty(`리포트 생성 실패: ${err.message || err}`);
+  }
+}
+
+function aiNumberInput(el, fallback, { min = -Infinity, max = Infinity } = {}) {
+  const value = Number(el?.value);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, value));
+}
+
+function aiRangeInput(el, fallback) {
+  const parts = String(el?.value || "").split(",").map((item) => Number(item.trim()));
+  const min = Number.isFinite(parts[0]) ? parts[0] : fallback[0];
+  const max = Number.isFinite(parts[1]) ? parts[1] : fallback[1];
+  return { min: Math.max(0, Math.min(100, min)), max: Math.max(0, Math.min(100, Math.max(min, max))) };
+}
+
+const AI_PORTFOLIO_UNIVERSE_LABELS = {
+  default_multi_asset: "프리셋 · 기본 멀티에셋",
+  quant_lab_default: "프리셋 · Quant Lab 기본",
+  sp500_top_200: "프리셋 · 미국 대형주 200",
+  etf_core_100: "프리셋 · 주요 ETF 100",
+  kr_300: "프리셋 · 한국 300",
+  crypto_core: "프리셋 · 암호화폐 2",
+  all_supported: "프리셋 · 전체 지원 602",
+  custom: "직접 입력 · 쉼표 구분 심볼",
+};
+
+function aiPortfolioSelectedUniverseLabel() {
+  const selected = els.aiPortfolioUniverse?.value || "default_multi_asset";
+  const apiItem = state.aiPortfolioUniverses.find((item) => item.id === selected);
+  if (apiItem?.display_name) {
+    return `${apiItem.source_type === "direct_input" ? "직접 입력" : "프리셋"} · ${apiItem.display_name}`;
+  }
+  return AI_PORTFOLIO_UNIVERSE_LABELS[selected] || selected;
+}
+
+function syncAiPortfolioUniverseMode() {
+  const selected = els.aiPortfolioUniverse?.value || "default_multi_asset";
+  const isCustom = selected === "custom";
+  if (els.aiPortfolioCustomUniverse) {
+    els.aiPortfolioCustomUniverse.disabled = !isCustom;
+    els.aiPortfolioCustomUniverse.setAttribute("aria-disabled", isCustom ? "false" : "true");
+  }
+  if (els.aiPortfolioCustomUniverseWrap) {
+    els.aiPortfolioCustomUniverseWrap.classList.toggle("is-disabled", !isCustom);
+  }
+  if (els.aiPortfolioUniverseStatus) {
+    const customCount = parseTickerInput(els.aiPortfolioCustomUniverse?.value || "").length;
+    els.aiPortfolioUniverseStatus.classList.toggle("warn", isCustom && !customCount);
+    els.aiPortfolioUniverseStatus.classList.toggle("ok", !isCustom || customCount > 0);
+    els.aiPortfolioUniverseStatus.textContent = isCustom
+      ? `현재 사용: 직접 입력 심볼 목록 · ${customCount}개`
+      : `현재 사용: ${aiPortfolioSelectedUniverseLabel()} · 직접 입력값은 무시됨`;
+  }
+}
+
+function aiPortfolioUniverseId() {
+  syncAiPortfolioUniverseMode();
+  const selected = els.aiPortfolioUniverse?.value || "default_multi_asset";
+  if (selected === "custom") {
+    const raw = String(els.aiPortfolioCustomUniverse?.value || "").trim();
+    return raw ? `custom:${raw}` : "default_multi_asset";
+  }
+  return selected;
+}
+
+function aiPortfolioPolicyOverrides() {
+  return {
+    target_volatility: aiNumberInput(els.aiPortfolioTargetVolatility, 12, { min: 0, max: 100 }),
+    max_drawdown_alert: aiNumberInput(els.aiPortfolioMaxDrawdown, -15, { max: 0 }),
+    min_cash_weight: aiNumberInput(els.aiPortfolioMinCash, 5, { min: 0, max: 100 }),
+    max_single_asset_weight: aiNumberInput(els.aiPortfolioMaxSingle, 30, { min: 1, max: 100 }),
+    max_sector_weight: aiNumberInput(els.aiPortfolioMaxSector, 40, { min: 1, max: 100 }),
+    rebalance_frequency: els.aiPortfolioRebalanceFrequency?.value || "monthly",
+    weight_drift_threshold: aiNumberInput(els.aiPortfolioDriftThreshold, 5, { min: 0, max: 100 }),
+    max_turnover: aiNumberInput(els.aiPortfolioMaxTurnover, 20, { min: 0, max: 100 }),
+    optimization_method: els.aiPortfolioOptimization?.value || "risk_parity",
+    lookback_window_months: aiNumberInput(els.aiPortfolioLookbackMonths, 12, { min: 1, max: 120 }),
+    risk_model: els.aiPortfolioRiskModel?.value || "diagonal_shrinkage",
+    expected_return_model: els.aiPortfolioExpectedReturn?.value || "momentum_adjusted_historical",
+    asset_allocation_ranges: {
+      equity: aiRangeInput(els.aiPortfolioEquityRange, [50, 75]),
+      bond: aiRangeInput(els.aiPortfolioBondRange, [15, 35]),
+      cash: aiRangeInput(els.aiPortfolioCashRange, [0, 15]),
+      alternative: aiRangeInput(els.aiPortfolioAlternativeRange, [0, 15]),
+    },
+  };
+}
+
+function aiPortfolioRequest() {
+  return {
+    portfolio_name: String(els.aiPortfolioName?.value || "AI Portfolio").trim() || "AI Portfolio",
+    investment_type: state.aiPortfolioSelectedType || "balanced_growth",
+    universe_id: aiPortfolioUniverseId(),
+    initial_capital: aiNumberInput(els.aiPortfolioInitialCapital, 10000000, { min: 0 }),
+    monthly_contribution: aiNumberInput(els.aiPortfolioMonthlyContribution, 0, { min: 0 }),
+    target_return: aiNumberInput(els.aiPortfolioTargetReturn, 0),
+    benchmark: normalizeTickerToken(els.aiPortfolioBenchmark?.value || "SPY") || "SPY",
+    automation_level: els.aiPortfolioAutomation?.value || "alert_only",
+    policy_overrides: aiPortfolioPolicyOverrides(),
+  };
+}
+
+function applyAiPortfolioTemplate(template) {
+  if (!template) return;
+  state.aiPortfolioSelectedType = template.id || state.aiPortfolioSelectedType;
+  const ranges = template.asset_allocation_ranges || {};
+  const limits = template.risk_limits || {};
+  const rebalance = template.rebalance_policy || {};
+  const quant = template.quant_settings || {};
+  if (els.aiPortfolioTargetVolatility) els.aiPortfolioTargetVolatility.value = String(limits.target_volatility ?? 12);
+  if (els.aiPortfolioMaxDrawdown) els.aiPortfolioMaxDrawdown.value = String(limits.max_drawdown_alert ?? -15);
+  if (els.aiPortfolioMinCash) els.aiPortfolioMinCash.value = String(limits.min_cash_weight ?? ranges.cash?.min ?? 0);
+  if (els.aiPortfolioMaxSingle) els.aiPortfolioMaxSingle.value = String(limits.max_single_asset_weight ?? 30);
+  if (els.aiPortfolioMaxSector) els.aiPortfolioMaxSector.value = String(limits.max_sector_weight ?? 40);
+  if (els.aiPortfolioRebalanceFrequency) els.aiPortfolioRebalanceFrequency.value = rebalance.frequency || "monthly";
+  if (els.aiPortfolioDriftThreshold) els.aiPortfolioDriftThreshold.value = String(rebalance.weight_drift_threshold ?? 5);
+  if (els.aiPortfolioMaxTurnover) els.aiPortfolioMaxTurnover.value = String(rebalance.max_turnover ?? 20);
+  if (els.aiPortfolioOptimization) els.aiPortfolioOptimization.value = quant.optimization_method || "risk_parity";
+  if (els.aiPortfolioLookbackMonths) els.aiPortfolioLookbackMonths.value = String(quant.lookback_window_months ?? 12);
+  if (els.aiPortfolioRiskModel) els.aiPortfolioRiskModel.value = quant.risk_model || "diagonal_shrinkage";
+  if (els.aiPortfolioExpectedReturn) els.aiPortfolioExpectedReturn.value = quant.expected_return_model || "momentum_adjusted_historical";
+  if (els.aiPortfolioEquityRange && ranges.equity) els.aiPortfolioEquityRange.value = `${ranges.equity.min},${ranges.equity.max}`;
+  if (els.aiPortfolioBondRange && ranges.bond) els.aiPortfolioBondRange.value = `${ranges.bond.min},${ranges.bond.max}`;
+  if (els.aiPortfolioCashRange && ranges.cash) els.aiPortfolioCashRange.value = `${ranges.cash.min},${ranges.cash.max}`;
+  if (els.aiPortfolioAlternativeRange && ranges.alternative) els.aiPortfolioAlternativeRange.value = `${ranges.alternative.min},${ranges.alternative.max}`;
+}
+
+function renderAiPortfolioInvestmentTypes(items) {
+  if (!els.aiPortfolioInvestmentTypes) return;
+  if (!items.length) {
+    els.aiPortfolioInvestmentTypes.innerHTML = decisionEmpty("투자 유형 템플릿을 불러오지 못했습니다.");
+    return;
+  }
+  els.aiPortfolioInvestmentTypes.innerHTML = items.map((item) => {
+    const active = item.id === state.aiPortfolioSelectedType ? " active" : "";
+    const ranges = item.asset_allocation_ranges || {};
+    const summary = Object.entries(ranges).map(([key, value]) => `${key} ${value.min}-${value.max}%`).join(" · ");
+    return `
+      <button type="button" class="ai-investment-card${active}" data-ai-investment-type="${escapeHtml(item.id)}">
+        <strong>${escapeHtml(item.display_name || item.id)}</strong>
+        <span>${escapeHtml(item.risk_level || "risk")}</span>
+        <small>${escapeHtml(summary)}</small>
+      </button>
+    `;
+  }).join("");
+}
+
+async function loadAiPortfolio(force = false) {
+  if (!force && state.aiPortfolioLoaded) return;
+  state.aiPortfolioLoaded = true;
+  if (els.aiPortfolioOverviewSurface) els.aiPortfolioOverviewSurface.innerHTML = decisionEmpty("AI Portfolio 템플릿을 불러오는 중입니다.");
+  try {
+    const [typesRes, universeRes] = await Promise.all([
+      fetch(API.aiPortfolioInvestmentTypes),
+      fetch(API.aiPortfolioUniverses),
+    ]);
+    const data = await typesRes.json();
+    const universeData = await universeRes.json();
+    if (!typesRes.ok) throw new Error(data.detail || `HTTP ${typesRes.status}`);
+    if (!universeRes.ok) throw new Error(universeData.detail || `HTTP ${universeRes.status}`);
+    const items = Array.isArray(data.items) ? data.items : [];
+    state.aiPortfolioUniverses = Array.isArray(universeData.items) ? universeData.items : [];
+    state.aiPortfolioInvestmentTypes = items;
+    renderAiPortfolioInvestmentTypes(items);
+    applyAiPortfolioTemplate(items.find((item) => item.id === state.aiPortfolioSelectedType) || items[0]);
+    syncAiPortfolioUniverseMode();
+    if (els.aiPortfolioOverviewSurface) {
+      els.aiPortfolioOverviewSurface.innerHTML = `
+        <div class="decision-status-row">
+          <span class="decision-badge ok">ready</span>
+          <span>${escapeHtml(String(items.length))}개 정책 템플릿 · ${escapeHtml(String(state.aiPortfolioUniverses.length))}개 유니버스 옵션 로드 · 브로커 주문 실행 없음</span>
+        </div>
+        <div class="decision-summary ok">정책, 정량 엔진, AI 설명, 리밸런싱 승인 흐름이 분리된 워크플로우입니다.</div>
+      `;
+    }
+  } catch (err) {
+    state.aiPortfolioLoaded = false;
+    if (els.aiPortfolioOverviewSurface) els.aiPortfolioOverviewSurface.innerHTML = decisionEmpty(`AI Portfolio 로드 실패: ${err.message || err}`);
+  }
+  loadAiPortfolioOps(force);
+  loadAiPortfolioPolicies(force);
+  loadAiPortfolioOperations(force);
+}
+
+async function loadAiPortfolioOps(force = false) {
+  if (!els.aiPortfolioOpsSurface || (!force && state.aiPortfolioOpsLoaded)) return;
+  els.aiPortfolioOpsSurface.innerHTML = decisionEmpty("AI Portfolio 저장소와 데이터 마트 상태를 확인하는 중입니다.");
+  try {
+    const [storeRes, dataRes] = await Promise.all([
+      fetch(API.aiPortfolioStoreStatus),
+      fetch(API.dataHealth),
+    ]);
+    const store = await storeRes.json();
+    const data = await dataRes.json();
+    if (!storeRes.ok) throw new Error(store.detail || `store HTTP ${storeRes.status}`);
+    if (!dataRes.ok) throw new Error(data.detail || `data HTTP ${dataRes.status}`);
+    const counts = data.table_counts || {};
+    const collections = store.collections || {};
+    const legacy = Array.isArray(store.legacy_json) ? store.legacy_json : [];
+    const legacyExisting = legacy.filter((item) => item.exists);
+    const legacyRows = legacyExisting.map((item) => `
+      <div class="decision-list-row">
+        <span>${escapeHtml(item.collection)} · ${escapeHtml(String(item.item_count || 0))} legacy rows</span>
+        <strong class="warn">seed only</strong>
+      </div>
+    `).join("");
+    els.aiPortfolioOpsSurface.innerHTML = `
+      <div class="decision-status-row">
+        <span class="decision-badge ok">${escapeHtml(store.primary_store || "sqlite")}</span>
+        <span>${escapeHtml(store.legacy_json_policy || "legacy JSON is not the write path")}</span>
+      </div>
+      <div class="decision-metric-grid dense">
+        ${decisionMetric("정책", String(collections.policies?.item_count || 0), "ok")}
+        ${decisionMetric("추천", String(collections.recommendations?.item_count || 0), "ok")}
+        ${decisionMetric("신호", String(collections.signals?.item_count || 0), "ok")}
+        ${decisionMetric("이력", String(collections.history?.item_count || 0), "ok")}
+        ${decisionMetric("가격 행", _fmtNumber(counts.prices_daily || 0), counts.prices_daily ? "ok" : "warn")}
+        ${decisionMetric("재무 스냅샷", _fmtNumber(counts.fundamentals_snapshots || 0), counts.fundamentals_snapshots ? "ok" : "warn")}
+        ${decisionMetric("밸류에이션", _fmtNumber(counts.valuation_metrics || 0), counts.valuation_metrics ? "ok" : "warn")}
+        ${decisionMetric("재무제표형 지표", _fmtNumber(counts.financial_statements || 0), counts.financial_statements ? "ok" : "warn")}
+      </div>
+      <div class="decision-summary ${legacyExisting.length ? "warn" : "ok"}">
+        현재 쓰기 경로: SQLite · ${escapeHtml(store.write_path || store.db_path || "-")}
+        ${legacyExisting.length ? " · legacy JSON 파일은 migration seed로만 사용됩니다." : " · legacy JSON 잔여 파일 없음"}
+      </div>
+      <div class="decision-section-title">Legacy JSON 상태</div>
+      <div class="decision-list compact">
+        ${legacyRows || '<div class="muted small">legacy JSON 파일이 감지되지 않았습니다.</div>'}
+      </div>
+    `;
+    state.aiPortfolioOpsLoaded = true;
+  } catch (err) {
+    els.aiPortfolioOpsSurface.innerHTML = decisionEmpty(`운영 상태 조회 실패: ${err.message || err}`);
+  }
+}
+
+function aiActivePolicyId() {
+  return state.aiPortfolioPolicy?.policy_id || "";
+}
+
+function renderAiPortfolioPolicies(items) {
+  if (!els.aiPortfolioPolicyListSurface) return;
+  if (!Array.isArray(items) || !items.length) {
+    els.aiPortfolioPolicyListSurface.innerHTML = decisionEmpty("저장된 AI Portfolio 정책이 없습니다.");
+    return;
+  }
+  els.aiPortfolioPolicyListSurface.innerHTML = `
+    <div class="decision-list compact">
+      ${items.slice(0, 8).map((item) => `
+        <div class="decision-list-row">
+          <span><strong>${escapeHtml(item.portfolio_name || item.policy_id)}</strong><br><small>${escapeHtml(item.investment_type || "-")} · ${escapeHtml(item.universe_id || "-")} · ${escapeHtml(item.updated_at || item.created_at || "")}</small></span>
+          <strong class="${item.status === "active" ? "ok" : "warn"}">${escapeHtml(item.status || "draft")}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderAiPortfolioOperations(items) {
+  if (!els.aiPortfolioOperationsSurface) return;
+  if (!Array.isArray(items) || !items.length) {
+    els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty("아직 실행된 운영 작업이 없습니다.");
+    return;
+  }
+  els.aiPortfolioOperationsSurface.innerHTML = `
+    <div class="decision-list compact">
+      ${items.slice(0, 8).map((item) => `
+        <div class="decision-list-row">
+          <span><strong>${escapeHtml(item.operation_type || "operation")}</strong><br><small>${escapeHtml(item.created_at || "")} · ${escapeHtml(item.operation_id || "")}</small></span>
+          <strong class="${item.status === "completed" || item.status === "dry_run" ? "ok" : "warn"}">${escapeHtml(item.status || "-")}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+async function loadAiPortfolioPolicies(force = false) {
+  if (!els.aiPortfolioPolicyListSurface) return;
+  if (!force && state.aiPortfolioPolicies.length) {
+    renderAiPortfolioPolicies(state.aiPortfolioPolicies);
+    return;
+  }
+  els.aiPortfolioPolicyListSurface.innerHTML = decisionEmpty("정책 목록을 불러오는 중입니다.");
+  try {
+    const res = await fetch(API.aiPortfolioPolicies);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    state.aiPortfolioPolicies = Array.isArray(data.items) ? data.items : [];
+    renderAiPortfolioPolicies(state.aiPortfolioPolicies);
+  } catch (err) {
+    els.aiPortfolioPolicyListSurface.innerHTML = decisionEmpty(`정책 목록 로드 실패: ${err.message || err}`);
+  }
+}
+
+async function loadAiPortfolioOperations(force = false) {
+  if (!els.aiPortfolioOperationsSurface) return;
+  if (!force && state.aiPortfolioOperations.length) {
+    renderAiPortfolioOperations(state.aiPortfolioOperations);
+    return;
+  }
+  els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty("운영 작업 이력을 불러오는 중입니다.");
+  try {
+    const res = await fetch(API.aiPortfolioOperations);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    state.aiPortfolioOperations = Array.isArray(data.items) ? data.items : [];
+    renderAiPortfolioOperations(state.aiPortfolioOperations);
+  } catch (err) {
+    els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty(`운영 작업 로드 실패: ${err.message || err}`);
+  }
+}
+
+function renderAiRecommendationDiff(diff) {
+  if (!els.aiPortfolioRecommendationDiffSurface) return;
+  const changes = Array.isArray(diff?.changes) ? diff.changes : [];
+  if (!changes.length) {
+    els.aiPortfolioRecommendationDiffSurface.innerHTML = decisionEmpty(diff?.message || "비교할 추천 변경이 없습니다.");
+    return;
+  }
+  els.aiPortfolioRecommendationDiffSurface.innerHTML = `
+    <div class="decision-status-row">
+      <span class="decision-badge ok">${escapeHtml(diff.status || "available")}</span>
+      <span>${escapeHtml(diff.previous_recommendation_id || "")} -> ${escapeHtml(diff.latest_recommendation_id || "")}</span>
+    </div>
+    <div class="portfolio-weight-list">
+      ${changes.slice(0, 12).map((item) => `
+        <div class="portfolio-weight-row ai-diff-row">
+          <span>${escapeHtml(item.ticker)}</span>
+          <div><i style="width:${Math.min(100, Math.abs(Number(item.change) || 0) * 4)}%"></i></div>
+          <strong>${escapeHtml(item.change > 0 ? "+" : "")}${escapeHtml(fmtPct(item.change))}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+async function loadAiRecommendationDiff(policyId = aiActivePolicyId()) {
+  if (!policyId || !els.aiPortfolioRecommendationDiffSurface) return;
+  els.aiPortfolioRecommendationDiffSurface.innerHTML = decisionEmpty("추천 변경분을 계산하는 중입니다.");
+  try {
+    const res = await fetch(API.aiPortfolioRecommendationDiff(policyId));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    renderAiRecommendationDiff(data);
+  } catch (err) {
+    els.aiPortfolioRecommendationDiffSurface.innerHTML = decisionEmpty(`추천 비교 실패: ${err.message || err}`);
+  }
+}
+
+async function runAiPortfolioHydrateData({ missingOnly = false } = {}) {
+  if (els.aiPortfolioOperationsSurface) {
+    els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty("가격/재무 데이터 보강 작업을 실행하는 중입니다. 네트워크 상태에 따라 시간이 걸릴 수 있습니다.");
+  }
+  const quality = state.aiPortfolioRecommendation?.data_quality || {};
+  const missing = [...(quality.missing_assets || []), ...(quality.insufficient_assets || [])].filter(Boolean);
+  const payload = {
+    hydrate_prices: true,
+    hydrate_fundamentals: true,
+    max_assets: 250,
+    min_price_rows: 42,
+  };
+  if (missingOnly && missing.length) {
+    payload.tickers = missing;
+  } else if (aiActivePolicyId()) {
+    payload.policy_id = aiActivePolicyId();
+  } else {
+    payload.universe_id = aiPortfolioUniverseId();
+  }
+  try {
+    const res = await fetch(API.aiPortfolioHydrate, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    state.aiPortfolioOperations = [];
+    renderAiPortfolioOperations([data]);
+    state.aiPortfolioOpsLoaded = false;
+    loadAiPortfolioOps(true);
+    loadAiPortfolioOperations(true);
+  } catch (err) {
+    if (els.aiPortfolioOperationsSurface) els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty(`데이터 보강 실패: ${err.message || err}`);
+  }
+}
+
+async function runAiPortfolioSnapshotJob() {
+  if (els.aiPortfolioOperationsSurface) els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty("성과 스냅샷 작업을 실행하는 중입니다.");
+  const payload = aiActivePolicyId() ? { policy_id: aiActivePolicyId(), active_only: false } : { active_only: true };
+  try {
+    const res = await fetch(API.aiPortfolioSnapshotJob, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    state.aiPortfolioOperations = [];
+    renderAiPortfolioOperations([data]);
+    loadAiPortfolioOperations(true);
+    loadAiPortfolioHistory();
+  } catch (err) {
+    if (els.aiPortfolioOperationsSurface) els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty(`성과 스냅샷 실패: ${err.message || err}`);
+  }
+}
+
+function aiWeightsTable(weights) {
+  if (!Array.isArray(weights) || !weights.length) return decisionEmpty("표시할 추천 비중이 없습니다.");
+  return `
+    <div class="portfolio-weight-list">
+      ${weights.map((item) => `
+        <div class="portfolio-weight-row">
+          <span>${escapeHtml(item.ticker)} <small>${escapeHtml(item.asset_class || "")}</small></span>
+          <div><i style="width:${Math.max(2, Math.min(100, Number(item.weight) || 0))}%"></i></div>
+          <strong>${escapeHtml(fmtPct(item.weight))}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderAiPortfolioResult(data) {
+  const policy = data.policy || {};
+  const rec = data.recommendation || {};
+  state.aiPortfolioPolicy = policy;
+  state.aiPortfolioRecommendation = rec;
+  const quality = rec.data_quality || data.data_quality || {};
+  const backtest = rec.backtest_metrics || {};
+  const risk = rec.risk_metrics || {};
+  const check = rec.constraint_check || {};
+  const warnings = [...(data.warnings || []), ...(quality.warnings || [])].filter(Boolean);
+  const hydration = quality.hydration || {};
+  const universeText = quality.universe_label
+    ? `${quality.universe_source === "direct_input" ? "직접 입력" : "프리셋"} · ${quality.universe_label}`
+    : policy.universe_id || "";
+  if (els.aiPortfolioOverviewSurface) {
+    els.aiPortfolioOverviewSurface.innerHTML = `
+      <div class="decision-status-row">
+        <span class="decision-badge ${escapeHtml(decisionStatusClass(rec.status || "generated"))}">${escapeHtml(rec.status || "generated")}</span>
+        <span>${escapeHtml(policy.portfolio_name || "AI Portfolio")} · ${escapeHtml(policy.investment_type || "")} · ${escapeHtml(universeText)}</span>
+      </div>
+      <div class="decision-metric-grid dense">
+        ${decisionMetric("정책 상태", policy.status || "-", "ok")}
+        ${decisionMetric("자동화", policy.automation_level || "-", policy.automation_level === "auto_paper_rebalance" ? "warn" : "ok")}
+        ${decisionMetric("가격 사용", `${quality.available_asset_count || 0}/${quality.asset_count || 0}`, quality.price_data_available ? "ok" : "warn")}
+        ${decisionMetric("백테스트", quality.backtest_available ? "available" : "unavailable", quality.backtest_available ? "ok" : "warn")}
+        ${decisionMetric("보강 상태", hydration.status || "not_checked", hydration.status === "failed" ? "warn" : "ok")}
+        ${decisionMetric("섹터 메타", quality.metadata_coverage?.sector_pct !== undefined ? `${quality.metadata_coverage.sector_pct}%` : "unavailable", "ok")}
+      </div>
+      ${warnings.length ? `<div class="decision-warning">${escapeHtml(warnings.join("; "))}</div>` : ""}
+    `;
+  }
+  if (els.aiPortfolioRecommendationSurface) {
+    els.aiPortfolioRecommendationSurface.innerHTML = `
+      ${aiWeightsTable(rec.weights || [])}
+      <div class="decision-summary ${escapeHtml(check.status === "pass" ? "ok" : "warn")}">제약조건: ${escapeHtml(check.status || "unchecked")}</div>
+      <div class="prose">${escapeHtml(rec.ai_explanation || "AI 설명이 없습니다.").replace(/\n/g, "<br>")}</div>
+    `;
+  }
+  if (els.aiPortfolioPerformanceSurface) {
+    els.aiPortfolioPerformanceSurface.innerHTML = `
+      <div class="decision-metric-grid dense">
+        ${decisionMetric("총수익률", backtest.status === "available" ? fmtPct(backtest.total_return_pct) : "unavailable", backtest.status === "available" ? "ok" : "warn")}
+        ${decisionMetric("MDD", backtest.status === "available" ? fmtPct(backtest.max_drawdown_pct) : "unavailable", backtest.status === "available" ? "ok" : "warn")}
+        ${decisionMetric("Sharpe", backtest.status === "available" ? fmtDecimal(backtest.sharpe, 2) : "unavailable", backtest.status === "available" ? "ok" : "warn")}
+        ${decisionMetric("예상 변동성", risk.annualized_volatility_pct !== undefined ? fmtPct(risk.annualized_volatility_pct) : "unavailable", risk.annualized_volatility_pct !== undefined ? "ok" : "warn")}
+      </div>
+      ${backtest.reason ? `<div class="decision-warning">${escapeHtml(backtest.reason)}</div>` : ""}
+    `;
+  }
+  if (els.aiPortfolioComplianceSurface) {
+    const violations = Array.isArray(check.violations) ? check.violations : [];
+    els.aiPortfolioComplianceSurface.innerHTML = `
+      <div class="decision-status-row">
+        <span class="decision-badge ${escapeHtml(check.status === "pass" ? "ok" : check.status === "warning" ? "warn" : "err")}">${escapeHtml(check.status || "unchecked")}</span>
+        <span>${escapeHtml(String(violations.length))}개 위반/경고</span>
+      </div>
+      <div class="decision-metric-grid dense">
+        ${Object.entries(check.allocation_by_asset_class || {}).map(([key, value]) => decisionMetric(key, fmtPct(value), "ok")).join("")}
+      </div>
+      <div class="decision-summary ${quality.price_data_available ? "ok" : "warn"}">
+        유니버스: ${escapeHtml(universeText || "-")} · 가격 이력 사용 ${escapeHtml(String(quality.available_asset_count || 0))}/${escapeHtml(String(quality.asset_count || 0))} ·
+        누락 ${escapeHtml(String((quality.missing_assets || []).length))}개 · 자동 보강 ${escapeHtml(String(hydration.status || "not_checked"))}
+      </div>
+      ${violations.length ? `<ul class="decision-action-list">${violations.map((item) => `<li><strong>${escapeHtml(item.rule)}</strong><span>${escapeHtml(item.message)}</span></li>`).join("")}</ul>` : decisionEmpty("정책 위반이 없습니다.")}
+    `;
+  }
+  loadAiPortfolioHistory();
+  loadAiPortfolioPolicies(true);
+  loadAiRecommendationDiff(policy.policy_id);
+}
+
+async function runAiPortfolioGenerate() {
+  await loadAiPortfolio(false);
+  if (els.aiPortfolioOverviewSurface) els.aiPortfolioOverviewSurface.innerHTML = decisionEmpty("정책 기반 포트폴리오를 생성하는 중입니다.");
+  try {
+    const res = await fetch(API.aiPortfolioGenerate, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(aiPortfolioRequest()),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data));
+    renderAiPortfolioResult(data);
+  } catch (err) {
+    if (els.aiPortfolioOverviewSurface) els.aiPortfolioOverviewSurface.innerHTML = decisionEmpty(`AI Portfolio 생성 실패: ${err.message || err}`);
+  }
+}
+
+function parseAiCurrentWeights(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return {};
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+  } catch (_) {
+    // Continue with loose "SPY 40, TLT 30" parsing.
+  }
+  const out = {};
+  text.split(/[,\n]+/).forEach((part) => {
+    const match = part.trim().match(/^([A-Za-z0-9.\-]+)\s*[:= ]\s*(-?\d+(?:\.\d+)?)$/);
+    if (match) out[normalizeTickerToken(match[1])] = Number(match[2]);
+  });
+  return out;
+}
+
+function setAiRebalanceButtons(enabled) {
+  [els.aiPortfolioApproveRebalance, els.aiPortfolioRejectRebalance, els.aiPortfolioDeferRebalance].forEach((button) => {
+    if (button) button.disabled = !enabled;
+  });
+}
+
+function renderAiPortfolioSignal(signal) {
+  state.aiPortfolioSignal = signal;
+  setAiRebalanceButtons(Boolean(signal?.signal_id));
+  if (!els.aiPortfolioRebalanceSurface) return;
+  const changes = Array.isArray(signal?.recommended_changes) ? signal.recommended_changes : [];
+  els.aiPortfolioRebalanceSurface.innerHTML = `
+    <div class="decision-status-row">
+      <span class="decision-badge ${signal?.rebalance_required ? "warn" : "ok"}">${signal?.rebalance_required ? "approval_required" : "no_action"}</span>
+      <span>${escapeHtml((signal?.trigger_type || []).join(", ") || "no trigger")}</span>
+    </div>
+    <div class="decision-metric-grid dense">
+      ${decisionMetric("상태", signal?.status || "-", signal?.rebalance_required ? "warn" : "ok")}
+      ${decisionMetric("변경 수", String(changes.length), changes.length ? "warn" : "ok")}
+      ${decisionMetric("예상 회전율", signal?.turnover_estimate !== undefined && signal?.turnover_estimate !== null ? fmtPct(signal.turnover_estimate) : "unavailable", changes.length ? "warn" : "ok")}
+      ${decisionMetric("만료", signal?.expires_at || "not required", signal?.expires_at ? "warn" : "ok")}
+      ${decisionMetric("다음 점검", signal?.next_review_at || "-", "ok")}
+      ${decisionMetric("브로커 실행", signal?.estimated_risk_after?.broker_execution || "not_supported", "warn")}
+    </div>
+    ${changes.length ? `<ul class="decision-action-list">${changes.map((item) => `<li><strong>${escapeHtml(item.ticker)}</strong><span>${escapeHtml(fmtPct(item.current_weight))} -> ${escapeHtml(fmtPct(item.target_weight))} · ${escapeHtml(item.change > 0 ? "+" : "")}${escapeHtml(fmtPct(item.change))} (${escapeHtml(item.action)})</span></li>`).join("")}</ul>` : decisionEmpty("리밸런싱 변경이 필요하지 않습니다.")}
+    ${signal?.decision_reason ? `<div class="decision-summary ok">사용자 조치 사유: ${escapeHtml(signal.decision_reason)}</div>` : ""}
+    <div class="prose">${escapeHtml(signal?.ai_explanation || "").replace(/\n/g, "<br>")}</div>
+  `;
+}
+
+async function runAiPortfolioRebalanceCheck() {
+  if (!state.aiPortfolioPolicy?.policy_id) {
+    await runAiPortfolioGenerate();
+  }
+  const policyId = state.aiPortfolioPolicy?.policy_id;
+  if (!policyId) return;
+  if (els.aiPortfolioRebalanceSurface) els.aiPortfolioRebalanceSurface.innerHTML = decisionEmpty("리밸런싱 룰을 점검하는 중입니다.");
+  try {
+    const res = await fetch(API.aiPortfolioRebalanceCheck, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        policy_id: policyId,
+        current_weights: parseAiCurrentWeights(els.aiPortfolioCurrentWeights?.value || ""),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    renderAiPortfolioSignal(data.signal || data);
+    loadAiPortfolioHistory();
+  } catch (err) {
+    if (els.aiPortfolioRebalanceSurface) els.aiPortfolioRebalanceSurface.innerHTML = decisionEmpty(`리밸런싱 점검 실패: ${err.message || err}`);
+  }
+}
+
+async function updateAiPortfolioSignal(action) {
+  const signalId = state.aiPortfolioSignal?.signal_id;
+  if (!signalId) return;
+  try {
+    const res = await fetch(API.aiPortfolioRebalanceAction(signalId, action), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: `UI ${action}`, actor: "user" }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    renderAiPortfolioSignal(data);
+    loadAiPortfolioHistory();
+  } catch (err) {
+    if (els.aiPortfolioRebalanceSurface) els.aiPortfolioRebalanceSurface.innerHTML += `<div class="decision-warning">신호 업데이트 실패: ${escapeHtml(err.message || err)}</div>`;
+  }
+}
+
+async function generateAiPortfolioReport(reportType = "weekly") {
+  if (!state.aiPortfolioPolicy?.policy_id) {
+    await runAiPortfolioGenerate();
+  }
+  const policyId = state.aiPortfolioPolicy?.policy_id;
+  if (!policyId) return;
+  if (els.aiPortfolioReportsSurface) els.aiPortfolioReportsSurface.innerHTML = decisionEmpty("리포트를 생성하는 중입니다.");
+  try {
+    const res = await fetch(API.aiPortfolioReportsGenerate, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ policy_id: policyId, report_type: reportType }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    if (els.aiPortfolioReportsSurface) {
+      els.aiPortfolioReportsSurface.innerHTML = `<pre class="report-md">${escapeHtml(data.content || data.markdown || "")}</pre>`;
+    }
+    loadAiPortfolioHistory();
+  } catch (err) {
+    if (els.aiPortfolioReportsSurface) els.aiPortfolioReportsSurface.innerHTML = decisionEmpty(`리포트 생성 실패: ${err.message || err}`);
+  }
+}
+
+async function loadAiPortfolioHistory() {
+  const policyId = state.aiPortfolioPolicy?.policy_id;
+  if (!policyId || !els.aiPortfolioHistorySurface) return;
+  try {
+    const res = await fetch(API.aiPortfolioHistory(policyId));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    const items = Array.isArray(data.items) ? data.items.slice(0, 12) : [];
+    els.aiPortfolioHistorySurface.innerHTML = items.length ? `
+      <ul class="decision-action-list">
+        ${items.map((item) => `<li><strong>${escapeHtml(item.event_type || "event")}</strong><span>${escapeHtml(item.summary || "")}<br><small>${escapeHtml(item.event_time || "")}</small></span></li>`).join("")}
+      </ul>
+    ` : decisionEmpty("아직 기록된 이력이 없습니다.");
+  } catch (err) {
+    els.aiPortfolioHistorySurface.innerHTML = decisionEmpty(`이력 로드 실패: ${err.message || err}`);
   }
 }
 
@@ -4083,12 +6912,12 @@ async function renderWatchlist() {
       .map((it) => {
         const last = it.last_run_at ? timeAgo(it.last_run_at) : "—";
         const status = it.last_run_status
-          ? `<span class="status-badge ${statusClass(it.last_run_status)}">${it.last_run_status.toUpperCase()}</span>`
-          : `<span class="status-badge neutral">NEW</span>`;
+          ? `<span class="status-badge ${statusClass(it.last_run_status)}">${escapeHtml(decisionStatusLabel(it.last_run_status))}</span>`
+          : `<span class="status-badge neutral">신규</span>`;
         const interval = it.interval_hours
-          ? `<span class="wl-interval">every ${it.interval_hours}h</span>`
-          : `<span class="wl-interval muted">manual</span>`;
-        const enabled = it.enabled ? "" : `<span class="wl-paused">paused</span>`;
+          ? `<span class="wl-interval">${it.interval_hours}시간마다</span>`
+          : `<span class="wl-interval muted">수동</span>`;
+        const enabled = it.enabled ? "" : `<span class="wl-paused">일시정지</span>`;
         const err = it.last_run_error
           ? `<div class="wl-error" title="${escapeHtml(it.last_run_error)}">${escapeHtml(it.last_run_error.slice(0, 80))}</div>`
           : "";
@@ -4102,15 +6931,15 @@ async function renderWatchlist() {
             <div class="wl-question" title="${escapeHtml(it.question)}">${escapeHtml(it.question.length > 80 ? it.question.slice(0, 80) + "…" : it.question)}</div>
             <div class="wl-meta">
               ${interval}
-              <span class="wl-last">last: ${last}</span>
-              <span class="wl-count">· ${it.run_count || 0} runs</span>
+              <span class="wl-last">최근: ${last}</span>
+              <span class="wl-count">· ${it.run_count || 0}회</span>
             </div>
             ${err}
             <div class="wl-actions">
-              <button type="button" class="linkish wl-run" data-id="${escapeHtml(it.id)}" title="지금 실행">run</button>
-              <button type="button" class="linkish wl-load" data-id="${escapeHtml(it.id)}" title="폼에 불러오기">load</button>
-              <button type="button" class="linkish wl-toggle" data-id="${escapeHtml(it.id)}" data-enabled="${it.enabled}" title="일시정지/재개">${it.enabled ? "pause" : "resume"}</button>
-              <button type="button" class="linkish danger wl-delete" data-id="${escapeHtml(it.id)}" title="삭제">del</button>
+              <button type="button" class="linkish wl-run" data-id="${escapeHtml(it.id)}" title="지금 실행">실행</button>
+              <button type="button" class="linkish wl-load" data-id="${escapeHtml(it.id)}" title="폼에 불러오기">불러오기</button>
+              <button type="button" class="linkish wl-toggle" data-id="${escapeHtml(it.id)}" data-enabled="${it.enabled}" title="일시정지/재개">${it.enabled ? "정지" : "재개"}</button>
+              <button type="button" class="linkish danger wl-delete" data-id="${escapeHtml(it.id)}" title="삭제">삭제</button>
             </div>
           </li>`;
       })
@@ -4119,7 +6948,13 @@ async function renderWatchlist() {
     state.watchlistItems = items;
     wireWatchlistActions();
   } catch (err) {
-    console.warn("watchlist load failed", err);
+    if (els.watchlistList) {
+      els.watchlistList.innerHTML = `<li class="watchlist-empty">Watchlist를 불러오지 못했습니다.</li>`;
+    }
+    if (els.watchlistSchedStatus) {
+      els.watchlistSchedStatus.textContent = "sched · 연결 실패";
+      els.watchlistSchedStatus.classList.remove("on");
+    }
   }
 }
 
@@ -4285,7 +7120,12 @@ async function renderTickerSummary(ticker) {
 
 function renderSparkline(points) {
   if (!els.sparkline) return;
-  const w = 240, h = 60, pad = 6;
+  const w = 280;
+  const h = 86;
+  const padLeft = 34;
+  const padRight = 8;
+  const padTop = 8;
+  const padBottom = 16;
   const vals = points.map(p => Number(p.confidence || 0));
   const n = vals.length;
   const svgNS = "http://www.w3.org/2000/svg";
@@ -4293,13 +7133,41 @@ function renderSparkline(points) {
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   svg.setAttribute("width", "100%");
   svg.setAttribute("height", h);
+  const maxV = Math.max(1, ...vals);
+  const minV = 0;
+  const yFor = (value) => chartY(minV, maxV, value, h, padTop, padBottom);
+
+  [1, 0.5, 0].forEach((value) => {
+    const y = yFor(value);
+    const grid = document.createElementNS(svgNS, "line");
+    grid.setAttribute("class", "chart-grid-line");
+    grid.setAttribute("x1", String(padLeft));
+    grid.setAttribute("x2", String(w - padRight));
+    grid.setAttribute("y1", y.toFixed(1));
+    grid.setAttribute("y2", y.toFixed(1));
+    svg.appendChild(grid);
+    const label = document.createElementNS(svgNS, "text");
+    label.setAttribute("class", "chart-y-label");
+    label.setAttribute("x", String(padLeft - 7));
+    label.setAttribute("y", (y + 3).toFixed(1));
+    label.setAttribute("text-anchor", "end");
+    label.textContent = `${Math.round(value * 100)}%`;
+    svg.appendChild(label);
+  });
+
+  const axis = document.createElementNS(svgNS, "line");
+  axis.setAttribute("class", "chart-axis-line");
+  axis.setAttribute("x1", String(padLeft));
+  axis.setAttribute("x2", String(padLeft));
+  axis.setAttribute("y1", String(padTop));
+  axis.setAttribute("y2", String(h - padBottom));
+  svg.appendChild(axis);
 
   if (n >= 2) {
-    const maxV = Math.max(1, ...vals), minV = 0;
-    const step = (w - pad * 2) / (n - 1);
+    const step = (w - padLeft - padRight) / (n - 1);
     const path = vals.map((v, i) => {
-      const x = pad + i * step;
-      const y = h - pad - ((v - minV) / (maxV - minV || 1)) * (h - pad * 2);
+      const x = padLeft + i * step;
+      const y = yFor(v);
       return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(" ");
     const p = document.createElementNS(svgNS, "path");
@@ -4313,8 +7181,9 @@ function renderSparkline(points) {
   }
 
   points.forEach((pt, i) => {
-    const x = pad + (n > 1 ? i * ((w - pad * 2) / (n - 1)) : (w / 2));
-    const y = h - pad - (Number(pt.confidence || 0)) * (h - pad * 2);
+    const confidence = Number(pt.confidence || 0);
+    const x = padLeft + (n > 1 ? i * ((w - padLeft - padRight) / (n - 1)) : ((w - padLeft - padRight) / 2));
+    const y = yFor(confidence);
     const c = document.createElementNS(svgNS, "circle");
     c.setAttribute("cx", x);
     c.setAttribute("cy", y.toFixed(1));
@@ -4322,6 +7191,17 @@ function renderSparkline(points) {
     const tone = (pt.sentiment || "").toLowerCase();
     c.setAttribute("fill", tone.includes("pos") ? "#4ade80" : tone.includes("neg") ? "#f87171" : "#9aa3b2");
     svg.appendChild(c);
+    const hit = document.createElementNS(svgNS, "circle");
+    const tooltip = `${pt.created_at || pt.run_id || `#${i + 1}`} · 신뢰도 ${fmtDecimal(confidence * 100, 0)}% · ${pt.status || "-"} / ${pt.sentiment || "-"}`;
+    hit.setAttribute("class", "chart-hover-point");
+    hit.setAttribute("cx", x);
+    hit.setAttribute("cy", y.toFixed(1));
+    hit.setAttribute("r", "7");
+    hit.setAttribute("data-chart-tooltip", tooltip);
+    const title = document.createElementNS(svgNS, "title");
+    title.textContent = tooltip;
+    hit.appendChild(title);
+    svg.appendChild(hit);
   });
 
   els.sparkline.innerHTML = "";
@@ -4592,7 +7472,11 @@ function renderCompareResponse(data) {
     { label: "Latency", cell: (r) => (r.execution_meta?.pipeline_latency_s != null ? `${r.execution_meta.pipeline_latency_s}s` : "—") },
     { label: "Producing model", cell: (r) => r.execution_meta?.producing_model || "—" },
   ];
-  const header = `<thead><tr><th></th>${tickers.map((t) => `<th>${escapeHtml(t)}</th>`).join("")}</tr></thead>`;
+  const header = `<thead><tr><th></th>${tickers.map((t) => {
+    const r = results[t] || {};
+    const label = compareSymbolDisplay(t, r);
+    return `<th><span class="compare-symbol">${escapeHtml(t)}</span><small>${escapeHtml(label)}</small></th>`;
+  }).join("")}</tr></thead>`;
   const bodyHtml = rows
     .map((row) => {
       const cells = tickers
@@ -4612,10 +7496,16 @@ function renderCompareResponse(data) {
     const err = r.error_metadata ? `<div class="compare-error">${escapeHtml(r.error_metadata)}</div>` : "";
     const bull = (r.bull_points || []).slice(0, 3).map((b) => `<li>${escapeHtml(b)}</li>`).join("");
     const bear = (r.bear_points || []).slice(0, 3).map((b) => `<li>${escapeHtml(b)}</li>`).join("");
+    const label = compareSymbolDisplay(t, r);
+    const metrics = renderCompareMetricChips(r);
     return `
       <div class="compare-card ${statusClass(r.status)}">
-        <div class="compare-card-head"><h4>${escapeHtml(t)}</h4><span class="status-badge ${statusClass(r.status)}">${(r.status || "").toUpperCase()}</span></div>
+        <div class="compare-card-head">
+          <h4><span>${escapeHtml(t)}</span><small>${escapeHtml(label)}</small></h4>
+          <span class="status-badge ${statusClass(r.status)}">${(r.status || "").toUpperCase()}</span>
+        </div>
         ${err}
+        ${metrics}
         <p class="compare-summary">${escapeHtml(r.summary || "—")}</p>
         <div class="compare-sides">
           <div class="compare-side bull"><h5>Bull</h5><ul>${bull || "<li class='muted'>—</li>"}</ul></div>
@@ -4625,6 +7515,46 @@ function renderCompareResponse(data) {
       </div>`;
   });
   els.compareSummaries.innerHTML = cards.join("");
+}
+
+function compareSymbolDisplay(ticker, response = {}) {
+  const symbol = normalizeTickerToken(ticker);
+  const snapshots = response.execution_meta?.extras?.structured_context?.price_snapshot || [];
+  const exact = snapshots.find((row) => normalizeTickerToken(row.ticker) === symbol) || snapshots[0] || null;
+  if (exact?.display_name) return exact.display_name;
+  const catalog = SYMBOL_CATALOG.find((item) => item.symbol === symbol);
+  return catalog?.name || SYMBOL_NAME_OVERRIDES[symbol] || symbol;
+}
+
+function compareMetricLabel(metric) {
+  const name = String(metric?.name || "").toLowerCase();
+  if (name.includes("adjusted close")) return "기준 종가";
+  if (name.includes("21d_pct")) return "1개월 수익률";
+  if (name.includes("63d_pct")) return "3개월 수익률";
+  if (name.includes("1d_pct")) return "1일 수익률";
+  if (name.includes("realized_vol_20d_pct")) return "20일 변동성";
+  return "";
+}
+
+function renderCompareMetricChips(response = {}) {
+  const seen = new Set();
+  const chips = (response.key_metrics || [])
+    .map((metric) => {
+      const label = compareMetricLabel(metric);
+      if (!label || seen.has(label)) return "";
+      seen.add(label);
+      const unit = metric.unit && metric.unit !== "price" ? metric.unit : "";
+      const asOf = metric.as_of && metric.as_of !== "unknown" ? ` · ${metric.as_of}` : "";
+      return `
+        <span class="compare-metric-chip">
+          <em>${escapeHtml(label)}</em>
+          <strong>${escapeHtml(String(metric.value ?? "—"))}${escapeHtml(unit)}</strong>
+          <small>${escapeHtml(asOf.replace(/^ · /, ""))}</small>
+        </span>`;
+    })
+    .filter(Boolean)
+    .slice(0, 5);
+  return chips.length ? `<div class="compare-metric-chips">${chips.join("")}</div>` : "";
 }
 
 function updateCompareModeUI() {
@@ -6699,11 +9629,28 @@ function bindInputs() {
   els.loadLatestBtn.addEventListener("click", loadLatest);
   if (els.homeBtn) els.homeBtn.addEventListener("click", showHome);
   if (els.marketDashboardTab) {
-    els.marketDashboardTab.addEventListener("click", () => setDashboardTab("market"));
+    els.marketDashboardTab.addEventListener("click", () => setDashboardTab("market", { updateUrl: true }));
   }
   if (els.quantLabTab) {
-    els.quantLabTab.addEventListener("click", () => setDashboardTab("quant"));
+    els.quantLabTab.addEventListener("click", () => setDashboardTab("quant", { updateUrl: true }));
   }
+  if (els.aiPortfolioTab) {
+    els.aiPortfolioTab.addEventListener("click", () => setDashboardTab("ai-portfolio", { updateUrl: true }));
+  }
+  if (els.homeDashboardTabs) {
+    els.homeDashboardTabs.addEventListener("click", (event) => {
+      const rawTarget = event.target;
+      const target = rawTarget?.closest ? rawTarget.closest("[data-dashboard-tab]") : rawTarget;
+      const nextTab = target?.dataset?.dashboardTab;
+      if (!nextTab) return;
+      event.preventDefault();
+      setDashboardTab(nextTab, { updateUrl: true });
+    });
+  }
+  window.addEventListener("hashchange", () => {
+    const requestedTab = dashboardTabFromLocation();
+    if (requestedTab) setDashboardTab(requestedTab);
+  });
   if (els.homeNewsRefresh) els.homeNewsRefresh.addEventListener("click", () => {
     loadDashboardNews(true);
     loadDashboardMarket(true);
@@ -6714,13 +9661,29 @@ function bindInputs() {
   if (els.homeHeatmapRefresh) els.homeHeatmapRefresh.addEventListener("click", () => loadDashboardEquityHeatmap(true));
   if (els.dataHealthRefresh) els.dataHealthRefresh.addEventListener("click", () => loadDataHealth(true));
   if (els.assetDetailLoad) els.assetDetailLoad.addEventListener("click", loadAssetDetail);
+  if (els.assetDetailTicker) {
+    els.assetDetailTicker.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") loadAssetDetail();
+    });
+  }
+  [els.assetDetailRange, els.assetDetailStartDate, els.assetDetailEndDate, els.assetDetailView, els.assetDetailBenchmark, els.assetDetailBenchmarkCompare].forEach((control) => {
+    if (control) control.addEventListener("change", () => {
+      if (els.assetDetailSurface?.querySelector?.(".decision-status-row")) loadAssetDetail();
+    });
+  });
   if (els.quantFeatureRun) els.quantFeatureRun.addEventListener("click", runQuantFeaturePreview);
   if (els.quantSignalRun) els.quantSignalRun.addEventListener("click", runQuantSignalPreview);
   if (els.quantStrategyRefresh) els.quantStrategyRefresh.addEventListener("click", () => loadQuantStrategies(true));
   if (els.quantStrategyNewDraft) els.quantStrategyNewDraft.addEventListener("click", () => {
     setStrategyEditor(quantStrategyDraftFromControls());
+    renderStrategyPromptReview({
+      advantages: ["현재 백테스트 조건에서 바로 검증 가능한 보수적 JSON 초안입니다."],
+      disadvantages: ["프롬프트 기반 생성이 아니므로 진입/청산 아이디어는 직접 조정해야 합니다."],
+      warnings: [],
+    });
     showQuantStrategyMessage("현재 퀀트 랩 조건으로 전략 초안을 만들었습니다.", "success");
   });
+  if (els.quantStrategyGenerate) els.quantStrategyGenerate.addEventListener("click", runQuantStrategyGenerate);
   if (els.quantStrategyDryRun) els.quantStrategyDryRun.addEventListener("click", () => runQuantStrategyDryRun());
   if (els.quantStrategySave) els.quantStrategySave.addEventListener("click", saveQuantStrategy);
   if (els.quantStrategyDelete) els.quantStrategyDelete.addEventListener("click", () => deleteQuantStrategy());
@@ -6740,7 +9703,10 @@ function bindInputs() {
     });
   }
   if (els.backtestRun) els.backtestRun.addEventListener("click", runHomeBacktest);
-  if (els.backtestTicker) els.backtestTicker.addEventListener("input", renderBacktestUniverseChips);
+  if (els.backtestTicker) els.backtestTicker.addEventListener("input", () => {
+    state.lastUniverseResolution = null;
+    renderBacktestUniverseChips();
+  });
   if (els.backtestUniverseOpen) els.backtestUniverseOpen.addEventListener("click", openSymbolPicker);
   if (els.backtestStrategy) {
     els.backtestStrategy.addEventListener("change", () => {
@@ -6766,18 +9732,36 @@ function bindInputs() {
       renderSymbolPicker();
     });
   }
+  if (els.symbolPickerAddFiltered) els.symbolPickerAddFiltered.addEventListener("click", addFilteredSymbolsToBacktestUniverse);
+  if (els.symbolPickerRemoveFiltered) els.symbolPickerRemoveFiltered.addEventListener("click", removeFilteredSymbolsFromBacktestUniverse);
   if (els.symbolPickerSearch) els.symbolPickerSearch.addEventListener("input", renderSymbolPicker);
   if (els.symbolPickerCountry) els.symbolPickerCountry.addEventListener("change", renderSymbolPicker);
   if (els.symbolPickerSector) els.symbolPickerSector.addEventListener("change", renderSymbolPicker);
+  if (els.symbolPickerSummary) {
+    els.symbolPickerSummary.addEventListener("click", (event) => {
+      const rawTarget = event.target;
+      const target = rawTarget?.closest ? rawTarget.closest("[data-symbol-scope]") : rawTarget;
+      if (target?.dataset?.symbolScope) applySymbolPickerScope(target.dataset.symbolScope);
+    });
+  }
+  if (els.symbolPickerSelected) {
+    els.symbolPickerSelected.addEventListener("click", (event) => {
+      const rawTarget = event.target;
+      const selectAll = rawTarget?.closest ? rawTarget.closest("[data-symbol-select-all]") : null;
+      const clearSelected = rawTarget?.closest ? rawTarget.closest("[data-symbol-clear-selected]") : null;
+      if (selectAll) addFilteredSymbolsToBacktestUniverse();
+      if (clearSelected) {
+        setBacktestUniverse([]);
+        renderSymbolPicker();
+      }
+    });
+  }
   if (els.symbolPickerTabs) {
     els.symbolPickerTabs.addEventListener("click", (event) => {
       const rawTarget = event.target;
       const target = rawTarget?.closest ? rawTarget.closest("[data-symbol-type]") : rawTarget;
       if (!target?.dataset?.symbolType) return;
-      state.symbolPickerType = target.dataset.symbolType || "all";
-      els.symbolPickerTabs.querySelectorAll("[data-symbol-type]").forEach((button) => {
-        button.classList.toggle("active", button === target);
-      });
+      setSymbolPickerType(target.dataset.symbolType || "all");
       renderSymbolPicker();
     });
   }
@@ -6827,6 +9811,51 @@ function bindInputs() {
     els.portfolioSyncBacktest.addEventListener("click", syncPortfolioFromBacktest);
   }
   if (els.portfolioOptimize) els.portfolioOptimize.addEventListener("click", runPortfolioOptimize);
+  if (els.aiPortfolioInvestmentTypes) {
+    els.aiPortfolioInvestmentTypes.addEventListener("click", (event) => {
+      const rawTarget = event.target;
+      const target = rawTarget?.closest ? rawTarget.closest("[data-ai-investment-type]") : rawTarget;
+      const typeId = target?.dataset?.aiInvestmentType;
+      if (!typeId) return;
+      const template = state.aiPortfolioInvestmentTypes.find((item) => item.id === typeId);
+      applyAiPortfolioTemplate(template);
+      renderAiPortfolioInvestmentTypes(state.aiPortfolioInvestmentTypes);
+    });
+  }
+  if (els.aiPortfolioGenerate) els.aiPortfolioGenerate.addEventListener("click", runAiPortfolioGenerate);
+  if (els.aiPortfolioOpsRefresh) {
+    els.aiPortfolioOpsRefresh.addEventListener("click", () => {
+      state.aiPortfolioOpsLoaded = false;
+      loadAiPortfolioOps(true);
+      loadAiPortfolioOperations(true);
+    });
+  }
+  if (els.aiPortfolioRefreshPolicies) els.aiPortfolioRefreshPolicies.addEventListener("click", () => loadAiPortfolioPolicies(true));
+  if (els.aiPortfolioHydrateData) els.aiPortfolioHydrateData.addEventListener("click", () => runAiPortfolioHydrateData({ missingOnly: false }));
+  if (els.aiPortfolioRetryMissing) els.aiPortfolioRetryMissing.addEventListener("click", () => runAiPortfolioHydrateData({ missingOnly: true }));
+  if (els.aiPortfolioSnapshotJob) els.aiPortfolioSnapshotJob.addEventListener("click", runAiPortfolioSnapshotJob);
+  if (els.aiPortfolioUniverse) els.aiPortfolioUniverse.addEventListener("change", syncAiPortfolioUniverseMode);
+  if (els.aiPortfolioCustomUniverse) els.aiPortfolioCustomUniverse.addEventListener("input", syncAiPortfolioUniverseMode);
+  if (els.aiPortfolioGenerateQuick) {
+    els.aiPortfolioGenerateQuick.addEventListener("click", () => {
+      setDashboardTab("ai-portfolio", { updateUrl: true });
+      runAiPortfolioGenerate();
+    });
+  }
+  if (els.aiPortfolioCheckRebalance) els.aiPortfolioCheckRebalance.addEventListener("click", runAiPortfolioRebalanceCheck);
+  if (els.aiPortfolioCheckRebalanceQuick) els.aiPortfolioCheckRebalanceQuick.addEventListener("click", runAiPortfolioRebalanceCheck);
+  if (els.aiPortfolioApproveRebalance) els.aiPortfolioApproveRebalance.addEventListener("click", () => updateAiPortfolioSignal("approve"));
+  if (els.aiPortfolioRejectRebalance) els.aiPortfolioRejectRebalance.addEventListener("click", () => updateAiPortfolioSignal("reject"));
+  if (els.aiPortfolioDeferRebalance) els.aiPortfolioDeferRebalance.addEventListener("click", () => updateAiPortfolioSignal("defer"));
+  if (els.aiPortfolioReportWeekly) els.aiPortfolioReportWeekly.addEventListener("click", () => generateAiPortfolioReport("weekly"));
+  if (els.aiPortfolioReportMonthly) els.aiPortfolioReportMonthly.addEventListener("click", () => generateAiPortfolioReport("monthly"));
+  if (els.aiPortfolioReportRebalance) els.aiPortfolioReportRebalance.addEventListener("click", () => generateAiPortfolioReport("rebalance"));
+  if (els.aiPortfolioReportQuick) els.aiPortfolioReportQuick.addEventListener("click", () => generateAiPortfolioReport("weekly"));
+  if (els.aiPortfolioAdvancedToggle && els.aiPortfolioPolicyForm) {
+    els.aiPortfolioAdvancedToggle.addEventListener("change", () => {
+      els.aiPortfolioPolicyForm.classList.toggle("hidden", !els.aiPortfolioAdvancedToggle.checked);
+    });
+  }
   if (els.historyToggleBtn) {
     els.historyToggleBtn.addEventListener("click", () => {
       state.historyExpanded = !state.historyExpanded;
@@ -6903,7 +9932,9 @@ function bindInputs() {
   bindTabs();
   bindDownloads();
   bindInputs();
+  initChartTooltips();
   restoreForm();
+  syncAiPortfolioUniverseMode();
   renderBacktestUniverseChips();
   populateBacktestStrategyRegistry();
   renderHistory();

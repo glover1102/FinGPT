@@ -21,8 +21,13 @@ from pipelines.analyze.risk_analysis import HeuristicRiskEngine
 from pipelines.analyze.risk_factory import get_risk_engine
 
 
-def _mk_settings(engine: str) -> SimpleNamespace:
-    return SimpleNamespace(risk_engine=engine, finbert_model_name="ProsusAI/finbert")
+def _mk_settings(engine: str, *, fingpt_enabled: bool = False) -> SimpleNamespace:
+    return SimpleNamespace(
+        risk_engine=engine,
+        finbert_model_name="ProsusAI/finbert",
+        fingpt_task_model_enabled=fingpt_enabled,
+        fingpt_task_model_name="FinGPT/fingpt-mt_llama3-8b_lora",
+    )
 
 
 class RiskFactoryTests(unittest.TestCase):
@@ -50,6 +55,33 @@ class RiskFactoryTests(unittest.TestCase):
         with patch.object(finbert_risk_engine.FinBertRiskEngine, "_load_classifier", _boom):
             engine = get_risk_engine(settings=_mk_settings("finbert"))
         self.assertIsInstance(engine, HeuristicRiskEngine)
+
+    def test_finbert_falls_back_on_unexpected_loader_exception(self) -> None:
+        from pipelines.analyze import finbert_risk_engine
+
+        with patch.object(
+            finbert_risk_engine.FinBertRiskEngine,
+            "_load_classifier",
+            lambda self: (_ for _ in ()).throw(RuntimeError("bad runtime")),
+        ):
+            engine = get_risk_engine(settings=_mk_settings("finbert"))
+        self.assertIsInstance(engine, HeuristicRiskEngine)
+
+    def test_fingpt_disabled_falls_back_to_heuristic(self) -> None:
+        engine = get_risk_engine(settings=_mk_settings("fingpt", fingpt_enabled=False))
+        self.assertIsInstance(engine, HeuristicRiskEngine)
+
+    def test_fingpt_success_returns_fingpt_risk_engine_without_eager_load(self) -> None:
+        from pipelines.fingpt.risk_engine import FinGPTRiskEngine
+        from pipelines.fingpt.task_adapter import FinGPTTaskAdapter
+
+        with patch.object(
+            FinGPTTaskAdapter,
+            "_load_pipeline",
+            lambda self: (_ for _ in ()).throw(AssertionError("must not load synchronously")),
+        ):
+            engine = get_risk_engine(settings=_mk_settings("fingpt", fingpt_enabled=True))
+        self.assertIsInstance(engine, FinGPTRiskEngine)
 
     def test_heuristic_risk_engine_reinforces_single_bull_from_summary(self) -> None:
         engine = HeuristicRiskEngine()
@@ -117,6 +149,75 @@ class FinBertEngineTests(unittest.TestCase):
         self.assertEqual(result.bear_points, ["demand softness"])
         # Neutrals are dropped intentionally.
         self.assertNotIn("guidance in-line", result.bull_points + result.bear_points)
+
+
+class FinGPTRiskEngineTests(unittest.TestCase):
+    def test_passthrough_when_llm_already_bucketed_points(self) -> None:
+        from pipelines.fingpt.risk_engine import FinGPTRiskEngine
+
+        adapter = SimpleNamespace(label_texts=lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not classify")))
+        engine = FinGPTRiskEngine(adapter)  # type: ignore[arg-type]
+        raw = {
+            "bull_points": ["margin expansion"],
+            "bear_points": ["FX headwind"],
+            "risk_flags": ["ignored"],
+        }
+
+        result = asyncio.run(engine.evaluate_risk(raw))
+
+        self.assertEqual(result.bull_points, ["margin expansion"])
+        self.assertEqual(result.bear_points, ["FX headwind"])
+
+    def test_classifies_risk_flags_when_points_missing(self) -> None:
+        from core.schemas.fingpt import FinGPTAnnotation
+        from pipelines.fingpt.risk_engine import FinGPTRiskEngine
+
+        class FakeAdapter:
+            def label_texts(self, task, texts):
+                self.task = task
+                labels = {
+                    "strong revenue beat": "positive",
+                    "demand softness": "negative",
+                    "guidance in-line": "neutral",
+                }
+                return [
+                    FinGPTAnnotation(article_id=f"inline-{index}", task=task, label=labels[text])
+                    for index, text in enumerate(texts)
+                ]
+
+        adapter = FakeAdapter()
+        engine = FinGPTRiskEngine(adapter)  # type: ignore[arg-type]
+        raw = {"risk_flags": ["strong revenue beat", "demand softness", "guidance in-line"]}
+
+        result = asyncio.run(engine.evaluate_risk(raw))
+
+        self.assertEqual(adapter.task, "sentiment")
+        self.assertEqual(result.bull_points, ["strong revenue beat"])
+        self.assertEqual(result.bear_points, ["demand softness"])
+        self.assertNotIn("guidance in-line", result.bull_points + result.bear_points)
+
+    def test_normalizes_fingpt_sentiment_aliases(self) -> None:
+        from core.schemas.fingpt import FinGPTAnnotation
+        from pipelines.fingpt.risk_engine import FinGPTRiskEngine
+
+        labels = ["bullish", "bearish", "LABEL_2", "LABEL_0", "mixed", "unknown"]
+
+        class FakeAdapter:
+            def label_texts(self, task, texts):
+                return [
+                    FinGPTAnnotation(article_id=f"inline-{index}", task=task, label=label)
+                    for index, label in enumerate(labels)
+                ]
+
+        engine = FinGPTRiskEngine(FakeAdapter())  # type: ignore[arg-type]
+        raw = {"risk_flags": [f"flag-{index}" for index in range(len(labels))]}
+
+        result = asyncio.run(engine.evaluate_risk(raw))
+
+        self.assertEqual(result.bull_points, ["flag-0", "flag-2"])
+        self.assertEqual(result.bear_points, ["flag-1", "flag-3"])
+        self.assertNotIn("flag-4", result.bull_points + result.bear_points)
+        self.assertNotIn("flag-5", result.bull_points + result.bear_points)
 
 
 if __name__ == "__main__":  # pragma: no cover

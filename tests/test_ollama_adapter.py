@@ -222,7 +222,7 @@ class OllamaAdapterTests(unittest.TestCase):
         self.assertEqual(result["_meta"]["retry_count"], 1)
         self.assertIn("AI 수요", result["summary"])
 
-    def test_run_inference_returns_final_attempt_with_language_warning(self):
+    def test_run_inference_rejects_final_non_korean_attempt(self):
         settings = Settings(
             primary_model="mistral:7b",
             enable_experimental_fallback=False,
@@ -251,11 +251,8 @@ class OllamaAdapterTests(unittest.TestCase):
                      _response_payload(english_payload),
                  ],
              ):
-            result = adapter.run_inference("NVDA", "investment view?", self.context)
-
-        self.assertEqual(result["_meta"]["retry_count"], 2)
-        self.assertEqual(result["summary"], "Demand remains strong despite supply debates.")
-        self.assertIn("Language violation", result["_meta"]["language_warning"])
+            with self.assertRaisesRegex(ValueError, "Language violation"):
+                adapter.run_inference("NVDA", "investment view?", self.context)
 
     def test_language_warning_accepts_normal_korean_output(self):
         payload = {
@@ -269,6 +266,19 @@ class OllamaAdapterTests(unittest.TestCase):
         }
 
         self.assertIsNone(ollama_adapter._language_warning(payload, "ko"))
+
+    def test_language_warning_rejects_chinese_or_mojibake_output(self):
+        payload = {
+            "summary": "需求仍然强劲，但估值压力需要谨慎。",
+            "uncertainty": "需要观察下一季度的利润率。",
+            "bull_points": [{"text": "需求改善可能推动收入。", "evidence_doc_ids": []}],
+            "bear_points": [{"text": "监管风险仍然存在。", "evidence_doc_ids": []}],
+            "key_metrics": [],
+            "catalyst_timeline": {"near_term": ["财报发布"], "mid_term": [], "long_term": []},
+            "open_questions": ["利润率是否改善？"],
+        }
+
+        self.assertIn("Language violation", ollama_adapter._language_warning(payload, "ko"))
 
     def test_run_inference_repairs_language_after_final_english_attempt(self):
         settings = Settings(

@@ -90,7 +90,10 @@ def _source_compatible_with_profile(source: str, profile) -> bool:
     if source == "transcript":
         return profile.supports_transcripts
     if source == "macro":
-        return profile.supports_macro
+        # For equity-like symbols the collector maps the macro source to a
+        # deterministic yfinance technical snapshot, so macro-only requests
+        # should not fail before the data-mart fallback can run.
+        return profile.supports_macro or profile.supports_equity_sources
     # Unknown source — let the upstream validator reject it.
     return True
 

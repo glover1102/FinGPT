@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FinGPT Local Research Assistant</title>
-  <link rel="stylesheet" href="styles.css?v=20260505-quant-lab-review-polish" />
+  <link rel="stylesheet" href="styles.css?v=20260507-asset-detail-controls" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='48' font-size='48'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E" />
 </head>
 <body>
@@ -166,13 +166,13 @@
 
         <section class="field-group two-col">
           <div>
-            <label class="field-label" for="lookback">조회 기간 <span id="lookbackValue" class="value-chip">30d</span></label>
-            <input id="lookback" type="range" min="1" max="90" value="30" step="1" />
-            <div class="range-scale"><span>1d</span><span>30d</span><span>90d</span></div>
+            <label class="field-label" for="lookback">조회 기간 <span id="lookbackValue" class="value-chip">90d</span></label>
+            <input id="lookback" type="range" min="1" max="180" value="90" step="1" />
+            <div class="range-scale"><span>1d</span><span>90d</span><span>180d</span></div>
           </div>
           <div>
-            <label class="field-label" for="topk">상위 K <span id="topkValue" class="value-chip">5</span></label>
-            <input id="topk" type="range" min="1" max="20" value="5" step="1" />
+            <label class="field-label" for="topk">상위 K <span id="topkValue" class="value-chip">15</span></label>
+            <input id="topk" type="range" min="1" max="20" value="15" step="1" />
             <div class="range-scale"><span>1</span><span>10</span><span>20</span></div>
           </div>
         </section>
@@ -182,6 +182,7 @@
           <select id="model" name="model">
             <option value="qwen">qwen2.5:7b (Ollama · 기본)</option>
           </select>
+          <div id="fingptStatus" class="form-notice info" role="status">FinGPT 보조 기능 비활성 · 기본 분석 경로에는 영향 없음</div>
         </section>
 
         <div class="button-row">
@@ -246,6 +247,9 @@
           <button id="quantLabTab" type="button" class="dashboard-tab" data-dashboard-tab="quant" role="tab" aria-selected="false">
             퀀트 랩
           </button>
+          <button id="aiPortfolioTab" type="button" class="dashboard-tab" data-dashboard-tab="ai-portfolio" role="tab" aria-selected="false">
+            AI Portfolio
+          </button>
         </div>
         <div id="homeSurfaceGrid" class="home-grid dashboard-surface-grid" data-dashboard-tab="market">
           <section class="home-card home-chart-card market-surface">
@@ -295,12 +299,51 @@
               <h3>자산 상세</h3>
               <span>가격 · 수익률 · 리스크</span>
             </div>
-            <div class="decision-form compact-form">
-              <input id="assetDetailTicker" type="text" value="SPY" maxlength="24" aria-label="Asset detail ticker" />
+            <div class="decision-form asset-detail-form">
+              <label>
+                <span>종목</span>
+                <input id="assetDetailTicker" type="text" value="SPY" maxlength="24" aria-label="Asset detail ticker" />
+              </label>
+              <label>
+                <span>기간</span>
+                <select id="assetDetailRange" aria-label="Asset detail range">
+                  <option value="3m">3개월</option>
+                  <option value="6m">6개월</option>
+                  <option value="1y" selected>1년</option>
+                  <option value="3y">3년</option>
+                  <option value="all">전체</option>
+                </select>
+              </label>
+              <label>
+                <span>시작일</span>
+                <input id="assetDetailStartDate" type="date" aria-label="Asset detail start date" />
+              </label>
+              <label>
+                <span>종료일</span>
+                <input id="assetDetailEndDate" type="date" aria-label="Asset detail end date" />
+              </label>
+              <label>
+                <span>보기</span>
+                <select id="assetDetailView" aria-label="Asset detail information view">
+                  <option value="overview" selected>전체 요약</option>
+                  <option value="price">가격 중심</option>
+                  <option value="returns">수익률 중심</option>
+                  <option value="risk">리스크 중심</option>
+                  <option value="data">데이터 품질</option>
+                </select>
+              </label>
+              <label>
+                <span>Benchmark</span>
+                <input id="assetDetailBenchmark" type="text" value="SPY" maxlength="24" aria-label="Asset detail benchmark ticker" />
+              </label>
+              <label class="checkbox-label">
+                <span>비교</span>
+                <input id="assetDetailBenchmarkCompare" type="checkbox" aria-label="Compare asset detail with benchmark" />
+              </label>
               <button type="button" id="assetDetailLoad" class="ghost-btn">조회</button>
             </div>
             <div id="assetDetailSurface" class="decision-surface">
-              <div class="home-news-empty">티커를 입력하면 저장된 가격, 수익률, 변동성, 낙폭, 최신 데이터 기준일을 확인합니다.</div>
+              <div class="home-news-empty">종목, 날짜 범위, 보기 옵션을 선택하면 저장 가격 기반 수익률 곡선, 낙폭, 변동성, 데이터 품질을 확인합니다.</div>
             </div>
           </section>
           <section class="home-card feature-card quant-surface">
@@ -339,11 +382,34 @@
             </div>
             <div class="decision-form strategy-governance-form">
               <button type="button" id="quantStrategyNewDraft" class="ghost-btn">새 초안</button>
+              <button type="button" id="quantStrategyGenerate" class="ghost-btn">로컬 LLM 생성</button>
               <button type="button" id="quantStrategyDryRun" class="ghost-btn">검증</button>
               <button type="button" id="quantStrategySave" class="ghost-btn">저장</button>
               <button type="button" id="quantStrategyDelete" class="ghost-btn danger">저장본 삭제</button>
             </div>
-            <textarea id="strategyDefinitionJson" class="strategy-json-editor" spellcheck="false" aria-label="Strategy definition JSON"></textarea>
+            <div class="strategy-editor-note">
+              왼쪽에는 만들고 싶은 전략을 한국어로 지시하고, 오른쪽에는 실제 전략 정의(JSON)만 유지합니다. Python 코드가 아니며 종목 유니버스와 벤치마크는 아래 백테스트 조건에서 관리합니다.
+            </div>
+            <div class="strategy-workbench-grid">
+              <label class="strategy-prompt-panel">
+                <span>전략 코드 프롬프트</span>
+                <textarea id="strategyPromptInput" class="strategy-prompt-input" spellcheck="false" aria-label="Local LLM strategy prompt">63일 모멘텀 상위 2개를 사고, 21일 변동성이 높은 종목은 비중을 낮추며, 모든 신호는 다음 봉 종가에 체결되게 해주세요.</textarea>
+              </label>
+              <label class="strategy-code-panel">
+                <span>실제 전략 코드</span>
+                <textarea id="strategyDefinitionJson" class="strategy-json-editor" spellcheck="false" aria-label="Strategy definition JSON only"></textarea>
+              </label>
+            </div>
+            <div id="strategyPromptReviewSurface" class="strategy-review-surface">
+              <div class="strategy-review-card">
+                <strong>장점</strong>
+                <p>프롬프트로 전략을 생성하면 여기에 장점이 정리됩니다.</p>
+              </div>
+              <div class="strategy-review-card warn">
+                <strong>단점</strong>
+                <p>거래비용, 데이터 공백, 과최적화 가능성을 저장 전 검증하세요.</p>
+              </div>
+            </div>
             <div id="quantStrategyResultSurface" class="decision-surface compact-surface">
               <div class="home-news-empty">전략을 불러오거나 초안을 만든 뒤 저장 전 검증하세요.</div>
             </div>
@@ -360,7 +426,7 @@
               <label>
                 <span>종목</span>
                 <div class="input-action-row">
-                  <input id="backtestTicker" type="text" value="SPY,TLT,GLD" maxlength="160" aria-label="Backtest tickers" />
+                  <input id="backtestTicker" type="text" value="SPY,TLT,GLD" maxlength="12000" aria-label="Backtest tickers" />
                   <button type="button" id="backtestUniverseOpen" class="ghost-btn">찾기</button>
                 </div>
                 <div id="backtestUniverseChips" class="selected-symbol-chips" aria-live="polite"></div>
@@ -469,7 +535,7 @@
             <div class="decision-form portfolio-form">
               <label>
                 <span>종목</span>
-                <input id="portfolioTickers" type="text" value="SPY,TLT,GLD" maxlength="160" aria-label="Portfolio tickers" />
+                <input id="portfolioTickers" type="text" value="SPY,TLT,GLD" maxlength="12000" aria-label="Portfolio tickers" />
               </label>
               <label>
                 <span>목적 함수</span>
@@ -524,6 +590,137 @@
               <div class="home-news-empty">백테스트와 같은 유니버스/기간으로 목표 비중, 위험 기여도, 벤치마크 민감도, 리밸런싱 초안을 계산합니다. 누락 종목과 오래된 데이터는 숨기지 않고 표시합니다.</div>
             </div>
           </section>
+          <section id="aiPortfolioSurface" class="home-card ai-portfolio-card ai-portfolio-overview-card ai-portfolio-surface">
+            <div class="home-card-head">
+              <h3>AI Portfolio</h3>
+              <span>정책 기반 포트폴리오 관리</span>
+            </div>
+            <div id="aiPortfolioOverviewSurface" class="decision-surface compact-surface">
+              <div class="home-news-empty">투자형과 정책을 선택하면 정량 엔진이 비중을 계산하고 AI 계층은 결과를 설명합니다. 실제 브로커 주문은 실행하지 않습니다.</div>
+            </div>
+            <div class="ai-portfolio-quick-actions">
+              <button type="button" id="aiPortfolioGenerateQuick" class="ghost-btn">새 포트폴리오 생성</button>
+              <button type="button" id="aiPortfolioCheckRebalanceQuick" class="ghost-btn">리밸런싱 점검</button>
+              <button type="button" id="aiPortfolioReportQuick" class="ghost-btn">리포트 생성</button>
+            </div>
+          </section>
+
+          <section class="home-card ai-portfolio-card ai-portfolio-ops-card ai-portfolio-surface">
+            <div class="home-card-head">
+              <h3>운영 상태</h3>
+              <button type="button" id="aiPortfolioOpsRefresh" class="linkish">새로고침</button>
+            </div>
+            <div id="aiPortfolioOpsSurface" class="decision-surface compact-surface">
+              <div class="home-news-empty">저장소, legacy JSON, 가격·재무 데이터 활성화 상태를 확인합니다.</div>
+            </div>
+          </section>
+
+          <section class="home-card ai-portfolio-card ai-portfolio-operations-card ai-portfolio-surface">
+            <div class="home-card-head">
+              <h3>운영 작업</h3>
+              <span>데이터 보강 · 스냅샷 · 추천 비교</span>
+            </div>
+            <div class="ai-portfolio-quick-actions">
+              <button type="button" id="aiPortfolioRefreshPolicies" class="ghost-btn">정책 목록</button>
+              <button type="button" id="aiPortfolioHydrateData" class="ghost-btn">누락 데이터 보강</button>
+              <button type="button" id="aiPortfolioRetryMissing" class="ghost-btn">현재 누락 재시도</button>
+              <button type="button" id="aiPortfolioSnapshotJob" class="ghost-btn">성과 스냅샷</button>
+            </div>
+            <div id="aiPortfolioPolicyListSurface" class="decision-surface compact-surface">
+              <div class="home-news-empty">활성/저장 정책과 최근 추천 변경을 불러올 수 있습니다.</div>
+            </div>
+            <div id="aiPortfolioRecommendationDiffSurface" class="decision-surface compact-surface">
+              <div class="home-news-empty">추천이 2개 이상이면 이전 추천과 현재 추천의 비중 차이를 표시합니다.</div>
+            </div>
+            <div id="aiPortfolioOperationsSurface" class="decision-surface compact-surface">
+              <div class="home-news-empty">데이터 보강과 스냅샷 작업 결과가 여기에 기록됩니다.</div>
+            </div>
+          </section>
+
+          <section class="home-card ai-portfolio-card ai-portfolio-create-card ai-portfolio-surface">
+            <div class="home-card-head">
+              <h3>Create Portfolio</h3>
+              <span>투자형 · 유니버스 · 정책</span>
+            </div>
+            <div class="decision-section-title">투자형 선택</div>
+            <div id="aiPortfolioInvestmentTypes" class="ai-investment-type-grid">
+              <div class="home-news-empty">투자형 템플릿을 불러오는 중입니다.</div>
+            </div>
+            <div id="aiPortfolioCreateForm" class="decision-form ai-portfolio-form">
+              <label><span>포트폴리오 이름</span><input id="aiPortfolioName" type="text" value="Balanced Growth AI Portfolio" maxlength="80" /></label>
+              <label class="ai-universe-preset"><span>유니버스 프리셋</span><select id="aiPortfolioUniverse"><option value="default_multi_asset">프리셋 · 기본 멀티에셋</option><option value="quant_lab_default">프리셋 · Quant Lab 기본</option><option value="sp500_top_200">프리셋 · 미국 대형주 200</option><option value="etf_core_100">프리셋 · 주요 ETF 100</option><option value="kr_300">프리셋 · 한국 300</option><option value="crypto_core">프리셋 · 암호화폐 2</option><option value="all_supported">프리셋 · 전체 지원 602</option><option value="custom">직접 입력 · 쉼표 구분 심볼</option></select></label>
+              <label id="aiPortfolioCustomUniverseWrap" class="ai-custom-universe"><span>직접 입력 심볼 목록</span><input id="aiPortfolioCustomUniverse" type="text" value="SPY,TLT,GLD,SGOV" maxlength="12000" placeholder="직접 입력 선택 시 예: SPY,TLT,GLD,005930.KS" /><small>프리셋 선택 시 이 입력값은 무시됩니다.</small></label>
+              <div id="aiPortfolioUniverseStatus" class="ai-universe-status decision-summary ok">현재 사용: 프리셋 · 기본 멀티에셋</div>
+              <label><span>초기 투자금</span><input id="aiPortfolioInitialCapital" type="number" value="10000000" min="0" step="100000" /></label>
+              <label><span>월 추가 납입</span><input id="aiPortfolioMonthlyContribution" type="number" value="500000" min="0" step="10000" /></label>
+              <label><span>목표 수익률 %</span><input id="aiPortfolioTargetReturn" type="number" value="8" step="0.1" /></label>
+              <label><span>벤치마크</span><input id="aiPortfolioBenchmark" type="text" value="SPY" maxlength="24" /></label>
+              <label><span>자동화 수준</span><select id="aiPortfolioAutomation"><option value="manual">manual</option><option value="alert_only" selected>alert_only</option><option value="confirm_before_apply">confirm_before_apply</option><option value="auto_paper_rebalance">auto_paper_rebalance</option></select></label>
+            </div>
+            <label class="ai-advanced-toggle"><input id="aiPortfolioAdvancedToggle" type="checkbox" checked /><span>고급 정량 설정 표시</span></label>
+            <div id="aiPortfolioPolicyForm" class="decision-form ai-portfolio-form ai-policy-form">
+              <label><span>목표 변동성 %</span><input id="aiPortfolioTargetVolatility" type="number" value="12" step="0.1" /></label>
+              <label><span>MDD 경고 %</span><input id="aiPortfolioMaxDrawdown" type="number" value="-15" step="0.1" /></label>
+              <label><span>최소 현금 %</span><input id="aiPortfolioMinCash" type="number" value="5" min="0" max="100" step="0.5" /></label>
+              <label><span>단일 자산 한도 %</span><input id="aiPortfolioMaxSingle" type="number" value="30" min="1" max="100" step="0.5" /></label>
+              <label><span>섹터 한도 %</span><input id="aiPortfolioMaxSector" type="number" value="40" min="1" max="100" step="0.5" /></label>
+              <label><span>리밸런싱 주기</span><select id="aiPortfolioRebalanceFrequency"><option value="monthly">monthly</option><option value="quarterly">quarterly</option><option value="weekly">weekly</option></select></label>
+              <label><span>비중 이탈 %</span><input id="aiPortfolioDriftThreshold" type="number" value="5" min="0" max="100" step="0.5" /></label>
+              <label><span>최대 회전율 %</span><input id="aiPortfolioMaxTurnover" type="number" value="20" min="0" max="100" step="0.5" /></label>
+              <label><span>최적화 방법</span><select id="aiPortfolioOptimization"><option value="risk_parity_max_sharpe_blend">risk_parity_max_sharpe_blend</option><option value="minimum_volatility">minimum_volatility</option><option value="risk_parity">risk_parity</option><option value="max_sharpe">max_sharpe</option><option value="momentum_tilt">momentum_tilt</option><option value="equal_weight">equal_weight</option></select></label>
+              <label><span>Lookback 월</span><input id="aiPortfolioLookbackMonths" type="number" value="12" min="1" max="120" /></label>
+              <label><span>Risk model</span><select id="aiPortfolioRiskModel"><option value="diagonal_shrinkage">diagonal_shrinkage</option><option value="sample">sample</option><option value="ledoit_wolf">ledoit_wolf</option></select></label>
+              <label><span>Expected return</span><select id="aiPortfolioExpectedReturn"><option value="momentum_adjusted_historical">momentum_adjusted_historical</option><option value="historical">historical</option></select></label>
+              <label><span>Equity min/max</span><input id="aiPortfolioEquityRange" type="text" value="50,75" /></label>
+              <label><span>Bond min/max</span><input id="aiPortfolioBondRange" type="text" value="15,35" /></label>
+              <label><span>Cash min/max</span><input id="aiPortfolioCashRange" type="text" value="0,15" /></label>
+              <label><span>Alternative min/max</span><input id="aiPortfolioAlternativeRange" type="text" value="0,15" /></label>
+              <button type="button" id="aiPortfolioGenerate" class="ghost-btn">AI Portfolio 생성</button>
+            </div>
+          </section>
+
+          <section class="home-card ai-portfolio-card ai-portfolio-recommendation-card ai-portfolio-surface">
+            <div class="home-card-head"><h3>Recommendation</h3><span>정량 결과 · AI 설명 분리</span></div>
+            <div id="aiPortfolioRecommendationSurface" class="decision-surface"><div class="home-news-empty">포트폴리오를 생성하면 추천 배분, 리스크, 제약조건, AI 설명이 표시됩니다.</div></div>
+          </section>
+
+          <section class="home-card ai-portfolio-card ai-portfolio-performance-card ai-portfolio-surface">
+            <div class="home-card-head"><h3>Performance</h3><span>성과 · 벤치마크 · 위험</span></div>
+            <div id="aiPortfolioPerformanceSurface" class="decision-surface compact-surface"><div class="home-news-empty">성과 지표는 충분한 공통 가격 이력이 있을 때만 표시합니다.</div></div>
+          </section>
+
+          <section class="home-card ai-portfolio-card ai-portfolio-compliance-card ai-portfolio-surface">
+            <div class="home-card-head"><h3>Policy Compliance</h3><span>제약조건 검사</span></div>
+            <div id="aiPortfolioComplianceSurface" class="decision-surface compact-surface"><div class="home-news-empty">정책 범위, 현금 비중, 단일 자산 한도, 누락 데이터를 검사합니다.</div></div>
+          </section>
+
+          <section class="home-card ai-portfolio-card ai-portfolio-rebalance-card ai-portfolio-surface">
+            <div class="home-card-head"><h3>Rebalancing</h3><span>사용자 승인 기반</span></div>
+            <label class="ai-current-weights-label"><span>현재 비중 JSON 또는 "SPY 40, TLT 30" 형식</span><textarea id="aiPortfolioCurrentWeights" spellcheck="false" aria-label="AI Portfolio current weights"></textarea></label>
+            <div class="ai-rebalance-actions">
+              <button type="button" id="aiPortfolioCheckRebalance" class="ghost-btn">리밸런싱 점검</button>
+              <button type="button" id="aiPortfolioApproveRebalance" class="ghost-btn" disabled>승인</button>
+              <button type="button" id="aiPortfolioRejectRebalance" class="ghost-btn danger" disabled>거절</button>
+              <button type="button" id="aiPortfolioDeferRebalance" class="ghost-btn" disabled>보류</button>
+            </div>
+            <div id="aiPortfolioRebalanceSurface" class="decision-surface compact-surface"><div class="home-news-empty">리밸런싱은 룰 기반 트리거가 있을 때만 신호를 생성합니다.</div></div>
+          </section>
+
+          <section class="home-card ai-portfolio-card ai-portfolio-reports-card ai-portfolio-surface">
+            <div class="home-card-head"><h3>Reports</h3><span>성과 · 리밸런싱 리포트</span></div>
+            <div class="ai-report-actions">
+              <button type="button" id="aiPortfolioReportWeekly" class="ghost-btn">주간 리포트</button>
+              <button type="button" id="aiPortfolioReportMonthly" class="ghost-btn">월간 리포트</button>
+              <button type="button" id="aiPortfolioReportRebalance" class="ghost-btn">리밸런싱 리포트</button>
+            </div>
+            <div id="aiPortfolioReportsSurface" class="decision-surface compact-surface"><div class="home-news-empty">생성된 리포트는 제공된 정량 결과와 이력만 사용합니다.</div></div>
+          </section>
+
+          <section class="home-card ai-portfolio-card ai-portfolio-history-card ai-portfolio-surface">
+            <div class="home-card-head"><h3>History</h3><span>정책 · 추천 · 신호 이력</span></div>
+            <div id="aiPortfolioHistorySurface" class="decision-surface compact-surface"><div class="home-news-empty">정책 생성, 추천 생성, 리밸런싱 점검, 사용자 조치가 이력으로 기록됩니다.</div></div>
+          </section>
+
           <section class="home-card home-news-card market-surface">
             <div class="home-card-head">
               <h3>주요 뉴스</h3>
@@ -718,7 +915,6 @@
         <button type="button" data-symbol-type="stock">주식</button>
         <button type="button" data-symbol-type="etf">ETF</button>
         <button type="button" data-symbol-type="crypto">암호화폐</button>
-        <button type="button" data-symbol-type="index">지수</button>
       </div>
       <div class="symbol-picker-filters">
         <select id="symbolPickerCountry" aria-label="Filter by country">
@@ -728,24 +924,29 @@
           <option value="GLOBAL">글로벌</option>
         </select>
         <select id="symbolPickerSector" aria-label="Filter by sector">
-          <option value="all">모든 섹터</option>
-          <option value="technology">Technology</option>
-          <option value="ai_semis">AI/Semis</option>
-          <option value="consumer">Consumer</option>
-          <option value="financials">Financials</option>
-          <option value="macro">Macro</option>
-          <option value="crypto">Crypto</option>
+          <option value="all">모든 범위</option>
+          <option value="us_large_cap">미국 대형주 200</option>
+          <option value="etf_index">지수 ETF</option>
+          <option value="etf_sector">섹터 ETF</option>
+          <option value="etf_bond">채권 ETF</option>
+          <option value="etf_commodity">원자재/달러 ETF</option>
+          <option value="kr_kospi200">KOSPI 200</option>
+          <option value="kr_kosdaq100">KOSDAQ 100</option>
+          <option value="crypto">BTC/ETH</option>
         </select>
       </div>
+      <div id="symbolPickerSummary" class="symbol-picker-summary" aria-live="polite"></div>
       <div id="symbolPickerSelected" class="symbol-picker-selected"></div>
       <div id="symbolPickerList" class="symbol-picker-list"></div>
       <div class="symbol-picker-actions">
+        <button type="button" id="symbolPickerAddFiltered" class="ghost-btn">현재 필터 전체 선택</button>
+        <button type="button" id="symbolPickerRemoveFiltered" class="ghost-btn">현재 필터 제거</button>
         <button type="button" id="symbolPickerClear" class="ghost-btn">선택 해제</button>
         <button type="button" id="symbolPickerApply" class="ghost-btn">유니버스 적용</button>
       </div>
     </div>
   </div>
 
-  <script src="app.js?v=20260505-quant-lab-review-comments"></script>
+  <script src="app.js?v=20260507-grounded-financial-output"></script>
 </body>
 </html>

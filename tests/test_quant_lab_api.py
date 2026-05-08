@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app.api.routers import quant_lab as quant_lab_router
 from app.api.server import app
 from pipelines.data_mart.models import PriceBar
 from pipelines.data_mart.storage import repository
@@ -41,6 +42,87 @@ def test_quant_config_and_feature_preview_endpoint(tmp_path, monkeypatch) -> Non
     assert preview.status_code == 200
     assert preview.json()["status"] == "success"
     assert preview.json()["diagnostics"]["freshness_policy"]["policy_id"] == "daily_price_t_plus_3_market_days"
+
+
+def test_quant_universe_resolve_filters_assets_without_price_history(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "research_mart.db"
+    _seed_prices(db_path)
+    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
+    client = TestClient(app)
+
+    response = client.post("/api/v1/quant/universe/resolve", json={"tickers": ["SPY", "005930.KS"], "min_rows": 2})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "partial"
+    assert body["available"] == ["SPY"]
+    assert body["unavailable"] == ["005930.KS"]
+    assert body["price_counts"]["SPY"] == 90
+    assert body["price_counts"]["005930.KS"] == 0
+
+
+def test_quant_universe_resolve_can_hydrate_missing_price_history(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "research_mart.db"
+    _seed_prices(db_path)
+    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
+
+    def fake_ensure_price_history(tickers, **kwargs):
+        rows = []
+        for idx in range(5):
+            day = (date(2026, 4, 1) + timedelta(days=idx)).isoformat()
+            rows.append(PriceBar(ticker="AVGO", date=day, close=900 + idx, adjusted_close=900 + idx, source="test"))
+        repository.upsert_prices(rows, db_path=db_path)
+        availability = repository.price_availability(tickers, min_rows=kwargs.get("min_rows", 2), db_path=db_path)
+        return {
+            "availability": availability,
+            "hydration": {
+                "enabled": True,
+                "attempted": True,
+                "hydrated": ["AVGO"],
+                "hydrated_count": 1,
+                "still_unavailable": [],
+                "still_unavailable_count": 0,
+                "rows_inserted": len(rows),
+                "rows_updated": 0,
+            },
+        }
+
+    monkeypatch.setattr(quant_lab_router, "ensure_price_history", fake_ensure_price_history)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/quant/universe/resolve",
+        json={"tickers": ["SPY", "AVGO"], "min_rows": 2, "hydrate_missing": True},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["available"] == ["SPY", "AVGO"]
+    assert body["unavailable"] == []
+    assert body["hydration"]["hydrated"] == ["AVGO"]
+    assert body["price_counts"]["AVGO"] == 5
+
+
+def test_quant_backtest_excludes_unavailable_assets_without_missing_assets(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "research_mart.db"
+    _seed_prices(db_path)
+    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
+    monkeypatch.setattr(quant_lab_pipeline, "ARTIFACT_ROOT", tmp_path / "artifacts")
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/quant/backtest",
+        json={"tickers": ["SPY", "QQQ", "005930.KS"], "benchmark": "SPY", "lookback": 21, "top_n": 2},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["tickers"] == ["SPY", "QQQ"]
+    assert body["diagnostics"]["missing_assets"] == []
+    assert body["diagnostics"]["excluded_assets"] == ["005930.KS"]
+    assert "excluded_unavailable_assets:005930.KS" in body["diagnostics"]["warnings"]
 
 
 def test_qlib_status_is_disabled_by_default() -> None:
@@ -271,3 +353,26 @@ def test_strategy_migration_endpoint_normalizes_legacy_payload() -> None:
     assert body["status"] == "success"
     assert body["strategy"]["schema_version"] == "quant_strategy_v1"
     assert body["migrations"][0]["from_schema_version"] == "quant_strategy_v0"
+
+
+def test_strategy_generate_endpoint_returns_code_only_strategy_without_llm() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/quant/strategy/generate",
+        json={
+            "prompt": "63일 모멘텀 상위 2개, 21일 변동성 확인, 다음 봉 체결",
+            "context": {"top_n": 2, "lookback": 63, "transaction_cost_bps": 5, "slippage_bps": 2},
+            "use_local_llm": False,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["model_status"] == "deterministic_fallback"
+    assert "universe" not in body["strategy"]
+    assert "benchmark" not in body["strategy"]
+    assert body["strategy"]["execution"]["trade_at"] == "next_bar_close"
+    assert body["advantages"]
+    assert body["disadvantages"]

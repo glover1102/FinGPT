@@ -8,7 +8,9 @@ import httpx
 from pydantic import BaseModel, Field
 
 from core.config.settings import load_settings
+from core.utils.asset_classifier import classify
 from core.utils.logger import get_logger
+from core.utils.symbol_registry import known_symbol_tickers, resolve_symbol_aliases
 
 logger = get_logger("pipelines.router")
 
@@ -21,12 +23,13 @@ class RoutedQuery(BaseModel):
     reasoning: str
 
 
-_KNOWN_TICKERS = {
+_CORE_KNOWN_TICKERS = {
     "AAPL", "MSFT", "NVDA", "TSLA", "GOOGL", "GOOG", "AMZN", "META",
     "JPM", "GS", "SPY", "QQQ", "XLK", "SOXX", "SMH", "TLT", "IEF", "SHY", "AGG", "LQD", "HYG",
     "USO", "GLD", "SLV", "ASML", "AMAT", "KLAC", "INTC", "AMD",
     "BTC-USD", "ETH-USD", "EURUSD=X", "DXY", "CL=F",
 }
+_KNOWN_TICKERS = _CORE_KNOWN_TICKERS | known_symbol_tickers()
 _NON_EQUITY_PROXY_TICKERS = {
     "TLT", "IEF", "SHY", "AGG", "LQD", "HYG",
     "GLD", "SLV", "USO", "CL=F",
@@ -98,14 +101,44 @@ _SECTOR_THEME_INTENT_TERMS = [
     "\ud074\ub77c\uc6b0\ub4dc",
 ]
 
-_SIMPLE_TICKERS = {ticker for ticker in _KNOWN_TICKERS if re.fullmatch(r"[A-Z0-9]+", ticker)}
+_SIMPLE_TICKERS = {ticker for ticker in _CORE_KNOWN_TICKERS if re.fullmatch(r"[A-Z0-9]+", ticker)}
 _TICKER_PATTERN = "|".join(sorted((re.escape(t) for t in _SIMPLE_TICKERS), key=len, reverse=True))
-_TICKER_RE = re.compile(rf"(?<![A-Z0-9])({_TICKER_PATTERN})(?![A-Z0-9])", re.IGNORECASE)
+_TICKER_RE = re.compile(rf"(?<![A-Za-z0-9.$=-])({_TICKER_PATTERN})(?![A-Za-z0-9])", re.IGNORECASE)
+_CATALOG_SIMPLE_TICKERS = {
+    ticker for ticker in (known_symbol_tickers() - _CORE_KNOWN_TICKERS) if re.fullmatch(r"[A-Z0-9]+", ticker)
+}
+_CATALOG_TICKER_PATTERN = "|".join(
+    sorted((re.escape(t) for t in _CATALOG_SIMPLE_TICKERS), key=len, reverse=True)
+)
+_CATALOG_TICKER_RE = re.compile(
+    rf"(?<![A-Za-z0-9.$=-])({_CATALOG_TICKER_PATTERN})(?![A-Za-z0-9])"
+) if _CATALOG_TICKER_PATTERN else None
+_PUNCTUATED_TICKERS = {ticker for ticker in _KNOWN_TICKERS if not re.fullmatch(r"[A-Z0-9]+", ticker)}
+_PUNCTUATED_TICKER_PATTERN = "|".join(
+    sorted((re.escape(t) for t in _PUNCTUATED_TICKERS), key=len, reverse=True)
+)
+_PUNCTUATED_TICKER_RE = re.compile(
+    rf"(?<![A-Za-z0-9])({_PUNCTUATED_TICKER_PATTERN})(?![A-Za-z0-9])",
+    re.IGNORECASE,
+) if _PUNCTUATED_TICKER_PATTERN else None
 _SPECIAL_TICKER_PATTERNS = {
     "BTC-USD": re.compile(r"\b(?:btc(?:-usd)?|bitcoin)\b", re.IGNORECASE),
     "ETH-USD": re.compile(r"\b(?:eth(?:-usd)?|ethereum)\b", re.IGNORECASE),
     "EURUSD=X": re.compile(r"\b(?:eurusd(?:=x)?|eur/usd|euro\s*vs\s*dollar)\b", re.IGNORECASE),
     "CL=F": re.compile(r"\b(?:cl=f|wti|crude oil|oil futures)\b", re.IGNORECASE),
+}
+_EXPLICIT_TICKER_TOKEN_RE = re.compile(
+    r"(?<![A-Za-z0-9.$=-])(?P<marker>\$?)(?P<ticker>[A-Za-z][A-Za-z0-9]{0,9}(?:[.\-=][A-Za-z0-9]{1,8})?|\d{6}\.(?:KS|KQ))(?![A-Za-z0-9])"
+)
+_CLASS_SHARE_DOT_RE = re.compile(r"^(?P<root>[A-Z]{1,5})\.(?P<class>[A-Z])$")
+_SUPPORTED_EXPLICIT_TICKER_RE = re.compile(
+    r"^(?:[A-Z]{3,5}(?:[.-][A-Z0-9]{1,4})?|[A-Z]{2,8}-USD|[A-Z]{6}=X|[A-Z]{1,3}=F|\d{6}\.(?:KS|KQ))$"
+)
+_SHORT_MARKED_TICKER_RE = re.compile(r"^[A-Z]{1,2}(?:[.-][A-Z0-9]{1,4})?$")
+_UNREGISTERED_TICKER_STOPWORDS = {
+    "AI", "API", "APP", "CEO", "CFO", "CPU", "CPI", "ETF", "EPS", "FED", "FOMC",
+    "GDP", "GPU", "IPO", "KRX", "LLM", "MDD", "NAV", "NYSE", "PBR", "PER", "ROA",
+    "ROE", "SEC", "USD",
 }
 _ALLOWED_MODES = {"single_ticker", "multi_ticker", "sector_macro", "concept"}
 _HORIZON_ALIASES = {
@@ -177,25 +210,133 @@ def _call_router_model(question: str, hint_ticker: str | None) -> dict:
     return json.loads(payload.get("response") or "{}")
 
 
-def _clean_tickers(values: list[str]) -> list[str]:
+def _normalize_ticker_token(raw: object) -> str:
+    ticker = str(raw or "").strip().upper().removeprefix("$")
+    class_match = _CLASS_SHARE_DOT_RE.fullmatch(ticker)
+    if class_match:
+        return f"{class_match.group('root')}-{class_match.group('class')}"
+    return ticker
+
+
+def _is_supported_explicit_ticker(ticker: str, *, marked: bool = False) -> bool:
+    ticker = _normalize_ticker_token(ticker)
+    ticker = str(ticker or "").strip().upper()
+    if not ticker or (ticker in _UNREGISTERED_TICKER_STOPWORDS and not marked):
+        return False
+    if ticker in _KNOWN_TICKERS:
+        return True
+    if _SUPPORTED_EXPLICIT_TICKER_RE.fullmatch(ticker):
+        return True
+    return marked and bool(_SHORT_MARKED_TICKER_RE.fullmatch(ticker))
+
+
+def _clean_tickers(
+    values: list[str],
+    *,
+    allow_unregistered: bool = False,
+    explicit_unregistered: set[str] | None = None,
+) -> list[str]:
     cleaned: list[str] = []
     seen: set[str] = set()
     for raw in values:
-        ticker = str(raw or "").strip().upper()
-        if ticker not in _KNOWN_TICKERS or ticker in seen:
+        ticker = _normalize_ticker_token(raw)
+        if ticker in seen:
             continue
+        if ticker not in _KNOWN_TICKERS:
+            if explicit_unregistered and ticker in explicit_unregistered:
+                pass
+            elif not (allow_unregistered and _is_supported_explicit_ticker(ticker)):
+                continue
         seen.add(ticker)
         cleaned.append(ticker)
     return cleaned
 
 
+def _extract_explicit_unregistered_tickers(text: str) -> list[str]:
+    haystack = str(text or "")
+    found: list[str] = []
+    for match in _EXPLICIT_TICKER_TOKEN_RE.finditer(haystack):
+        raw = match.group("ticker") or ""
+        ticker = _normalize_ticker_token(raw)
+        if ticker in _KNOWN_TICKERS:
+            continue
+        marker = bool(match.group("marker"))
+        next_char = haystack[match.end():match.end() + 1]
+        colon_suffix = next_char in {":", "："}
+        if not marker and not colon_suffix and raw != raw.upper():
+            continue
+        if _is_supported_explicit_ticker(ticker, marked=marker):
+            found.append(ticker)
+    return found
+
+
+def _extract_literal_ticker_tokens(text: str) -> list[str]:
+    haystack = str(text or "")
+    found: list[str] = []
+    for match in _EXPLICIT_TICKER_TOKEN_RE.finditer(haystack):
+        raw = match.group("ticker") or ""
+        ticker = _normalize_ticker_token(raw)
+        marker = bool(match.group("marker"))
+        next_char = haystack[match.end():match.end() + 1]
+        colon_suffix = next_char in {":", "："}
+        if not marker and not colon_suffix and raw != raw.upper():
+            continue
+        if ticker in _KNOWN_TICKERS or _is_supported_explicit_ticker(ticker, marked=marker):
+            found.append(ticker)
+    return found
+
+
+def _leading_equity_literal_ticker(text: str) -> str:
+    literal = _extract_literal_ticker_tokens(text)
+    if not literal:
+        return ""
+    first = literal[0]
+    try:
+        profile = classify(first)
+    except Exception:
+        return ""
+    if profile.asset_class in {"equity", "foreign_equity"} and not profile.is_etf:
+        return first
+    return ""
+
+
+def _is_context_proxy_ticker(ticker: str) -> bool:
+    try:
+        profile = classify(ticker)
+    except Exception:
+        return False
+    return profile.supports_macro and (not profile.supports_equity_sources or profile.asset_class != "equity" or profile.is_etf)
+
+
 def _extract_known_tickers(text: str) -> list[str]:
     found = [match.group(1) for match in _TICKER_RE.finditer(str(text or ""))]
     haystack = str(text or "")
+    if _CATALOG_TICKER_RE is not None:
+        found.extend(match.group(1) for match in _CATALOG_TICKER_RE.finditer(haystack))
+    if _PUNCTUATED_TICKER_RE is not None:
+        found.extend(match.group(1) for match in _PUNCTUATED_TICKER_RE.finditer(haystack))
     for ticker, pattern in _SPECIAL_TICKER_PATTERNS.items():
         if pattern.search(haystack):
             found.append(ticker)
-    return _clean_tickers(found)
+    found.extend(resolve_symbol_aliases(haystack))
+    literal_tokens = _extract_literal_ticker_tokens(haystack)
+    found.extend(literal_tokens)
+    explicit_unregistered = [ticker for ticker in literal_tokens if ticker not in _KNOWN_TICKERS]
+    leading_equity = _leading_equity_literal_ticker(haystack)
+    if leading_equity:
+        found = [
+            ticker for ticker in found
+            if ticker == leading_equity or not (_is_context_proxy_ticker(ticker) and ticker not in set(literal_tokens))
+        ]
+    return _clean_tickers(
+        found,
+        allow_unregistered=True,
+        explicit_unregistered=set(explicit_unregistered),
+    )
+
+
+def extract_explicit_tickers(question: str) -> list[str]:
+    return _extract_known_tickers(question)
 
 
 def _normalise_horizon(value: object) -> Literal["short_term", "medium_term", "unspecified"]:
@@ -291,6 +432,8 @@ def _non_equity_intent_route(question: str, hint_ticker: str | None = None) -> R
     q = question or ""
     q_lower = q.lower()
     found = _extract_known_tickers(q)
+    if any(ticker not in _NON_EQUITY_PROXY_TICKERS for ticker in found):
+        return None
     hinted = _clean_tickers([hint_ticker]) if hint_ticker else []
     related = _merge_tickers(found, hinted)
     non_equity = [ticker for ticker in related if ticker in _NON_EQUITY_PROXY_TICKERS]

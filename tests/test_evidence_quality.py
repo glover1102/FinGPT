@@ -1,5 +1,5 @@
 from core.schemas.retrieval import RetrievalItem
-from core.utils.evidence_quality import score_evidence_item
+from core.utils.evidence_quality import fingpt_annotation_quality_bonus, score_evidence_item
 
 
 def _item(source: str, title: str, date: str, chunk: str) -> RetrievalItem:
@@ -31,3 +31,26 @@ def test_specific_ticker_metric_date_scores_high_specificity():
     item = _item("CNBC", "MSFT earnings", "2026-05-01", "MSFT margin was 43% on 2026-05-01")
     score = score_evidence_item(item, ticker="MSFT", question="MSFT margin")
     assert score.specificity_score >= 0.80
+
+
+def test_fingpt_annotation_quality_bonus_is_capped():
+    metadata = {
+        "fingpt_annotations": [
+            {"task": "sentiment", "label": "positive", "confidence": 0.91},
+            {"task": "headline", "label": "price_up", "confidence": 0.88},
+            {"task": "ner", "label": "MSFT", "confidence": 0.77},
+            {"task": "relation", "label": "supplier", "confidence": 0.93},
+            {"task": "sentiment", "label": "neutral", "confidence": 0.80},
+        ]
+    }
+    assert fingpt_annotation_quality_bonus(metadata) == 0.1
+
+
+def test_fingpt_annotation_quality_bonus_ignores_malformed_confidence():
+    metadata = {
+        "fingpt_annotations": [
+            {"task": "sentiment", "label": "positive", "confidence": "bad"},
+            {"task": "headline", "label": "price_up", "confidence": 0.82},
+        ]
+    }
+    assert fingpt_annotation_quality_bonus(metadata) == 0.025

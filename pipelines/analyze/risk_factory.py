@@ -3,10 +3,10 @@
 The pipeline calls ``get_risk_engine()`` once per run. The resolution order is:
 
 1. Explicit ``engine_name`` argument (tests / CLI override).
-2. ``settings.risk_engine`` (env-driven — ``RISK_ENGINE=...`` in ``.env``).
+2. ``settings.risk_engine`` (env-driven ``RISK_ENGINE=...`` in ``.env``).
 3. Default: ``heuristic``.
 
-Unknown engine names are logged and fall back to heuristic, never crash — the
+Unknown engine names are logged and fall back to heuristic, never crash; the
 risk engine is a downstream refinement, not a hard prerequisite for producing
 an answer.
 """
@@ -20,7 +20,7 @@ from pipelines.analyze.risk_analysis import HeuristicRiskEngine
 logger = get_logger("pipelines.analyze.risk_factory")
 
 
-_VALID_ENGINES = {"heuristic", "finbert"}
+_VALID_ENGINES = {"heuristic", "finbert", "fingpt"}
 
 
 def get_risk_engine(
@@ -33,7 +33,7 @@ def get_risk_engine(
     name = (engine_name or getattr(settings, "risk_engine", "heuristic") or "heuristic").strip().lower()
 
     if name not in _VALID_ENGINES:
-        logger.warning("[RISK_ENGINE] unknown engine '%s' — falling back to heuristic", name)
+        logger.warning("[RISK_ENGINE] unknown engine '%s'; falling back to heuristic", name)
         return HeuristicRiskEngine()
 
     if name == "heuristic":
@@ -48,7 +48,8 @@ def get_risk_engine(
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "[RISK_ENGINE] finbert module unavailable (%s) — falling back to heuristic", exc,
+                "[RISK_ENGINE] finbert module unavailable (%s); falling back to heuristic",
+                exc,
             )
             return HeuristicRiskEngine()
 
@@ -61,7 +62,32 @@ def get_risk_engine(
             logger.info("[RISK_ENGINE] active=finbert")
             return engine
         except FinBertUnavailable as exc:
-            logger.warning("[RISK_ENGINE] finbert unavailable (%s) — falling back to heuristic", exc)
+            logger.warning("[RISK_ENGINE] finbert unavailable (%s); falling back to heuristic", exc)
             return HeuristicRiskEngine()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[RISK_ENGINE] finbert load failed (%s); falling back to heuristic", exc)
+            return HeuristicRiskEngine()
+
+    if name == "fingpt":
+        try:
+            from pipelines.fingpt.risk_engine import FinGPTRiskEngine
+            from pipelines.fingpt.task_adapter import FinGPTTaskAdapter
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "[RISK_ENGINE] fingpt module unavailable (%s); falling back to heuristic",
+                exc,
+            )
+            return HeuristicRiskEngine()
+
+        if not getattr(settings, "fingpt_task_model_enabled", False):
+            logger.warning("[RISK_ENGINE] fingpt task model disabled; falling back to heuristic")
+            return HeuristicRiskEngine()
+
+        adapter = FinGPTTaskAdapter(
+            enabled=True,
+            model_name=getattr(settings, "fingpt_task_model_name", "FinGPT/fingpt-mt_llama3-8b_lora"),
+        )
+        logger.info("[RISK_ENGINE] active=fingpt")
+        return FinGPTRiskEngine(adapter)
 
     return HeuristicRiskEngine()

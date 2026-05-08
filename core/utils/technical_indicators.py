@@ -78,13 +78,13 @@ def _metric(
 
 
 def _localize_technical_metrics(metrics: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Normalize deterministic technical metrics to Korean labels/context."""
+    """Normalize deterministic technical metrics to clean Korean labels/context."""
 
     for metric in metrics:
         name = str(metric.get("name") or "")
         if " latest close" in name:
             metric["name"] = name.replace(" latest close", " 최신 종가")
-            metric["context"] = "기술지표 계산의 기준 가격입니다."
+            metric["context"] = "기술 지표 계산에 사용한 기준 가격입니다."
         elif " 1M price momentum" in name:
             metric["name"] = name.replace(" 1M price momentum", " 1개월 가격 모멘텀")
             metric["context"] = "최근 20거래일 가격 모멘텀입니다."
@@ -94,7 +94,7 @@ def _localize_technical_metrics(metrics: list[dict[str, Any]]) -> list[dict[str,
         elif " price vs SMA" in name:
             metric["name"] = name.replace(" price vs SMA", " SMA") + " 대비 가격 괴리"
             window = re.search(r"SMA(\d+)", str(metric["name"]))
-            metric["context"] = f"{window.group(0) if window else 'SMA'} 대비 가격 괴리율입니다."
+            metric["context"] = f"{window.group(0) if window else 'SMA'} 대비 가격 괴리입니다."
         elif " RSI(14)" in name:
             metric["context"] = "70 이상은 과열, 30 이하는 침체권으로 해석하는 모멘텀 지표입니다."
         elif " MACD histogram" in name:
@@ -102,7 +102,7 @@ def _localize_technical_metrics(metrics: list[dict[str, Any]]) -> list[dict[str,
             metric["context"] = "MACD와 시그널선의 차이를 보여주는 단기 모멘텀 지표입니다."
         elif " 20D realized volatility" in name:
             metric["name"] = name.replace(" 20D realized volatility", " 20일 실현 변동성")
-            metric["context"] = "최근 20거래일 일간 수익률의 연율화 변동성입니다."
+            metric["context"] = "최근 20거래일 일간 수익률을 연율화한 변동성입니다."
         elif " volume vs 20D average" in name:
             metric["name"] = name.replace(" volume vs 20D average", " 20일 평균 대비 거래량")
             metric["context"] = "최근 거래량이 20일 평균 대비 얼마나 강한지 보여줍니다."
@@ -184,12 +184,7 @@ def compute_technical_metrics_from_history(
     evidence_doc_ids: Iterable[str] | None = None,
     source: str = "yfinance:technical",
 ) -> list[dict[str, Any]]:
-    """Compute reproducible technical indicators from OHLCV history.
-
-    The function intentionally returns schema-compatible metric dictionaries
-    rather than prose so downstream reports can show value, unit, 기준일,
-    source, and evidence consistently.
-    """
+    """Compute reproducible technical indicators from OHLCV history."""
 
     close = _close_series(history)
     if close is None or len(close) < 20:
@@ -206,7 +201,7 @@ def compute_technical_metrics_from_history(
             _fmt_number(last),
             unit="price",
             as_of=as_of,
-            context="기술지표 계산의 기준 가격입니다.",
+            context="기술 지표 계산에 사용한 기준 가격입니다.",
             source=source,
             evidence_doc_ids=evidence_doc_ids,
         )
@@ -237,7 +232,7 @@ def compute_technical_metrics_from_history(
                 _fmt_pct(distance),
                 unit="%",
                 as_of=as_of,
-                context=f"SMA{window} {_fmt_number(sma)} 대비 가격 괴리율입니다.",
+                context=f"SMA{window} {_fmt_number(sma)} 대비 가격 괴리입니다.",
                 source=source,
                 evidence_doc_ids=evidence_doc_ids,
             )
@@ -282,7 +277,7 @@ def compute_technical_metrics_from_history(
                     _fmt_pct(vol * math.sqrt(252.0) * 100.0),
                     unit="%",
                     as_of=as_of,
-                    context="최근 20거래일 일간 수익률의 연율화 변동성입니다.",
+                    context="최근 20거래일 일간 수익률을 연율화한 변동성입니다.",
                     source=source,
                     evidence_doc_ids=evidence_doc_ids,
                 )

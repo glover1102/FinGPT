@@ -80,6 +80,9 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
         try:
             page.goto(f"{base_url.rstrip('/')}/ui/", wait_until="domcontentloaded", timeout=timeout_ms)
             page.locator("#quantLabTab").click()
+            if page.locator("#homeSurfaceGrid").get_attribute("data-dashboard-tab") != "quant":
+                raise AssertionError("quant dashboard tab did not activate")
+            page.locator(".strategy-governance-card").wait_for(state="visible", timeout=timeout_ms)
             _mark(checked, "quant tab")
 
             for selector in [
@@ -91,16 +94,38 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
                 "#backtestStrategyRegistry",
                 "#backtestBenchmark",
                 "#backtestBenchmarkCompare",
+                "#assetDetailRange",
+                "#assetDetailStartDate",
+                "#assetDetailEndDate",
+                "#assetDetailView",
+                "#assetDetailBenchmark",
+                "#assetDetailBenchmarkCompare",
                 "#portfolioBenchmark",
                 "#portfolioCovarianceMethod",
                 "#portfolioShrinkageAlpha",
+                "#strategyPromptInput",
+                "#quantStrategyGenerate",
                 "#strategyDefinitionJson",
+                "#strategyPromptReviewSurface",
                 "#quantStrategyDryRun",
             ]:
                 page.locator(selector).wait_for(state="visible", timeout=timeout_ms)
                 _mark(checked, selector)
             page.locator("#symbolPickerModal").wait_for(state="attached", timeout=timeout_ms)
             _mark(checked, "#symbolPickerModal")
+
+            page.locator("#assetDetailTicker").fill("QQQ")
+            page.locator("#assetDetailRange").select_option("1y")
+            page.locator("#assetDetailView").select_option("overview")
+            page.locator("#assetDetailBenchmark").fill("SPY")
+            if not page.locator("#assetDetailBenchmarkCompare").is_checked():
+                page.locator("#assetDetailBenchmarkCompare").check()
+            page.locator("#assetDetailLoad").click()
+            page.locator("#assetDetailSurface .chart-y-label").first.wait_for(state="visible", timeout=timeout_ms)
+            page.locator("#assetDetailSurface [data-chart-tooltip]").first.wait_for(state="visible", timeout=timeout_ms)
+            page.locator("text=수익률 곡선").wait_for(state="visible", timeout=timeout_ms)
+            page.locator("text=자산 수익률 비교").wait_for(state="visible", timeout=timeout_ms)
+            _mark(checked, "asset detail date and curve controls")
 
             page.locator("#backtestFreshnessProfile").select_option("historical_lab")
             page.locator("#backtestTicker").fill("SPY,QQQ,TLT")
@@ -109,6 +134,37 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
                 page.locator("#backtestBenchmarkCompare").check()
             page.locator("#backtestUniverseOpen").click()
             page.locator("#symbolPickerModal").wait_for(state="visible", timeout=timeout_ms)
+            for selector in ["#symbolPickerSummary", "#symbolPickerAddFiltered", "#symbolPickerRemoveFiltered"]:
+                page.locator(selector).wait_for(state="visible", timeout=timeout_ms)
+                _mark(checked, selector)
+            page.locator('[data-symbol-scope="kr_equity"]').click()
+            page.locator('[data-symbol-select-all]').wait_for(state="visible", timeout=timeout_ms)
+            page.locator('[data-symbol-select-all]').click()
+            selected_after_all = [
+                token.strip()
+                for token in page.locator("#backtestTicker").input_value().split(",")
+                if token.strip()
+            ]
+            if len(selected_after_all) < 300:
+                raise AssertionError(
+                    f"symbol picker select-all should keep the full Korean universe, got {len(selected_after_all)}"
+                )
+            page.locator("#symbolPickerClear").click()
+            page.locator("#symbolPickerSearch").fill("005930")
+            page.locator('[data-symbol-toggle="005930.KS"]').wait_for(state="visible", timeout=timeout_ms)
+            page.locator("text=삼성전자").wait_for(state="visible", timeout=timeout_ms)
+            _mark(checked, "expanded korea universe")
+            _mark(checked, "symbol picker select all")
+            page.locator('[data-symbol-type="all"]').click()
+            page.locator("#symbolPickerCountry").select_option("all")
+            page.locator("#symbolPickerSector").select_option("all")
+            page.locator('[data-symbol-scope="etf_core"]').click()
+            page.locator("#symbolPickerSearch").fill("ACWI")
+            page.locator("text=iShares MSCI ACWI ETF").wait_for(state="visible", timeout=timeout_ms)
+            _mark(checked, "expanded etf names")
+            page.locator('[data-symbol-type="all"]').click()
+            page.locator("#symbolPickerCountry").select_option("all")
+            page.locator("#symbolPickerSector").select_option("all")
             page.locator("#symbolPickerSearch").fill("NVDA")
             page.locator('[data-symbol-toggle="NVDA"]').click()
             page.locator("#symbolPickerApply").click()
@@ -140,15 +196,25 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
                 page.locator("#backtestStrategyRegistry").select_option(strategy_value)
                 _mark(checked, "strategy governance linked selector")
             page.locator("#quantStrategyNewDraft").click()
+            editor_value = page.locator("#strategyDefinitionJson").input_value()
+            if '"universe"' in editor_value or '"benchmark"' in editor_value:
+                raise AssertionError("strategy editor should not contain universe or benchmark fields")
+            page.locator("text=Python 코드가 아니며").wait_for(state="visible", timeout=timeout_ms)
+            page.locator("text=장점").wait_for(state="visible", timeout=timeout_ms)
+            page.locator("text=단점").wait_for(state="visible", timeout=timeout_ms)
+            _mark(checked, "strategy editor code only")
             page.locator("#quantStrategyDryRun").click()
             page.locator("#quantStrategyResultSurface .decision-status-row").wait_for(state="visible", timeout=timeout_ms)
             _mark(checked, "strategy governance dry-run")
 
             page.locator("#backtestRun").click()
             page.locator("#backtestSurface .decision-status-row").wait_for(state="visible", timeout=timeout_ms)
+            page.locator("#backtestSurface .chart-y-label").first.wait_for(state="visible", timeout=timeout_ms)
+            page.locator("#backtestSurface [data-chart-tooltip]").first.wait_for(state="visible", timeout=timeout_ms)
             page.locator("text=수익 곡선 비교").wait_for(state="visible", timeout=timeout_ms)
             page.locator('#backtestSurface [data-action="replay-backtest"]').wait_for(state="visible", timeout=timeout_ms)
             _mark(checked, "backtest")
+            _mark(checked, "curve chart axes and hover tooltips")
             _mark(checked, "backtest benchmark comparison")
 
             page.locator('#backtestSurface [data-action="replay-backtest"]').click()

@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field, field_validator
 
+from app.api.routers.market_utils import clean_ticker_list
 from core.schemas.quant import (
     QuantBacktestRequest,
     QuantBacktestResponse,
@@ -32,11 +34,47 @@ from pipelines.orchestration.quant_lab_pipeline import (
     verify_backtest_export,
 )
 from pipelines.adapters.qlib_adapter import qlib_export_preview, qlib_status
+from pipelines.data_mart.jobs.ensure_price_history import ensure_price_history
+from pipelines.data_mart.storage.repository import price_availability
+from pipelines.strategies.generator import generate_strategy_from_prompt
 from pipelines.strategies.registry import get_strategy, list_strategies
 from pipelines.strategies.storage import delete_strategy, load_strategy, migrate_strategy, save_strategy, validate_strategy
 
 
 router = APIRouter(prefix="/api/v1/quant", tags=["quant_lab"])
+
+
+class QuantUniverseResolveRequest(BaseModel):
+    tickers: list[str] = Field(default_factory=list)
+    start_date: str | None = None
+    end_date: str | None = None
+    min_rows: int = Field(default=2, ge=1, le=5000)
+    hydrate_missing: bool = False
+    max_hydrate_assets: int = Field(default=750, ge=0, le=1000)
+    hydrate_batch_size: int = Field(default=40, ge=1, le=100)
+
+    @field_validator("tickers", mode="before")
+    @classmethod
+    def _clean_tickers(cls, value: Any) -> list[str]:
+        return clean_ticker_list(value)
+
+    @field_validator("start_date", "end_date", mode="before")
+    @classmethod
+    def _clean_date(cls, value: Any) -> str | None:
+        cleaned = str(value or "").strip()
+        return cleaned or None
+
+
+class QuantStrategyGenerateRequest(BaseModel):
+    prompt: str = Field(default="", max_length=5000)
+    context: dict[str, Any] = Field(default_factory=dict)
+    use_local_llm: bool = True
+    timeout_s: float = Field(default=45.0, ge=4.0, le=45.0)
+
+    @field_validator("prompt", mode="before")
+    @classmethod
+    def _clean_prompt(cls, value: Any) -> str:
+        return str(value or "").strip()
 
 
 @router.get("/config")
@@ -76,6 +114,55 @@ async def post_signal_generate(request: QuantSignalGenerateRequest) -> QuantSign
 @router.post("/backtest", response_model=QuantBacktestResponse)
 async def post_quant_backtest(request: QuantBacktestRequest) -> QuantBacktestResponse:
     return run_quant_backtest(request)
+
+
+@router.post("/universe/resolve")
+async def post_quant_universe_resolve(request: QuantUniverseResolveRequest) -> dict[str, Any]:
+    hydration: dict[str, Any] = {
+        "enabled": False,
+        "attempted": False,
+        "hydrated": [],
+        "hydrated_count": 0,
+        "still_unavailable": [],
+        "still_unavailable_count": 0,
+    }
+    if request.hydrate_missing:
+        resolved = ensure_price_history(
+            request.tickers,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            min_rows=request.min_rows,
+            hydrate_missing=True,
+            max_hydrate_assets=request.max_hydrate_assets,
+            batch_size=request.hydrate_batch_size,
+        )
+        availability = resolved["availability"]
+        hydration = dict(resolved.get("hydration") or hydration)
+    else:
+        availability = price_availability(
+            request.tickers,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            min_rows=request.min_rows,
+        )
+    items = [availability[ticker] for ticker in request.tickers if ticker in availability]
+    available = [item["ticker"] for item in items if item.get("available")]
+    unavailable = [item["ticker"] for item in items if not item.get("available")]
+    status = "success" if available and not unavailable else ("partial" if available else "empty")
+    return {
+        "status": status,
+        "requested_count": len(request.tickers),
+        "available_count": len(available),
+        "unavailable_count": len(unavailable),
+        "available": available,
+        "unavailable": unavailable,
+        "items": items,
+        "price_counts": {item["ticker"]: int(item.get("row_count") or 0) for item in items},
+        "latest_price_dates": {item["ticker"]: item.get("latest_date") or "" for item in items if item.get("latest_date")},
+        "date_range": {"start": request.start_date, "end": request.end_date},
+        "min_rows": request.min_rows,
+        "hydration": hydration,
+    }
 
 
 @router.get("/backtests")
@@ -306,6 +393,16 @@ async def post_strategy_dry_run(payload: dict[str, Any]) -> dict[str, Any]:
             "migration_history": strategy.get("migration_history") or [],
         },
     }
+
+
+@router.post("/strategy/generate")
+async def post_strategy_generate(request: QuantStrategyGenerateRequest) -> dict[str, Any]:
+    return generate_strategy_from_prompt(
+        request.prompt,
+        context=request.context,
+        use_local_llm=request.use_local_llm,
+        timeout_s=request.timeout_s,
+    )
 
 
 @router.post("/strategy/migrate")

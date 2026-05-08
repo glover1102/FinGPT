@@ -11,6 +11,7 @@ from core.utils.asset_classifier import classify
 from core.utils.decision_support import enrich_research_response
 from core.utils.model_capabilities import model_capability_dict
 from core.utils.query_planner import plan_query
+from core.utils.symbol_registry import symbol_display_name
 from core.utils.technical_indicators import technical_metrics_from_retrieval_items
 
 # Opaque event sink used by the SSE endpoint. The orchestrator only cares
@@ -32,7 +33,12 @@ from core.utils.logger import get_logger
 import asyncio
 from pipelines.collect.openbb_collector import collect_data
 from pipelines.collect.models import CollectionOutcome
-from pipelines.collect.fundamentals_card import collect_fundamentals_card
+from pipelines.collect.fundamentals_card import (
+    collect_fundamentals_card,
+    fundamentals_card_metrics,
+    fundamentals_card_to_retrieval_item,
+    fundamentals_metrics_from_retrieval_items,
+)
 from pipelines.ingest.qdrant_ingestor import ingest_documents
 from pipelines.retrieve.qdrant_retriever import retrieve_context
 from pipelines.retrieve.multi_query_retriever import retrieve_context_multi
@@ -131,7 +137,31 @@ def _normalise_sources_for_pipeline(ticker: str, question: str, sources: Any) ->
     # explicitly extend the known source contract.
     known = set(KNOWN_COLLECTION_SOURCES)
     filtered = [source for source in cleaned if source in known]
-    return filtered or list(DEFAULT_COLLECTION_SOURCES)
+    filtered = filtered or list(DEFAULT_COLLECTION_SOURCES)
+    if profile is None:
+        return filtered
+
+    compatible = [
+        source for source in filtered
+        if (
+            source == "news" and (profile.supports_equity_sources or profile.supports_macro)
+        ) or (
+            source == "transcript" and profile.supports_transcripts
+        ) or (
+            source == "macro" and (profile.supports_macro or profile.supports_equity_sources)
+        )
+    ]
+    if compatible:
+        return filtered
+
+    fallback = ""
+    if profile.supports_equity_sources:
+        fallback = "news"
+    elif profile.supports_macro:
+        fallback = "macro"
+    if fallback and fallback not in filtered:
+        return [fallback, *filtered]
+    return filtered
 
 
 def _apply_collection_outcome(
@@ -328,6 +358,44 @@ async def _finalize_response(
         elapsed_s=round(elapsed, 2),
         stages_ran=list(stages_ran or []),
     )
+    return response
+
+
+def _serialize_fingpt_annotation_result(result: Any) -> dict[str, Any] | None:
+    if result is None:
+        return None
+    if isinstance(result, dict):
+        status = result.get("status")
+        detail = result.get("detail")
+        documents_seen = result.get("documents_seen", 0)
+        raw_annotations = result.get("annotations") or []
+    else:
+        status = getattr(result, "status", None)
+        detail = getattr(result, "detail", None)
+        documents_seen = getattr(result, "documents_seen", 0)
+        raw_annotations = getattr(result, "annotations", []) or []
+
+    annotations: list[dict[str, Any]] = []
+    for annotation in raw_annotations:
+        if hasattr(annotation, "model_dump"):
+            annotations.append(annotation.model_dump(mode="json"))
+        elif isinstance(annotation, dict):
+            annotations.append(dict(annotation))
+    return {
+        "status": str(status or "unknown"),
+        "detail": str(detail or ""),
+        "documents_seen": int(documents_seen or 0),
+        "annotations": annotations,
+    }
+
+
+def _attach_fingpt_annotation_meta(response: AnalysisResponse, result: Any) -> AnalysisResponse:
+    metadata = _serialize_fingpt_annotation_result(result)
+    if metadata is None:
+        return response
+    if response.execution_meta is None:
+        response.execution_meta = ExecutionMeta()
+    response.execution_meta.extras["fingpt_annotations"] = metadata
     return response
 
 
@@ -534,6 +602,8 @@ def _filter_llm_metrics(raw_metrics: Any, technical_metrics: list[dict[str, Any]
             continue
         if technical_metrics and _metric_overlaps_technical(item, technical_metrics):
             continue
+        if technical_metrics and not item.get("evidence_doc_ids"):
+            continue
         filtered.append(item)
     return filtered
 
@@ -545,6 +615,164 @@ def _find_metric(metrics: list[KeyMetric], *needles: str) -> KeyMetric | None:
         if any(needle in haystack for needle in lowered):
             return metric
     return None
+
+
+_VALUATION_QUESTION_TERMS = (
+    "\ud569\ub9ac",
+    "\ubc38\ub958\uc5d0\uc774\uc158",
+    "\uc800\ud3c9\uac00",
+    "\uace0\ud3c9\uac00",
+    "\uc801\uc815\uac00",
+    "\uc2f8\ub2e4",
+    "\ube44\uc2f8\ub2e4",
+    "valuation",
+    "fair value",
+    "fairly valued",
+    "reasonable",
+    "expensive",
+    "cheap",
+    "overvalued",
+    "undervalued",
+)
+
+
+def _is_valuation_question(question: str | None) -> bool:
+    lowered = str(question or "").lower()
+    return any(term in lowered for term in _VALUATION_QUESTION_TERMS)
+
+
+def _find_symbol_metric(key_metrics: list[KeyMetric], ticker: str, *needles: str) -> KeyMetric | None:
+    ticker_lower = str(ticker or "").lower()
+    lowered_needles = [needle.lower() for needle in needles if needle]
+    for metric in key_metrics:
+        haystack = f"{metric.name} {metric.context} {metric.source}".lower()
+        if ticker_lower and ticker_lower not in haystack:
+            continue
+        if all(needle in haystack for needle in lowered_needles):
+            return metric
+    return _find_metric(key_metrics, *needles)
+
+
+def _metric_value_phrase(metric: KeyMetric | None) -> str:
+    if metric is None:
+        return ""
+    value = str(metric.value or "").strip()
+    unit = str(metric.unit or "").strip()
+    if not value:
+        return ""
+    if unit and unit not in value:
+        if unit == "%":
+            value = f"{value}%"
+        elif unit.lower() == "price":
+            value = value
+        else:
+            value = f"{value} {unit}"
+    as_of = str(metric.as_of or "").strip()
+    return f"{value}({as_of} \uae30\uc900)" if as_of and as_of != "unknown" else value
+
+
+def _metric_evidence_ids(*metrics: KeyMetric | None) -> list[str]:
+    ids: list[str] = []
+    seen: set[str] = set()
+    for metric in metrics:
+        if metric is None:
+            continue
+        for raw in metric.evidence_doc_ids or []:
+            doc_id = str(raw or "").strip()
+            if doc_id and doc_id not in seen:
+                seen.add(doc_id)
+                ids.append(doc_id)
+    return ids
+
+
+def _valuation_guard_texts(
+    *,
+    ticker: str,
+    question: str | None,
+    key_metrics: list[KeyMetric],
+) -> tuple[str, str, list[str], list[str], list[list[str]], list[list[str]]] | None:
+    if not _is_valuation_question(question):
+        return None
+
+    close = _find_symbol_metric(key_metrics, ticker, "data-mart adjusted close")
+    ret_1d = _find_symbol_metric(key_metrics, ticker, "1d_pct")
+    ret_21d = _find_symbol_metric(key_metrics, ticker, "21d_pct")
+    ret_63d = _find_symbol_metric(key_metrics, ticker, "63d_pct")
+    vol_20d = _find_symbol_metric(key_metrics, ticker, "realized_vol_20d_pct")
+    display = symbol_display_name(ticker)
+
+    facts: list[str] = []
+    close_text = _metric_value_phrase(close)
+    if close_text:
+        facts.append(f"\uc870\uc815\uc885\uac00 {close_text}")
+    ret_1d_text = _metric_value_phrase(ret_1d)
+    if ret_1d_text:
+        facts.append(f"1\uc77c \uc218\uc775\ub960 {ret_1d_text}")
+    ret_21d_text = _metric_value_phrase(ret_21d)
+    if ret_21d_text:
+        facts.append(f"1\uac1c\uc6d4 \uc218\uc775\ub960 {ret_21d_text}")
+    ret_63d_text = _metric_value_phrase(ret_63d)
+    if ret_63d_text:
+        facts.append(f"3\uac1c\uc6d4 \uc218\uc775\ub960 {ret_63d_text}")
+    vol_20d_text = _metric_value_phrase(vol_20d)
+    if vol_20d_text:
+        facts.append(f"20\uc77c \uc2e4\ud604 \ubcc0\ub3d9\uc131 {vol_20d_text}")
+
+    if facts:
+        fact_sentence = ", ".join(facts)
+        summary = (
+            f"{display}\uc740 \ub85c\uceec \ub370\uc774\ud130\ub9c8\ud2b8 \uae30\uc900 {fact_sentence}\uc774 \ud655\uc778\ub429\ub2c8\ub2e4. "
+            "\uc774 \uc815\ubcf4\ub294 \uac00\uaca9 \ucd94\uc138\uc640 \ub2e8\uae30 \ub9ac\uc2a4\ud06c \ud310\ub2e8\uc5d0\ub294 \uc720\uc6a9\ud558\uc9c0\ub9cc, "
+            "PER, PBR, EPS, \uc2e4\uc801 \ucee8\uc13c\uc11c\uc2a4, \ubaa9\ud45c\uc8fc\uac00 \uac19\uc740 \ubc38\ub958\uc5d0\uc774\uc158 \uadfc\uac70\uac00 \uc5c6\uc73c\uba74 "
+            "'\uc8fc\uac00\uac00 \ud569\ub9ac\uc801'\uc774\ub77c\uace0 \ub2e8\uc815\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4. "
+            "\ud604\uc7ac \uacb0\ub860\uc740 \uac00\uaca9 \ubaa8\uba58\ud140\uc740 \ud655\uc778\ud558\ub418 \ubc38\ub958\uc5d0\uc774\uc158 \ud310\ub2e8\uc740 \ubcf4\ub958\uc785\ub2c8\ub2e4."
+        )
+    else:
+        summary = (
+            f"{display}\uc5d0 \ub300\ud55c \uac00\uaca9 \uc2a4\ub0c5\uc0f7\uc774 \ub85c\uceec \ub370\uc774\ud130\ub9c8\ud2b8\uc5d0\uc11c \ud655\uc778\ub418\uc9c0 \uc54a\uc544 "
+            "\uc8fc\uac00 \ud569\ub9ac\uc131\uc744 \ub2e8\uc815\ud560 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4. PER, PBR, EPS, \uc2e4\uc801 \ucee8\uc13c\uc11c\uc2a4\uc640 "
+            "\ucd5c\uc2e0 \uc885\uac00\uac00 \uac19\uc774 \ud655\uc778\ub420 \ub54c\uae4c\uc9c0 \ud310\ub2e8\uc744 \ubcf4\ub958\ud574\uc57c \ud569\ub2c8\ub2e4."
+        )
+
+    uncertainty = (
+        "\uc774 \uc751\ub2f5\uc740 \ud655\uc778 \uac00\ub2a5\ud55c \ub370\uc774\ud130\ub9c8\ud2b8 \uac00\uaca9, \uc218\uc775\ub960, \ubcc0\ub3d9\uc131\uc744 \uc6b0\uc120 \uc0ac\uc6a9\ud588\uc2b5\ub2c8\ub2e4. "
+        "\ud604\uc7ac \uadfc\uac70\ub9cc\uc73c\ub85c\ub294 \uc808\ub300\uc801 \uc800\ud3c9\uac00/\uace0\ud3c9\uac00 \ud310\ub2e8\uc774 \ubd88\uac00\ud558\uba70, "
+        "PER, PBR, EPS, \uc2e4\uc801 \ucee8\uc13c\uc11c\uc2a4, \uc5c5\uc885 \ubc30\uc218, \ubaa9\ud45c\uc8fc\uac00 \uadfc\uac70\uac00 \ucd94\uac00\ub85c \ud544\uc694\ud569\ub2c8\ub2e4."
+    )
+
+    trend_evidence = _metric_evidence_ids(close, ret_1d, ret_21d, ret_63d)
+    risk_evidence = _metric_evidence_ids(vol_20d, ret_21d, ret_63d)
+    trend_parts = []
+    if ret_21d_text:
+        trend_parts.append(f"1\uac1c\uc6d4 {ret_21d_text}")
+    if ret_63d_text:
+        trend_parts.append(f"3\uac1c\uc6d4 {ret_63d_text}")
+    trend_phrase = ", ".join(trend_parts) or "\uc218\uc775\ub960 \uc9c0\ud45c \ubd80\uc871"
+    risk_phrase = f"20\uc77c \uc2e4\ud604 \ubcc0\ub3d9\uc131 {vol_20d_text}" if vol_20d_text else "\ubcc0\ub3d9\uc131 \uadfc\uac70 \ubd80\uc871"
+    bull_points = [
+        (
+            "\ud655\uc778 \uac00\ub2a5\ud55c \uae0d\uc815 \uadfc\uac70\ub294 \uac00\uaca9 \ubaa8\uba58\ud140\uc785\ub2c8\ub2e4. "
+            f"{display}\uc758 \ucd5c\uc2e0 \ub370\uc774\ud130\ub9c8\ud2b8 \uc9c0\ud45c\ub294 "
+            f"{trend_phrase}\ub97c \ubcf4\uc5ec\uc90d\ub2c8\ub2e4."
+        ),
+        (
+            "\ub85c\uceec \ub370\uc774\ud130\ub9c8\ud2b8\uac00 \uae30\uc900\uc77c, \uc885\uac00, \uc218\uc775\ub960, \ubcc0\ub3d9\uc131\uc744 \uac19\uc740 \uae30\uc900\uc73c\ub85c \uc81c\uacf5\ud558\ubbc0\ub85c "
+            "\ub2e4\ub978 \uc885\ubaa9\uacfc\uc758 \uc0c1\ub300 \ube44\uad50 \ubc0f \ud6c4\uc18d \uc2e4\uc801 \uadfc\uac70 \uac80\uc99d\uc758 \ucd9c\ubc1c\uc810\uc740 \uba85\ud655\ud569\ub2c8\ub2e4."
+        ),
+    ]
+    bear_points = [
+        (
+            "PER, PBR, EPS, \uc2e4\uc801 \ucee8\uc13c\uc11c\uc2a4, \uc5c5\uc885 \ubc30\uc218 \ub370\uc774\ud130\uac00 \uc5c6\ub294 \uc0c1\ud0dc\uc5d0\uc11c\ub294 "
+            "\uc8fc\uac00\uac00 \ud569\ub9ac\uc801\uc774\ub77c\ub294 \uacb0\ub860\uc744 \ub0b4\ub9ac\uba74 \ud658\uac01 \uc704\ud5d8\uc774 \ud07d\ub2c8\ub2e4."
+        ),
+        (
+            f"{risk_phrase} \ub54c\ubb38\uc5d0 "
+            "\ucd5c\uadfc \uc0c1\uc2b9\uc774 \ube68\ub790\ub358 \uc885\ubaa9\uc740 \uc801\uc815\uac00 \ub17c\ub9ac\ubcf4\ub2e4 \uc9c4\uc785 \ud0c0\uc774\ubc0d\uacfc \uc190\uc2e4 \ud55c\ub3c4\ub97c \uba3c\uc800 \uad00\ub9ac\ud574\uc57c \ud569\ub2c8\ub2e4."
+        ),
+    ]
+    bull_evidence = [trend_evidence, trend_evidence]
+    bear_evidence = [[], risk_evidence]
+    return summary, uncertainty, bull_points, bear_points, bull_evidence, bear_evidence
 
 
 def _technical_summary(ticker: str, key_metrics: list[KeyMetric]) -> str:
@@ -754,12 +982,18 @@ def _deterministic_inference_fallback(
 def _sanitize_decision_texts(
     *,
     ticker: str,
+    question: str | None,
     summary: Any,
     uncertainty: Any,
     bull_points: list[str],
     bear_points: list[str],
     key_metrics: list[KeyMetric],
 ) -> tuple[str, str, list[str], list[str], list[list[str]], list[list[str]], bool]:
+    guarded = _valuation_guard_texts(ticker=ticker, question=question, key_metrics=key_metrics)
+    if guarded is not None:
+        clean_summary, clean_uncertainty, bulls, bears, bull_evidence, bear_evidence = guarded
+        return clean_summary, clean_uncertainty, bulls, bears, bull_evidence, bear_evidence, True
+
     changed = False
     cleaned_summary = " ".join(str(summary or "").split()).strip()
     if _is_unusable_korean_text(cleaned_summary):
@@ -801,16 +1035,20 @@ def _merge_key_metric_dicts(existing: list[KeyMetric], candidates: list[dict[str
             continue
         evidence_doc_ids = _normalize_doc_id_list(item.get("evidence_doc_ids") or [], context_items)
         merged.append(
-            KeyMetric(
-                name=name,
-                value=value,
-                unit=str(item.get("unit") or "").strip(),
-                as_of=_metric_as_of(item.get("as_of"), evidence_doc_ids, context_items),
-                context=str(item.get("context") or "").strip(),
-                source=str(item.get("source") or "").strip(),
-                freshness_status=str(item.get("freshness_status") or "unknown").strip() or "unknown",
-                evidence_doc_ids=evidence_doc_ids,
-            )
+                KeyMetric(
+                    name=name,
+                    value=value,
+                    unit=str(item.get("unit") or "").strip(),
+                    as_of=_metric_as_of(item.get("as_of"), evidence_doc_ids, context_items),
+                    context=str(item.get("context") or "").strip(),
+                    source=str(item.get("source") or "").strip(),
+                    source_type=str(item.get("source_type") or "").strip(),
+                    calculation_method=item.get("calculation_method"),
+                    is_deterministic=bool(item.get("is_deterministic", False)),
+                    grounding_status=str(item.get("grounding_status") or "unknown").strip() or "unknown",
+                    freshness_status=str(item.get("freshness_status") or "unknown").strip() or "unknown",
+                    evidence_doc_ids=evidence_doc_ids,
+                )
         )
         seen.add(key)
     return merged
@@ -954,6 +1192,409 @@ def _single_ticker_quant_snapshot(
             "metric_count": len(metric_records),
         },
     }
+
+
+# Clean Korean overrides for deterministic paths. The original deterministic
+# branches are deliberately replaced here so model failures never surface
+# mojibake or Chinese-looking fallback prose to the UI/report.
+def _metric_overlaps_technical(metric: dict[str, Any], technical_metrics: list[dict[str, Any]]) -> bool:
+    haystack = f"{metric.get('name', '')} {metric.get('context', '')}".lower()
+    technical_tokens = (
+        "rsi",
+        "macd",
+        "sma",
+        "momentum",
+        "price",
+        "close",
+        "volatility",
+        "volume",
+        "종가",
+        "모멘텀",
+        "변동성",
+        "거래량",
+    )
+    if any(token in haystack for token in technical_tokens):
+        return True
+    metric_numbers = _number_tokens(metric.get("value"))
+    if not metric_numbers:
+        return False
+    return any(metric_numbers & _number_tokens(tech.get("value")) for tech in technical_metrics or [])
+
+
+def _find_financial_metric(key_metrics: list[KeyMetric], ticker: str, *needles: str) -> KeyMetric | None:
+    ticker_lower = str(ticker or "").lower()
+    lowered_needles = [needle.lower() for needle in needles if needle]
+    for metric in key_metrics:
+        haystack = f"{metric.name} {metric.context} {metric.source}".lower()
+        if ticker_lower and ticker_lower not in haystack:
+            continue
+        if any(needle in haystack for needle in lowered_needles):
+            return metric
+    return _find_metric(key_metrics, *needles)
+
+
+def _technical_summary(ticker: str, key_metrics: list[KeyMetric]) -> str:
+    close = _find_metric(key_metrics, "최신 종가", "latest close", "현재가")
+    mom_1m = _find_metric(key_metrics, "1개월 가격 모멘텀", "1m price momentum", "1m momentum")
+    mom_3m = _find_metric(key_metrics, "3개월 가격 모멘텀", "3m price momentum", "3m momentum")
+    sma20 = _find_metric(key_metrics, "sma20")
+    sma50 = _find_metric(key_metrics, "sma50")
+    rsi = _find_metric(key_metrics, "rsi")
+    macd = _find_metric(key_metrics, "macd")
+    vol = _find_metric(key_metrics, "실현 변동성", "realized volatility")
+    pe = _find_financial_metric(key_metrics, ticker, "ttm per", "forward per", "per")
+    pbr = _find_financial_metric(key_metrics, ticker, "pbr")
+    margin = _find_financial_metric(key_metrics, ticker, "영업이익률", "순이익률", "profit margin", "operating margin")
+    as_of = next((metric.as_of for metric in key_metrics if metric.as_of and metric.as_of != "unknown"), "unknown")
+
+    parts = [f"{ticker}는 {as_of} 기준 가격, 기술 지표, 재무 스냅샷, 수집 문서를 함께 확인해야 합니다."]
+    if close:
+        suffix = f" {close.unit}" if close.unit else ""
+        parts.append(f"기준 가격은 {close.value}{suffix}입니다.")
+    valuation_bits = []
+    if pe:
+        valuation_bits.append(f"{pe.name} {pe.value}")
+    if pbr:
+        valuation_bits.append(f"{pbr.name} {pbr.value}")
+    if margin:
+        valuation_bits.append(f"{margin.name} {margin.value}")
+    if valuation_bits:
+        parts.append("재무/밸류에이션 근거로 " + ", ".join(valuation_bits[:3]) + "를 우선 확인했습니다.")
+    trend_bits = []
+    if mom_1m:
+        trend_bits.append(f"1개월 모멘텀 {mom_1m.value}")
+    if mom_3m:
+        trend_bits.append(f"3개월 모멘텀 {mom_3m.value}")
+    if sma20:
+        trend_bits.append(f"SMA20 괴리 {sma20.value}")
+    if sma50:
+        trend_bits.append(f"SMA50 괴리 {sma50.value}")
+    if trend_bits:
+        parts.append("추세 판단은 " + ", ".join(trend_bits) + "를 중심으로 봅니다.")
+    risk_bits = []
+    if rsi:
+        risk_bits.append(f"RSI {rsi.value}")
+    if macd:
+        risk_bits.append(f"MACD 히스토그램 {macd.value}")
+    if vol:
+        risk_bits.append(f"실현 변동성 {vol.value}")
+    if risk_bits:
+        parts.append("단기 리스크는 " + ", ".join(risk_bits) + "가 과열, 둔화, 손실 한도를 어떻게 가리키는지로 확인합니다.")
+    return " ".join(parts)
+
+
+def _technical_uncertainty(key_metrics: list[KeyMetric]) -> str:
+    if not key_metrics:
+        return "확인 가능한 정량 지표가 부족해 가격 방향과 밸류에이션 판단을 보수적으로 해석해야 합니다."
+    return (
+        "이 답변은 확인 가능한 가격, 기술 지표, 재무 스냅샷, 수집 문서를 우선 사용합니다. "
+        "다만 실적 발표, 컨센서스 변경, 공시 이벤트, 동종 기업 배수와 교차 확인하기 전에는 결론을 확정하면 안 됩니다."
+    )
+
+
+def _technical_point_defaults(ticker: str, key_metrics: list[KeyMetric], *, side: str) -> tuple[list[str], list[list[str]]]:
+    points: list[str] = []
+    evidence: list[list[str]] = []
+
+    def add(text: str, metric: KeyMetric | None) -> None:
+        if text:
+            points.append(text)
+            evidence.append(list(metric.evidence_doc_ids or []) if metric else [])
+
+    mom_1m = _find_metric(key_metrics, "1개월 가격 모멘텀", "1m price momentum", "1m momentum")
+    mom_3m = _find_metric(key_metrics, "3개월 가격 모멘텀", "3m price momentum", "3m momentum")
+    sma20 = _find_metric(key_metrics, "sma20")
+    sma50 = _find_metric(key_metrics, "sma50")
+    sma200 = _find_metric(key_metrics, "sma200")
+    rsi = _find_metric(key_metrics, "rsi")
+    macd = _find_metric(key_metrics, "macd")
+    vol = _find_metric(key_metrics, "실현 변동성", "realized volatility")
+    pe = _find_financial_metric(key_metrics, ticker, "ttm per", "forward per", "per")
+    margin = _find_financial_metric(key_metrics, ticker, "영업이익률", "순이익률", "profit margin", "operating margin")
+
+    if side == "bull":
+        if pe:
+            add(f"{ticker}의 {pe.name} {pe.value}는 밸류에이션 논의를 시작할 수 있는 직접 근거입니다. 같은 업종 배수와 비교하면 가격 합리성 판단의 신뢰도가 올라갑니다.", pe)
+        if margin and len(points) < 2:
+            add(f"{margin.name} {margin.value}는 수익성 품질을 보여주는 근거입니다. 가격 모멘텀이 유지될 때 이익률이 함께 확인되면 상승 시나리오가 더 설득력을 갖습니다.", margin)
+        if mom_1m and len(points) < 2:
+            add(f"{ticker}의 1개월 가격 모멘텀은 {mom_1m.value}로, 단기 수급과 추세가 가격을 지지하는지 확인하는 핵심 지표입니다.", mom_1m)
+        if sma20 and len(points) < 2:
+            add(f"SMA20 대비 가격 괴리 {sma20.value}는 단기 추세 훼손 여부를 점검하는 1차 확인 지표입니다.", sma20)
+        if mom_3m and len(points) < 2:
+            add(f"3개월 모멘텀 {mom_3m.value}는 6~12개월 관점의 추세 지속성을 확인하는 보조 근거입니다.", mom_3m)
+        if sma50 and len(points) < 2:
+            add(f"SMA50 대비 괴리 {sma50.value}는 중기 추세가 훼손되지 않았는지 보는 확인 지표입니다.", sma50)
+    else:
+        if rsi:
+            add(f"RSI(14) {rsi.value}는 과열권 접근 또는 반락 위험을 먼저 점검해야 한다는 신호입니다.", rsi)
+        if macd and len(points) < 2:
+            add(f"MACD 히스토그램 {macd.value}는 모멘텀 확장과 둔화 전환을 구분하는 리스크 신호입니다.", macd)
+        if vol and len(points) < 2:
+            add(f"20일 실현 변동성 {vol.value}는 포지션 크기와 손실 한도에 직접 반영해야 하는 위험 지표입니다.", vol)
+        if sma200 and len(points) < 2:
+            add(f"SMA200 대비 괴리 {sma200.value}는 장기 추세 훼손 가능성을 평가하는 방어 지표입니다.", sma200)
+    return points[:2], evidence[:2]
+
+
+def _valuation_guard_texts(
+    *,
+    ticker: str,
+    question: str | None,
+    key_metrics: list[KeyMetric],
+) -> tuple[str, str, list[str], list[str], list[list[str]], list[list[str]]] | None:
+    if not _is_valuation_question(question):
+        return None
+
+    display = symbol_display_name(ticker)
+    close = _find_symbol_metric(key_metrics, ticker, "data-mart adjusted close") or _find_financial_metric(key_metrics, ticker, "현재가", "price")
+    ret_21d = _find_symbol_metric(key_metrics, ticker, "21d_pct")
+    ret_63d = _find_symbol_metric(key_metrics, ticker, "63d_pct")
+    vol_20d = _find_symbol_metric(key_metrics, ticker, "realized_vol_20d_pct") or _find_metric(key_metrics, "실현 변동성")
+    pe = _find_financial_metric(key_metrics, ticker, "ttm per", "forward per", "per")
+    pbr = _find_financial_metric(key_metrics, ticker, "pbr")
+    eps = _find_financial_metric(key_metrics, ticker, "eps")
+    revenue = _find_financial_metric(key_metrics, ticker, "매출액", "total revenue")
+    margin = _find_financial_metric(key_metrics, ticker, "영업이익률", "순이익률", "profit margin", "operating margin")
+    target = _find_financial_metric(key_metrics, ticker, "목표가", "target")
+
+    valuation_metrics = [metric for metric in (pe, pbr, eps, revenue, margin, target) if metric is not None]
+    market_metrics = [metric for metric in (close, ret_21d, ret_63d, vol_20d) if metric is not None]
+
+    if valuation_metrics:
+        valuation_sentence = ", ".join(
+            f"{metric.name} {_metric_value_phrase(metric)}" for metric in valuation_metrics[:4]
+        )
+        market_sentence = ", ".join(
+            f"{metric.name} {_metric_value_phrase(metric)}" for metric in market_metrics[:3]
+        )
+        summary = (
+            f"{display}의 가격 합리성은 단정이 아니라 조건부로 봐야 합니다. "
+            f"확인된 재무/밸류에이션 근거는 {valuation_sentence}입니다. "
+            + (f"가격·리스크 보조 근거는 {market_sentence}입니다. " if market_sentence else "")
+            + "동종 기업 배수와 다음 실적 컨센서스가 추가로 확인되면 저평가/고평가 판단을 더 명확히 할 수 있습니다."
+        )
+        uncertainty = (
+            "재무 스냅샷은 yfinance 제공 값으로 즉시 판단의 기준을 제공하지만, 회계 기준 차이, 최신 실적 반영 시점, "
+            "동종 기업 배수와 컨센서스 업데이트가 없으면 절대적인 적정가 판단에는 한계가 있습니다."
+        )
+        bull_points = [
+            f"{valuation_sentence}가 확인되어 단순 가격 차트보다 더 강한 밸류에이션 논의가 가능합니다. 동종 기업 대비 배수가 과도하지 않다면 가격 합리성 주장이 강화됩니다.",
+            "가격 모멘텀과 재무 품질 지표가 같은 방향으로 개선되면 상승 시나리오의 근거가 가격 수급에만 머물지 않습니다.",
+        ]
+        bear_points = [
+            "동종 기업 배수, 최신 실적 컨센서스, 목표주가 분포가 없으면 현재 배수가 싸거나 비싸다는 결론은 아직 불완전합니다.",
+            "실현 변동성이나 최근 수익률이 급격히 확대된 경우, 밸류에이션이 합리적이어도 진입 타이밍과 손실 한도 관리가 먼저 필요합니다.",
+        ]
+        valuation_ids = _metric_evidence_ids(*valuation_metrics)
+        market_ids = _metric_evidence_ids(*market_metrics)
+        return summary, uncertainty, bull_points, bear_points, [valuation_ids, valuation_ids + market_ids], [[], market_ids]
+
+    facts = []
+    for label, metric in (("종가", close), ("1개월 수익률", ret_21d), ("3개월 수익률", ret_63d), ("20일 실현 변동성", vol_20d)):
+        phrase = _metric_value_phrase(metric)
+        if phrase:
+            facts.append(f"{label} {phrase}")
+    fact_sentence = ", ".join(facts) if facts else "확인 가능한 가격·재무 지표가 부족"
+    summary = (
+        f"{display}는 현재 {fact_sentence}만으로는 주가가 합리적인지 단정할 수 없습니다. "
+        "PER, PBR, EPS, 매출/마진, 현금흐름, 동종 기업 배수, 목표주가가 같이 확인되어야 밸류에이션 결론을 낼 수 있습니다."
+    )
+    uncertainty = (
+        "현재 근거는 가격과 리스크 판단에는 유용하지만 밸류에이션 판단에는 부족합니다. "
+        "재무 지표가 수집되지 않은 경우 결론을 보류하고 데이터 보강 후 재평가해야 합니다."
+    )
+    ids = _metric_evidence_ids(*market_metrics)
+    bull_points = [
+        "확인 가능한 긍정 근거는 가격 모멘텀 또는 변동성 안정 여부입니다. 재무 지표가 보강되면 합리성 판단을 다시 해야 합니다.",
+        "동일 기준의 데이터마트 가격 지표는 다른 종목과의 상대 비교 및 후속 실적 검증의 출발점으로 사용할 수 있습니다.",
+    ]
+    bear_points = [
+        "재무/밸류에이션 지표 없이 주가가 합리적이라고 결론 내리면 환각 위험이 큽니다.",
+        "최근 수익률이나 변동성이 커진 구간에서는 적정가 논리보다 진입 타이밍과 손실 한도 관리가 우선입니다.",
+    ]
+    return summary, uncertainty, bull_points, bear_points, [ids, ids], [[], ids]
+
+
+def _deterministic_inference_fallback(
+    *,
+    ticker: str,
+    question: str,
+    context_items: list[Any],
+    model: str,
+    reason: str,
+    started_at: float,
+) -> dict[str, Any]:
+    metric_dicts = [
+        *fundamentals_metrics_from_retrieval_items(context_items),
+        *technical_metrics_from_retrieval_items(context_items),
+    ]
+    doc_ids = _context_doc_ids(context_items)
+    key_metrics = [
+        KeyMetric(
+            name=str(item.get("name") or ""),
+            value=str(item.get("value") or ""),
+            unit=str(item.get("unit") or ""),
+            as_of=str(item.get("as_of") or "unknown"),
+            context=str(item.get("context") or ""),
+            source=str(item.get("source") or "deterministic_fallback"),
+            freshness_status=str(item.get("freshness_status") or "unknown"),
+            evidence_doc_ids=[str(doc_id) for doc_id in (item.get("evidence_doc_ids") or [])],
+        )
+        for item in metric_dicts
+        if isinstance(item, dict) and str(item.get("name") or "").strip() and str(item.get("value") or "").strip()
+    ]
+    summary = _technical_summary(ticker, key_metrics)
+    uncertainty = f"LLM 구조화 출력이 실패해 재무·정량 지표와 수집 근거 기반의 보수적 fallback으로 작성했습니다. 원인: {reason}"
+    bull_points, bull_evidence_ids = _technical_point_defaults(ticker, key_metrics, side="bull")
+    bear_points, bear_evidence_ids = _technical_point_defaults(ticker, key_metrics, side="bear")
+    while len(bull_points) < 2:
+        bull_points.append(f"{ticker}에 대한 확인 가능한 가격·재무 근거가 유지되면 상승 시나리오를 재평가할 수 있습니다.")
+        bull_evidence_ids.append(doc_ids[:1])
+    while len(bear_points) < 2:
+        bear_points.append("LLM 출력이 실패한 만큼 확정 결론보다 검증 가능한 가격, 재무, 이벤트 지표를 우선해야 합니다.")
+        bear_evidence_ids.append(doc_ids[:1])
+
+    return {
+        "summary": summary,
+        "uncertainty": uncertainty,
+        "bull_points": bull_points[:2],
+        "bear_points": bear_points[:2],
+        "bull_evidence_ids": bull_evidence_ids[:2],
+        "bear_evidence_ids": bear_evidence_ids[:2],
+        "key_metrics": metric_dicts[:16],
+        "cited_doc_ids": doc_ids,
+        "catalyst_timeline": {
+            "near_term": ["가격 모멘텀, 거래량, 최근 뉴스 흐름, 재무 스냅샷 변화를 확인"],
+            "mid_term": ["실적 발표, 가이던스, 컨센서스, 밸류에이션 재평가 여부 확인"],
+            "long_term": ["사업 모멘텀, 현금흐름, 자본 조달 리스크, 경쟁 구도 재점검"],
+        },
+        "open_questions": [
+            "최근 가격 움직임이 거래량 증가와 재무 지표 개선을 동반했는가?",
+            "실적 또는 공시 이벤트가 가격 변동을 설명하는가?",
+            "현재 밸류에이션이 성장 둔화와 변동성 위험을 충분히 반영하는가?",
+        ],
+        "_meta": {
+            "primary_model": str(model),
+            "producing_model": "local-deterministic-fallback",
+            "fallback_enabled": False,
+            "fallback_model": None,
+            "fallback_available": False,
+            "fallback_used": True,
+            "fallback_reason": reason,
+            "retry_count": 0,
+            "total_latency_s": round(time.time() - started_at, 2),
+            "primary_latency_s": round(time.time() - started_at, 2),
+            "fallback_latency_s": 0.0,
+            "prompt_char_count": 0,
+            "chunks_used": len(context_items or []),
+            "model_capabilities": model_capability_dict(str(model), str(model)),
+        },
+    }
+
+
+def _single_ticker_quant_regime(key_metrics: list[KeyMetric]) -> dict[str, Any]:
+    momentum_1m = _find_metric(key_metrics, "1개월 가격 모멘텀", "1m price momentum", "1m momentum")
+    momentum_3m = _find_metric(key_metrics, "3개월 가격 모멘텀", "3m price momentum", "3m momentum")
+    sma20 = _find_metric(key_metrics, "sma20")
+    sma50 = _find_metric(key_metrics, "sma50")
+    sma200 = _find_metric(key_metrics, "sma200")
+    rsi = _find_metric(key_metrics, "rsi")
+    macd = _find_metric(key_metrics, "macd")
+    volatility = _find_metric(key_metrics, "실현 변동성", "realized volatility")
+    volume = _find_metric(key_metrics, "평균 대비 거래량", "volume")
+
+    m1 = _metric_number(momentum_1m)
+    m3 = _metric_number(momentum_3m)
+    d20 = _metric_number(sma20)
+    d50 = _metric_number(sma50)
+    d200 = _metric_number(sma200)
+    rsi_value = _metric_number(rsi)
+    macd_value = _metric_number(macd)
+    vol_value = _metric_number(volatility)
+    volume_value = _metric_number(volume)
+
+    confirming: list[str] = []
+    invalidation: list[str] = []
+    if m1 is not None:
+        (confirming if m1 > 0 else invalidation).append(f"1개월 모멘텀 {m1:+.2f}%")
+    if m3 is not None:
+        (confirming if m3 > 0 else invalidation).append(f"3개월 모멘텀 {m3:+.2f}%")
+    if d20 is not None:
+        (confirming if d20 > 0 else invalidation).append(f"SMA20 괴리 {d20:+.2f}%")
+    if d50 is not None:
+        (confirming if d50 > 0 else invalidation).append(f"SMA50 괴리 {d50:+.2f}%")
+    if d200 is not None:
+        (confirming if d200 > 0 else invalidation).append(f"SMA200 괴리 {d200:+.2f}%")
+    if rsi_value is not None and rsi_value >= 70:
+        invalidation.append(f"RSI 과열 {rsi_value:.1f}")
+    elif rsi_value is not None and 45 <= rsi_value <= 68:
+        confirming.append(f"RSI 중립-상승권 {rsi_value:.1f}")
+    if macd_value is not None:
+        (confirming if macd_value > 0 else invalidation).append(f"MACD 히스토그램 {macd_value:+.3f}")
+    if vol_value is not None and vol_value >= 35:
+        invalidation.append(f"20일 변동성 {vol_value:.1f}%")
+    if volume_value is not None and volume_value >= 1.2:
+        confirming.append(f"거래량 {volume_value:.2f}x")
+
+    short_positive = (m1 or 0) > 0 and (d20 or 0) > 0 and (d50 or 0) > 0
+    long_confirmed = d200 is not None and d200 > 0
+    trend_state = "mixed"
+    decision_bias = "Neutral / 확인 필요"
+    if short_positive and long_confirmed and (rsi_value is None or rsi_value < 75):
+        trend_state = "uptrend_confirmed"
+        decision_bias = "조건부 Bullish"
+    elif short_positive:
+        trend_state = "short_term_rebound"
+        decision_bias = "Neutral-to-Bullish / 장기 추세 검증"
+    elif (m1 is not None and m1 < 0) and (d20 is not None and d20 < 0):
+        trend_state = "downside_momentum"
+        decision_bias = "Bearish / 방어 우선"
+
+    momentum_state = "limited"
+    if rsi_value is not None or macd_value is not None:
+        if (rsi_value or 50) >= 70 and (macd_value or 0) > 0:
+            momentum_state = "strong_but_overbought"
+        elif (rsi_value or 50) <= 30:
+            momentum_state = "oversold_rebound_candidate"
+        elif (macd_value or 0) > 0:
+            momentum_state = "improving"
+        elif (macd_value or 0) < 0:
+            momentum_state = "weakening"
+
+    risk_state = "needs_confirmation"
+    if (rsi_value is not None and rsi_value >= 70) or (vol_value is not None and vol_value >= 35) or (d200 is not None and d200 < 0):
+        risk_state = "confirmation_before_chasing"
+    elif short_positive and (macd_value is None or macd_value > 0):
+        risk_state = "trend_follow_with_event_check"
+
+    return {
+        "trend_state": trend_state,
+        "momentum_state": momentum_state,
+        "risk_state": risk_state,
+        "decision_bias": decision_bias,
+        "confirming_signals": confirming[:6],
+        "invalidation_signals": invalidation[:6],
+    }
+
+
+def _clean_korean_list(items: Any, fallback: list[str]) -> list[str]:
+    cleaned = [
+        " ".join(str(item or "").split()).strip()
+        for item in (items or [])
+        if str(item or "").strip()
+    ]
+    cleaned = [item for item in cleaned if not _is_unusable_korean_text(item, min_hangul=4)]
+    return cleaned or fallback
+
+
+def _sanitize_catalyst_timeline(raw_timeline: Any) -> CatalystTimeline:
+    raw = raw_timeline if isinstance(raw_timeline, dict) else {}
+    return CatalystTimeline(
+        near_term=_clean_korean_list(raw.get("near_term"), ["가격 모멘텀, 거래량, 뉴스 흐름, 재무 스냅샷 변화를 확인"]),
+        mid_term=_clean_korean_list(raw.get("mid_term"), ["실적 발표, 가이던스, 컨센서스, 밸류에이션 재평가 여부 확인"]),
+        long_term=_clean_korean_list(raw.get("long_term"), ["사업 모멘텀, 현금흐름, 자본 조달 리스크, 경쟁 구도 재점검"]),
+    )
 
 
 def _filter_current_run_context(context_items, current_doc_ids: set[str], top_k: int):
@@ -1110,8 +1751,8 @@ async def run_pipeline_async(
     request_ticker = str(getattr(request, "ticker", "") or "").upper().strip()
     request_question = str(getattr(request, "question", "") or "").strip()
     safe_sources = _normalise_sources_for_pipeline(request_ticker, request_question, getattr(request, "sources", None))
-    safe_top_k = _coerce_int(getattr(request, "top_k", 10), 10, lower=1, upper=20)
-    safe_lookback_days = _coerce_int(getattr(request, "lookback_days", 60), 60, lower=1, upper=3650)
+    safe_top_k = _coerce_int(getattr(request, "top_k", 15), 15, lower=1, upper=20)
+    safe_lookback_days = _coerce_int(getattr(request, "lookback_days", 90), 90, lower=1, upper=3650)
     safe_model = getattr(request, "model", None) or "mistral"
     safe_output_dir = getattr(request, "output_dir", None)
     request = request.model_copy(
@@ -1132,6 +1773,7 @@ async def run_pipeline_async(
     error_metadata = None
     stages_ran: list[str] = []
     fundamentals_card = None
+    fingpt_annotation_result = None
 
     _emit(
         event_sink,
@@ -1170,6 +1812,71 @@ async def run_pipeline_async(
         documents = collection_outcome.documents
         current_doc_ids = _current_doc_ids(collection_outcome)
         settings_after_collect = load_settings()
+        if bool(getattr(settings_after_collect, "fingpt_task_model_enabled", False)):
+            try:
+                from pipelines.data_mart.storage.db import connect as data_mart_connect
+                from pipelines.data_mart.storage.repository import upsert_fingpt_annotations
+                from pipelines.fingpt.annotation_service import annotate_documents
+                from pipelines.fingpt.task_adapter import FinGPTTaskAdapter
+
+                adapter = FinGPTTaskAdapter(
+                    enabled=True,
+                    model_name=str(
+                        getattr(
+                            settings_after_collect,
+                            "fingpt_task_model_name",
+                            "FinGPT/fingpt-mt_llama3-8b_lora",
+                        )
+                        or "FinGPT/fingpt-mt_llama3-8b_lora"
+                    ),
+                )
+                try:
+                    annotation_timeout_s = float(
+                        getattr(settings_after_collect, "fingpt_annotation_timeout_s", 15.0) or 15.0
+                    )
+                except (TypeError, ValueError):
+                    annotation_timeout_s = 15.0
+                annotation_timeout_s = max(0.1, annotation_timeout_s)
+                fingpt_annotation_result = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        annotate_documents,
+                        documents,
+                        adapter=adapter,
+                        enabled=True,
+                        tasks=["sentiment"],
+                    ),
+                    timeout=annotation_timeout_s,
+                )
+                if getattr(fingpt_annotation_result, "annotations", None):
+                    annotations_to_store = list(getattr(fingpt_annotation_result, "annotations", []) or [])
+
+                    def _write_fingpt_annotations() -> int:
+                        with data_mart_connect() as conn:
+                            count = upsert_fingpt_annotations(conn, annotations_to_store)
+                            conn.commit()
+                            return count
+
+                    await asyncio.to_thread(_write_fingpt_annotations)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "[FINGPT_ANNOTATION] timed out after %.1fs for %s; failing open",
+                    annotation_timeout_s,
+                    request_ticker,
+                )
+                fingpt_annotation_result = {
+                    "status": "skipped",
+                    "detail": f"FinGPT annotation timed out after {annotation_timeout_s:.1f}s; failed open.",
+                    "documents_seen": len(documents),
+                    "annotations": [],
+                }
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[FINGPT_ANNOTATION] failed open for %s: %s", request_ticker, exc)
+                fingpt_annotation_result = {
+                    "status": "skipped",
+                    "detail": str(exc),
+                    "documents_seen": len(documents),
+                    "annotations": [],
+                }
         if bool(getattr(settings_after_collect, "fundamentals_card_enabled", True)):
             try:
                 fundamentals_card = await asyncio.to_thread(
@@ -1234,9 +1941,11 @@ async def run_pipeline_async(
         structured_context = await asyncio.to_thread(build_structured_context, request_ticker)
         structured_context_item = structured_context_to_retrieval_item(structured_context)
         structured_metric_dicts = structured_context_metrics(structured_context)
+        fundamentals_context_item = fundamentals_card_to_retrieval_item(fundamentals_card)
+        fundamentals_metric_dicts = fundamentals_card_metrics(fundamentals_card)
 
         if not current_doc_ids:
-            if structured_context_item is None:
+            if structured_context_item is None and fundamentals_context_item is None:
                 status = "partial"
                 stale_block_reason = (
                     "No usable current-run primary documents; stale Qdrant context blocked."
@@ -1256,6 +1965,7 @@ async def run_pipeline_async(
                     horizon=horizon,
                     fundamentals=fundamentals_card,
                 )
+                _attach_fingpt_annotation_meta(response, fingpt_annotation_result)
                 return await _finalize_response(
                     request,
                     response,
@@ -1267,10 +1977,10 @@ async def run_pipeline_async(
             status = "partial"
             error_metadata = _merge_error_metadata(
                 error_metadata,
-                "No usable current-run documents; using structured data mart numeric context only.",
+                "No usable current-run documents; using structured data mart and finance snapshot context only.",
             )
-            logger.warning("[RETRIEVAL_SKIPPED] No current-run documents. Using data mart structured context only.")
-            context_items = [structured_context_item]
+            logger.warning("[RETRIEVAL_SKIPPED] No current-run documents. Using data mart and fundamentals structured context only.")
+            context_items = [item for item in (structured_context_item, fundamentals_context_item) if item is not None]
         else:
             # 3. Retrieve
             settings_for_retrieval = load_settings()
@@ -1330,6 +2040,8 @@ async def run_pipeline_async(
             context_items = _append_priority_documents(context_items, collection_outcome.documents, top_k=request.top_k)
             if structured_context_item is not None:
                 context_items.append(structured_context_item)
+            if fundamentals_context_item is not None:
+                context_items.append(fundamentals_context_item)
         if not context_items:
             status = "partial"
             if current_doc_ids:
@@ -1348,6 +2060,7 @@ async def run_pipeline_async(
                 horizon=horizon,
                 fundamentals=fundamentals_card,
             )
+            _attach_fingpt_annotation_meta(response, fingpt_annotation_result)
             return await _finalize_response(
                 request,
                 response,
@@ -1474,7 +2187,8 @@ async def run_pipeline_async(
 
         # Build metrics before thesis construction so deterministic technical
         # indicators can repair non-Korean or repetitive model text.
-        raw_metrics = _filter_llm_metrics(raw_output.get("key_metrics") or [], technical_metric_dicts)
+        deterministic_metric_dicts = [*structured_metric_dicts, *fundamentals_metric_dicts, *technical_metric_dicts]
+        raw_metrics = _filter_llm_metrics(raw_output.get("key_metrics") or [], deterministic_metric_dicts)
         key_metrics: list[KeyMetric] = []
         for m in raw_metrics:
             if not isinstance(m, dict) or not str(m.get("name", "")).strip() or not str(m.get("value", "")).strip():
@@ -1488,11 +2202,15 @@ async def run_pipeline_async(
                     as_of=_metric_as_of(m.get("as_of"), evidence_doc_ids, context_items),
                     context=str(m.get("context", "")),
                     source=str(m.get("source", "")),
+                    source_type=str(m.get("source_type", "")),
+                    calculation_method=m.get("calculation_method"),
+                    is_deterministic=bool(m.get("is_deterministic", False)),
+                    grounding_status=str(m.get("grounding_status", "") or "unknown"),
                     freshness_status=str(m.get("freshness_status", "") or "unknown"),
                     evidence_doc_ids=evidence_doc_ids,
                 )
             )
-        key_metrics = _merge_key_metric_dicts(key_metrics, [*structured_metric_dicts, *technical_metric_dicts], context_items)
+        key_metrics = _merge_key_metric_dicts(key_metrics, deterministic_metric_dicts, context_items)
 
         (
             sanitized_summary,
@@ -1504,6 +2222,7 @@ async def run_pipeline_async(
             text_repaired,
         ) = _sanitize_decision_texts(
             ticker=request_ticker,
+            question=request.question,
             summary=raw_output.get("summary", "No summary generated."),
             uncertainty=raw_output.get("uncertainty", ""),
             bull_points=bull_points,
@@ -1578,19 +2297,31 @@ async def run_pipeline_async(
             "source": "yfinance:technical" if technical_metric_dicts else "",
             "text_repaired": bool(text_repaired),
         }
+        exec_meta.extras["fundamentals_snapshot"] = {
+            "present": fundamentals_card is not None,
+            "metric_count": len(fundamentals_metric_dicts),
+            "source": "yfinance:fundamentals" if fundamentals_card is not None else "",
+            "asset_class": getattr(fundamentals_card, "asset_class", "") if fundamentals_card is not None else "",
+            "quote_type": getattr(fundamentals_card, "quote_type", "") if fundamentals_card is not None else "",
+        }
+        fingpt_annotation_metadata = _serialize_fingpt_annotation_result(fingpt_annotation_result)
+        if fingpt_annotation_metadata is not None:
+            exec_meta.extras["fingpt_annotations"] = fingpt_annotation_metadata
         exec_meta.extras["quant_snapshot"] = _single_ticker_quant_snapshot(
             request_ticker,
             key_metrics,
             context_items,
             technical_metric_dicts,
         )
-        raw_timeline = raw_output.get("catalyst_timeline") or {}
-        catalyst_timeline = CatalystTimeline(
-            near_term=[str(x) for x in (raw_timeline.get("near_term") or []) if str(x).strip()],
-            mid_term=[str(x) for x in (raw_timeline.get("mid_term") or []) if str(x).strip()],
-            long_term=[str(x) for x in (raw_timeline.get("long_term") or []) if str(x).strip()],
+        catalyst_timeline = _sanitize_catalyst_timeline(raw_output.get("catalyst_timeline") or {})
+        open_questions = _clean_korean_list(
+            raw_output.get("open_questions") or [],
+            [
+                "최신 실적과 컨센서스 변화가 현재 가격을 정당화하는가?",
+                "동종 기업 배수와 비교했을 때 현재 밸류에이션은 과도하거나 저렴한가?",
+                "가격 모멘텀과 거래량이 재무 지표 개선을 동반하는가?",
+            ],
         )
-        open_questions = [str(x) for x in (raw_output.get("open_questions") or []) if str(x).strip()]
         exec_meta.extras["validation_summary"] = _coverage_summary(
             key_metrics,
             bull_evidence_ids,

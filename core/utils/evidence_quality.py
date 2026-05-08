@@ -47,6 +47,14 @@ def _get(item: Any, key: str, default: Any = "") -> Any:
     return metadata.get(key, default) if isinstance(metadata, dict) else default
 
 
+def _metadata(item: Any) -> dict[str, Any]:
+    if isinstance(item, dict):
+        metadata = item.get("metadata") or {}
+    else:
+        metadata = getattr(item, "metadata", None) or {}
+    return metadata if isinstance(metadata, dict) else {}
+
+
 def _parse_date(value: Any) -> datetime | None:
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
@@ -128,15 +136,34 @@ def specificity_score(item: Any, *, ticker: str = "", question: str = "") -> flo
     return 0.30
 
 
+def fingpt_annotation_quality_bonus(metadata: dict) -> float:
+    annotations = metadata.get("fingpt_annotations") or []
+    if not isinstance(annotations, list):
+        return 0.0
+    high_confidence = []
+    for ann in annotations:
+        if not isinstance(ann, dict):
+            continue
+        try:
+            confidence = float(ann.get("confidence") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if confidence >= 0.75:
+            high_confidence.append(ann)
+    return min(0.1, 0.025 * len(high_confidence))
+
+
 def score_evidence_item(item: Any, *, ticker: str = "", question: str = "", now: datetime | None = None) -> EvidenceQuality:
     source_type = infer_source_type(item)
     reliability = SOURCE_RELIABILITY.get(source_type, SOURCE_RELIABILITY["unknown"])
     freshness = freshness_score(item, now=now)
     specificity = specificity_score(item, ticker=ticker, question=question)
-    overall = round((reliability * 0.45) + (freshness * 0.30) + (specificity * 0.25), 4)
+    annotation_bonus = fingpt_annotation_quality_bonus(_metadata(item))
+    overall = round(min(1.0, (reliability * 0.45) + (freshness * 0.30) + (specificity * 0.25) + annotation_bonus), 4)
     rationale = (
         f"source_type={source_type}; reliability={reliability:.2f}; "
-        f"freshness={freshness:.2f}; specificity={specificity:.2f}"
+        f"freshness={freshness:.2f}; specificity={specificity:.2f}; "
+        f"fingpt_annotation_bonus={annotation_bonus:.3f}"
     )
     return EvidenceQuality(
         source_type=source_type,

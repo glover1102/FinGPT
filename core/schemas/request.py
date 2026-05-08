@@ -20,6 +20,7 @@ SupportedInferenceRoute = Literal[
     "primary",
     "fingpt",
     "llama-2",
+    "gemma4",
     "gemma",
     "gemma-experimental",
 ]
@@ -31,13 +32,14 @@ class AnalysisRequest(BaseModel):
         default_factory=lambda: list(DEFAULT_COLLECTION_SOURCES),
         description="Information sources to pull data from.",
     )
-    lookback_days: int = Field(default=60, description="The number of past days for data retrieval. Raised from 30 to widen the evidence window for deeper analysis.")
-    top_k: int = Field(default=10, ge=1, le=20, description="Number of document chunks to retrieve for context. Raised from 5 to expose the LLM to more corroborating/contradicting evidence.")
+    lookback_days: int = Field(default=90, description="The number of past days for data retrieval. Default widened for data-rich grounded analysis.")
+    top_k: int = Field(default=15, ge=1, le=20, description="Number of document chunks to retrieve for context. Default widened to expose the LLM to more corroborating/contradicting evidence.")
     model: SupportedInferenceRoute = Field(
         default="qwen",
         description=(
             "Inference route selector. Production baseline is qwen2.5 via Ollama. "
-            "Legacy aliases route to the same primary. Gemma routes are experimental only."
+            "Legacy aliases route to the same primary. gemma4 is an explicit experimental option; "
+            "legacy Gemma fallback routes remain gated."
         ),
     )
     output_dir: Optional[str] = Field(default=None, description="Path to save outputs.")
@@ -66,8 +68,8 @@ class UniversalRequest(BaseModel):
     ticker: Optional[str] = Field(default=None, description="Optional ticker hint for routing.")
     mode_hint: Optional[Literal["auto", "ticker", "topic"]] = Field(default="auto")
     sources: List[str] = Field(default_factory=lambda: list(DEFAULT_COLLECTION_SOURCES))
-    lookback_days: int = Field(default=60)
-    top_k: int = Field(default=10, ge=1, le=20)
+    lookback_days: int = Field(default=90)
+    top_k: int = Field(default=15, ge=1, le=20)
     model: SupportedInferenceRoute = Field(default="qwen")
     output_dir: Optional[str] = Field(default=None)
 
@@ -117,8 +119,8 @@ class CompareRequest(BaseModel):
         default_factory=lambda: list(DEFAULT_COLLECTION_SOURCES),
         description="Information sources to pull data from.",
     )
-    lookback_days: int = Field(default=60)
-    top_k: int = Field(default=10, ge=1, le=20)
+    lookback_days: int = Field(default=90)
+    top_k: int = Field(default=15, ge=1, le=20)
     model: SupportedInferenceRoute = Field(default="qwen")
     concurrency: int = Field(
         default=2,

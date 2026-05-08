@@ -152,6 +152,9 @@ data/research_mart.duckdb*
 data/quant_lab/backtests/
 data/quant_lab/strategies/
 data/watchlist.json
+data/ai_portfolio/
+data/ai_portfolio_smoke/
+data/ai_portfolio_browser_smoke/
 reports/
 .playwright-cli/
 .ruff_cache/

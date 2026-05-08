@@ -17,6 +17,17 @@ class ProductionRoutingTests(unittest.TestCase):
         self.assertTrue(profile["gpu_required"])
         self.assertIn("final_report", profile["restricted_tasks"])
 
+    def test_gemma4_route_resolves_without_fallback_enablement(self):
+        settings = Settings(enable_experimental_fallback=False, gemma4_model="gemma4:e4b")
+        self.assertEqual(resolve_model_name("gemma4", settings), "gemma4:e4b")
+
+    def test_gemma4_capability_profile_is_explicit_experimental_option(self):
+        profile = model_capability_dict("gemma4", "gemma4:e4b")
+        self.assertTrue(profile["structured_output_support"])
+        self.assertFalse(profile["gpu_required"])
+        self.assertIn("single_name_research_comparison", profile["recommended_tasks"])
+        self.assertNotIn("production_final_report", profile["restricted_tasks"])
+
     def test_gemma_route_requires_explicit_enablement(self):
         settings = Settings(enable_experimental_fallback=False)
         with self.assertRaises(ValueError):

@@ -1,3 +1,4 @@
+import time
 import unittest
 from unittest.mock import patch
 
@@ -309,6 +310,9 @@ class NoContextPipelineTests(unittest.IsolatedAsyncioTestCase):
             patch.object(research_pipeline, "build_structured_context", return_value={}),
             patch.object(research_pipeline, "structured_context_to_retrieval_item", return_value=None),
             patch.object(research_pipeline, "structured_context_metrics", return_value=[]),
+            patch.object(research_pipeline, "collect_fundamentals_card", return_value=None),
+            patch.object(research_pipeline, "fundamentals_card_to_retrieval_item", return_value=None),
+            patch.object(research_pipeline, "fundamentals_card_metrics", return_value=[]),
         ]
         for patcher in self._structured_context_patchers:
             patcher.start()
@@ -345,6 +349,107 @@ class NoContextPipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("No usable current-run primary documents", response.error_metadata)
         self.assertIn("신뢰할 만한 최신 근거", response.summary)
         self.assertEqual(response.sentiment, "Neutral")
+
+    async def test_fingpt_annotation_failure_is_metadata_only_for_no_context_response(self):
+        request = AnalysisRequest(
+            ticker="MSFT",
+            question="What changed recently?",
+            sources=["news"],
+            lookback_days=7,
+            top_k=5,
+        )
+        settings = Settings(
+            fingpt_task_model_enabled=True,
+            fingpt_task_model_name="fake-fingpt-model",
+            fundamentals_card_enabled=False,
+        )
+        outcome = collector.CollectionOutcome(
+            documents=[
+                {
+                    "article_id": "article-1",
+                    "ticker": "MSFT",
+                    "source": "Yahoo Finance",
+                    "title": "Microsoft headline",
+                    "text": "Microsoft body",
+                }
+            ],
+            source_results=[collector.SourceCollectionResult("news", "ok", 1, 1.0, "news ok")],
+            degraded=False,
+            summary_detail="",
+            current_doc_ids=[],
+        )
+
+        with patch.object(research_pipeline, "load_settings", return_value=settings), \
+             patch.object(research_pipeline, "run_execution_precheck", return_value=None), \
+             patch.object(research_pipeline, "collect_data", return_value=outcome), \
+             patch.object(research_pipeline, "ingest_documents", return_value=None), \
+             patch.object(research_pipeline, "retrieve_context", side_effect=AssertionError("retrieval should not run without current docs")), \
+             patch.object(research_pipeline, "retrieve_context_multi", side_effect=AssertionError("multi-query retrieval should not run without current docs")), \
+             patch.object(research_pipeline, "run_inference", side_effect=AssertionError("inference should not run without current context")), \
+             patch.object(research_pipeline, "build_report", return_value=("md", "html")), \
+             patch.object(research_pipeline, "save_outputs"), \
+             patch("pipelines.fingpt.annotation_service.annotate_documents", side_effect=RuntimeError("annotation down")):
+            response = await research_pipeline.run_pipeline_async(request)
+
+        self.assertIn(response.status, {"success", "partial"})
+        fingpt_meta = response.execution_meta.extras["fingpt_annotations"]
+        self.assertEqual(fingpt_meta["status"], "skipped")
+        self.assertIn("annotation down", fingpt_meta["detail"])
+        self.assertEqual(fingpt_meta["documents_seen"], 1)
+        self.assertEqual(fingpt_meta["annotations"], [])
+
+    async def test_fingpt_annotation_timeout_is_metadata_only_for_no_context_response(self):
+        request = AnalysisRequest(
+            ticker="MSFT",
+            question="What changed recently?",
+            sources=["news"],
+            lookback_days=7,
+            top_k=5,
+        )
+        settings = Settings(
+            fingpt_task_model_enabled=True,
+            fingpt_task_model_name="fake-fingpt-model",
+            fundamentals_card_enabled=False,
+        )
+        object.__setattr__(settings, "fingpt_annotation_timeout_s", 0.001)
+        outcome = collector.CollectionOutcome(
+            documents=[
+                {
+                    "article_id": "article-1",
+                    "ticker": "MSFT",
+                    "source": "Yahoo Finance",
+                    "title": "Microsoft headline",
+                    "text": "Microsoft body",
+                }
+            ],
+            source_results=[collector.SourceCollectionResult("news", "ok", 1, 1.0, "news ok")],
+            degraded=False,
+            summary_detail="",
+            current_doc_ids=[],
+        )
+
+        def slow_annotate_documents(*args, **kwargs):  # noqa: ANN002, ANN003
+            time.sleep(0.3)
+            return None
+
+        with patch.object(research_pipeline, "load_settings", return_value=settings), \
+             patch.object(research_pipeline, "run_execution_precheck", return_value=None), \
+             patch.object(research_pipeline, "collect_data", return_value=outcome), \
+             patch.object(research_pipeline, "ingest_documents", return_value=None), \
+             patch.object(research_pipeline, "retrieve_context", side_effect=AssertionError("retrieval should not run without current docs")), \
+             patch.object(research_pipeline, "retrieve_context_multi", side_effect=AssertionError("multi-query retrieval should not run without current docs")), \
+             patch.object(research_pipeline, "run_inference", side_effect=AssertionError("inference should not run without current context")), \
+             patch.object(research_pipeline, "build_report", return_value=("md", "html")), \
+             patch.object(research_pipeline, "save_outputs"), \
+             patch("pipelines.fingpt.annotation_service.annotate_documents", side_effect=slow_annotate_documents):
+            response = await research_pipeline.run_pipeline_async(request)
+
+        self.assertIn(response.status, {"success", "partial"})
+        fingpt_meta = response.execution_meta.extras["fingpt_annotations"]
+        self.assertEqual(fingpt_meta["status"], "skipped")
+        self.assertIn("timed out", fingpt_meta["detail"])
+        self.assertEqual(fingpt_meta["documents_seen"], 1)
+        self.assertEqual(fingpt_meta["annotations"], [])
 
     async def test_empty_current_primary_docs_skips_retrieval_and_inference(self):
         request = AnalysisRequest(
