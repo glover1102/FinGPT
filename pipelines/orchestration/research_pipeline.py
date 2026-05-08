@@ -1,3 +1,4 @@
+import asyncio
 import time
 import re
 import os
@@ -7,12 +8,43 @@ from typing import Any, Callable, Optional
 from core.schemas.request import AnalysisRequest, DEFAULT_COLLECTION_SOURCES, KNOWN_COLLECTION_SOURCES, PRIMARY_COLLECTION_SOURCES
 from core.schemas.retrieval import RetrievalItem
 from core.schemas.response import AnalysisResponse, CatalystTimeline, ExecutionMeta, KeyMetric
+from core.config.settings import load_settings
 from core.utils.asset_classifier import classify
 from core.utils.decision_support import enrich_research_response
+from core.utils.logger import get_logger
 from core.utils.model_capabilities import model_capability_dict
 from core.utils.query_planner import plan_query
 from core.utils.symbol_registry import symbol_display_name
 from core.utils.technical_indicators import technical_metrics_from_retrieval_items
+from pipelines.collect.openbb_collector import collect_data
+from pipelines.collect.models import CollectionOutcome
+from pipelines.collect.fundamentals_card import (
+    collect_fundamentals_card,
+    fundamentals_card_metrics,
+    fundamentals_card_to_retrieval_item,
+    fundamentals_metrics_from_retrieval_items,
+)
+from pipelines.ingest.qdrant_ingestor import ingest_documents
+from pipelines.retrieve.qdrant_retriever import retrieve_context
+from pipelines.retrieve.multi_query_retriever import retrieve_context_multi
+from pipelines.infer.runner_factory import run_inference
+from pipelines.analyze.sentiment import analyze_sentiment
+from pipelines.analyze.risk_factory import get_risk_engine
+from pipelines.analyze.thesis_builder import build_thesis
+from pipelines.analyze.report_builder import build_report
+from pipelines.data_mart.context.structured_context import (
+    build_structured_context,
+    structured_context_metrics,
+    structured_context_to_retrieval_item,
+)
+from pipelines.macro.macro_service import get_macro_research_context
+from pipelines.macro.research_context import (
+    TICKER_RELEVANCE,
+    macro_research_context_metrics,
+    macro_research_context_to_retrieval_item,
+)
+from pipelines.output.output_writer import save_outputs
+from pipelines.orchestration.precheck import run_execution_precheck
 
 # Opaque event sink used by the SSE endpoint. The orchestrator only cares
 # that it's callable with a JSON-serialisable dict; the consumer handles
@@ -28,34 +60,6 @@ def _emit(sink: EventSink, event_type: str, **fields: Any) -> None:
         sink({"event": event_type, "ts": time.time(), **fields})
     except Exception:
         pass
-from core.utils.logger import get_logger
-
-import asyncio
-from pipelines.collect.openbb_collector import collect_data
-from pipelines.collect.models import CollectionOutcome
-from pipelines.collect.fundamentals_card import (
-    collect_fundamentals_card,
-    fundamentals_card_metrics,
-    fundamentals_card_to_retrieval_item,
-    fundamentals_metrics_from_retrieval_items,
-)
-from pipelines.ingest.qdrant_ingestor import ingest_documents
-from pipelines.retrieve.qdrant_retriever import retrieve_context
-from pipelines.retrieve.multi_query_retriever import retrieve_context_multi
-from pipelines.infer.runner_factory import run_inference
-from pipelines.analyze.sentiment import analyze_sentiment
-from pipelines.analyze.risk_analysis import HeuristicRiskEngine
-from pipelines.analyze.risk_factory import get_risk_engine
-from pipelines.analyze.thesis_builder import build_thesis
-from pipelines.analyze.report_builder import build_report
-from pipelines.data_mart.context.structured_context import (
-    build_structured_context,
-    structured_context_metrics,
-    structured_context_to_retrieval_item,
-)
-from pipelines.output.output_writer import save_outputs
-from pipelines.orchestration.precheck import run_execution_precheck
-from core.config.settings import load_settings
 
 logger = get_logger("pipelines.orchestration")
 
@@ -162,6 +166,27 @@ def _normalise_sources_for_pipeline(ticker: str, question: str, sources: Any) ->
     if fallback and fallback not in filtered:
         return [fallback, *filtered]
     return filtered
+
+
+def _should_attach_macro_platform_context(ticker: str, question: str, sources: list[str]) -> bool:
+    if "macro" not in {str(item or "").strip().lower() for item in sources or []}:
+        return False
+    clean_ticker = str(ticker or "").upper().strip()
+    q_lower = str(question or "").lower()
+    if clean_ticker in TICKER_RELEVANCE:
+        return True
+    if any(term in q_lower for term in _MACRO_QUESTION_TERMS):
+        return True
+    try:
+        return bool(classify(clean_ticker).supports_macro)
+    except Exception:
+        return False
+
+
+def _macro_context_timeout_s() -> float:
+    if os.environ.get("FINGPT_VALIDATION_FAST_INFERENCE", "").strip().lower() in {"1", "true", "yes"}:
+        return 5.0
+    return 15.0
 
 
 def _apply_collection_outcome(
@@ -898,7 +923,6 @@ def _deterministic_inference_fallback(
         if isinstance(item, dict) and str(item.get("name") or "").strip() and str(item.get("value") or "").strip()
     ]
     summary = _technical_summary(ticker, key_metrics)
-    uncertainty = f"LLM 구조화 출력이 실패해 정량 지표와 수집 근거 기반의 보수적 fallback으로 작성했습니다. 원인: {reason}"
     bull_points, bull_evidence_ids = _technical_point_defaults(ticker, key_metrics, side="bull")
     bear_points, bear_evidence_ids = _technical_point_defaults(ticker, key_metrics, side="bear")
     if len(bull_points) < 2:
@@ -942,15 +966,6 @@ def _deterministic_inference_fallback(
         "key_metrics": metric_dicts[:12],
         "cited_doc_ids": doc_ids,
         "catalyst_timeline": {
-            "near_term": ["가격 모멘텀, 거래량, 최근 뉴스 플로우 확인"],
-            "mid_term": ["실적 발표와 밸류에이션 재평가 여부 확인"],
-            "long_term": ["사업 펀더멘털과 자본 조달 리스크 재점검"],
-        },
-        "open_questions": [
-            "최근 거래량과 스프레드가 포지션 진입 규모를 감당할 수 있는가?",
-            "실적 또는 공시 이벤트가 가격 변동을 설명하는가?",
-        ],
-        "catalyst_timeline": {
             "near_term": ["가격 모멘텀, 거래량, 최근 뉴스 흐름 확인"],
             "mid_term": ["실적 발표, 가이던스, 밸류에이션 재평가 여부 확인"],
             "long_term": ["사업 모멘텀, 자본 조달 리스크, 경쟁 구도 재점검"],
@@ -958,7 +973,7 @@ def _deterministic_inference_fallback(
         "open_questions": [
             "최근 가격 움직임이 거래량 증가를 동반했는가?",
             "실적 또는 공시 이벤트가 가격 변동을 설명하는가?",
-            "현재 밸류에이션이 모멘텀 둔화 위험을 충분히 반영하는가?",
+            "현재 밸류에이션이 모멘텀 약화 위험을 충분히 반영하는가?",
         ],
         "_meta": {
             "primary_model": str(model),
@@ -1465,14 +1480,14 @@ def _deterministic_inference_fallback(
         "key_metrics": metric_dicts[:16],
         "cited_doc_ids": doc_ids,
         "catalyst_timeline": {
-            "near_term": ["가격 모멘텀, 거래량, 최근 뉴스 흐름, 재무 스냅샷 변화를 확인"],
-            "mid_term": ["실적 발표, 가이던스, 컨센서스, 밸류에이션 재평가 여부 확인"],
-            "long_term": ["사업 모멘텀, 현금흐름, 자본 조달 리스크, 경쟁 구도 재점검"],
+            "near_term": ["가격 모멘텀, 거래량, 최근 뉴스 흐름 확인"],
+            "mid_term": ["실적 발표, 가이던스, 밸류에이션 재평가 여부 확인"],
+            "long_term": ["사업 모멘텀, 자본 조달 리스크, 경쟁 구도 재점검"],
         },
         "open_questions": [
-            "최근 가격 움직임이 거래량 증가와 재무 지표 개선을 동반했는가?",
+            "최근 가격 움직임이 거래량 증가를 동반했는가?",
             "실적 또는 공시 이벤트가 가격 변동을 설명하는가?",
-            "현재 밸류에이션이 성장 둔화와 변동성 위험을 충분히 반영하는가?",
+            "현재 밸류에이션이 모멘텀 약화 위험을 충분히 반영하는가?",
         ],
         "_meta": {
             "primary_model": str(model),
@@ -1943,9 +1958,57 @@ async def run_pipeline_async(
         structured_metric_dicts = structured_context_metrics(structured_context)
         fundamentals_context_item = fundamentals_card_to_retrieval_item(fundamentals_card)
         fundamentals_metric_dicts = fundamentals_card_metrics(fundamentals_card)
+        macro_context = None
+        macro_context_item = None
+        macro_metric_dicts: list[dict[str, Any]] = []
+        macro_context_error = ""
+        if _should_attach_macro_platform_context(request_ticker, request.question, list(request.sources)):
+            _emit(event_sink, "stage_started", stage="macro_context", ticker=request_ticker)
+            macro_started = time.time()
+            try:
+                macro_context_model = await asyncio.wait_for(
+                    asyncio.to_thread(get_macro_research_context, ticker=request_ticker),
+                    timeout=_macro_context_timeout_s(),
+                )
+                macro_context = macro_context_model.model_dump(mode="json")
+                macro_context_item = macro_research_context_to_retrieval_item(
+                    macro_context_model,
+                    ticker=request_ticker,
+                )
+                macro_metric_dicts = macro_research_context_metrics(macro_context_model, ticker=request_ticker)
+                stages_ran.append("macro_context")
+                _emit(
+                    event_sink,
+                    "stage_completed",
+                    stage="macro_context",
+                    duration_s=round(time.time() - macro_started, 2),
+                    status="ok",
+                    data_quality=macro_context.get("portfolio_hints", {}).get("data_quality", {}).get("status"),
+                )
+            except getattr(asyncio.exceptions, "TimeoutError", asyncio.TimeoutError):
+                macro_context_error = f"Macro platform context timed out after {_macro_context_timeout_s():.1f}s; continuing without it."
+                logger.warning("[MACRO_CONTEXT] %s", macro_context_error)
+                _emit(
+                    event_sink,
+                    "stage_completed",
+                    stage="macro_context",
+                    duration_s=round(time.time() - macro_started, 2),
+                    status="timeout",
+                )
+            except Exception as exc:  # noqa: BLE001
+                macro_context_error = f"Macro platform context failed open: {exc}"
+                logger.warning("[MACRO_CONTEXT] %s", macro_context_error)
+                _emit(
+                    event_sink,
+                    "stage_completed",
+                    stage="macro_context",
+                    duration_s=round(time.time() - macro_started, 2),
+                    status="failed",
+                    error=str(exc),
+                )
 
         if not current_doc_ids:
-            if structured_context_item is None and fundamentals_context_item is None:
+            if structured_context_item is None and fundamentals_context_item is None and macro_context_item is None:
                 status = "partial"
                 stale_block_reason = (
                     "No usable current-run primary documents; stale Qdrant context blocked."
@@ -1980,7 +2043,7 @@ async def run_pipeline_async(
                 "No usable current-run documents; using structured data mart and finance snapshot context only.",
             )
             logger.warning("[RETRIEVAL_SKIPPED] No current-run documents. Using data mart and fundamentals structured context only.")
-            context_items = [item for item in (structured_context_item, fundamentals_context_item) if item is not None]
+            context_items = [item for item in (structured_context_item, fundamentals_context_item, macro_context_item) if item is not None]
         else:
             # 3. Retrieve
             settings_for_retrieval = load_settings()
@@ -2042,6 +2105,8 @@ async def run_pipeline_async(
                 context_items.append(structured_context_item)
             if fundamentals_context_item is not None:
                 context_items.append(fundamentals_context_item)
+            if macro_context_item is not None:
+                context_items.append(macro_context_item)
         if not context_items:
             status = "partial"
             if current_doc_ids:
@@ -2098,7 +2163,7 @@ async def run_pipeline_async(
                 ),
                 timeout=_inference_timeout_s()
             )
-        except getattr(asyncio.exceptions, "TimeoutError", asyncio.TimeoutError) as e:
+        except getattr(asyncio.exceptions, "TimeoutError", asyncio.TimeoutError):
             logger.error("[INFERENCE_FAILURE] LLM generation timed out.")
             inference_degraded_reason = "LLM inference timeout; deterministic fallback used."
             status = "partial"
@@ -2187,7 +2252,12 @@ async def run_pipeline_async(
 
         # Build metrics before thesis construction so deterministic technical
         # indicators can repair non-Korean or repetitive model text.
-        deterministic_metric_dicts = [*structured_metric_dicts, *fundamentals_metric_dicts, *technical_metric_dicts]
+        deterministic_metric_dicts = [
+            *structured_metric_dicts,
+            *fundamentals_metric_dicts,
+            *macro_metric_dicts,
+            *technical_metric_dicts,
+        ]
         raw_metrics = _filter_llm_metrics(raw_output.get("key_metrics") or [], deterministic_metric_dicts)
         key_metrics: list[KeyMetric] = []
         for m in raw_metrics:
@@ -2285,6 +2355,13 @@ async def run_pipeline_async(
                 "provider_status": _provider_statuses(collection_outcome),
                 "data_freshness": _data_freshness(context_items),
                 "structured_context": structured_context,
+                "macro_context": macro_context or {},
+                "macro_context_status": (
+                    "attached"
+                    if macro_context_item is not None
+                    else ("failed_open" if macro_context_error else "not_applicable")
+                ),
+                "macro_context_error": macro_context_error,
                 "data_mart_freshness": structured_context.get("freshness") if isinstance(structured_context, dict) else {},
                 "data_quality_summary": structured_context.get("data_quality_summary") if isinstance(structured_context, dict) else {},
                 "error_type": _classify_error_type(error_metadata, status),

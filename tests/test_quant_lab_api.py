@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -376,3 +377,7 @@ def test_strategy_generate_endpoint_returns_code_only_strategy_without_llm() -> 
     assert body["strategy"]["execution"]["trade_at"] == "next_bar_close"
     assert body["advantages"]
     assert body["disadvantages"]
+    cjk_or_japanese = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff]")
+    for text in [*body["advantages"], *body["disadvantages"]]:
+        assert re.search(r"[\uac00-\ud7a3]", text)
+        assert not cjk_or_japanese.search(text)

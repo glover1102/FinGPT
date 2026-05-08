@@ -11,6 +11,7 @@ from app.api.routers.backtest import router as backtest_router
 from app.api.routers.ai_portfolio import router as ai_portfolio_router
 from app.api.routers.dashboard import router as dashboard_router
 from app.api.routers.data import router as data_router
+from app.api.routers.macro import router as macro_router
 from app.api.routers.portfolio import router as portfolio_router
 from app.api.routers.quant_lab import router as quant_lab_router
 from app.api.routers.research import router as research_router
@@ -90,6 +91,8 @@ app.include_router(portfolio_router)
 app.include_router(ai_portfolio_router, prefix="/api/v1/ai-portfolio")
 app.include_router(ai_portfolio_router, prefix="/api/ai-portfolio")
 app.include_router(watchlist_router)
+app.include_router(macro_router, prefix="/api/v1/macro")
+app.include_router(macro_router, prefix="/api/macro")
 app.include_router(quant_lab_router)
 
 if WEB_DIR.exists():

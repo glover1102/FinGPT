@@ -187,11 +187,120 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn('id="homeDashboardTabs"', html)
         self.assertIn('data-dashboard-tab="quant"', html)
         self.assertIn('data-dashboard-tab="ai-portfolio"', html)
+        self.assertIn('data-dashboard-tab="macro"', html)
         self.assertIn("function dashboardTabFromLocation", self.source)
         self.assertIn("hashchange", self.source)
+        self.assertIn('"#macro"', self.source)
         self.assertIn('"#quant-lab"', self.source)
         self.assertIn('"#ai-portfolio"', self.source)
         self.assertIn("setDashboardTab(nextTab", self.source)
+        self.assertIn("function loadMarketDashboard", self.source)
+        self.assertIn("function loadActiveDashboardResources", self.source)
+
+    def test_dashboard_initialization_does_not_eager_load_market_for_other_tabs(self):
+        init_match = re.search(r"\(async function init\(\) \{(?P<body>.*?)\n\}\)\(\);", self.source, re.S)
+        self.assertIsNotNone(init_match)
+        init_body = init_match.group("body")
+        self.assertIn("loadActiveDashboardResources(false)", init_body)
+        for marker in [
+            "initializeTradingViewDashboard(false);",
+            "loadDashboardEquityHeatmap(false);",
+            "loadDashboardMarket(false);",
+            "loadDataHealth(false);",
+            "loadDashboardNews(false);",
+        ]:
+            self.assertNotIn(marker, init_body)
+        show_match = re.search(r"function showHome\(\) \{(?P<body>.*?)\n\}\n\nfunction showTvFallback", self.source, re.S)
+        self.assertIsNotNone(show_match)
+        self.assertIn("loadActiveDashboardResources(false)", show_match.group("body"))
+        market_match = re.search(r"function loadMarketDashboard\(force = false\) \{(?P<body>.*?)\n\}", self.source, re.S)
+        self.assertIsNotNone(market_match)
+        market_body = market_match.group("body")
+        self.assertIn("initializeTradingViewDashboard(force)", market_body)
+        self.assertIn("loadDashboardEquityHeatmap(force)", market_body)
+        self.assertIn("loadDashboardMarket(force)", market_body)
+        self.assertIn("loadDashboardNews(force)", market_body)
+
+    def test_macro_static_ui_contract(self):
+        html = INDEX_HTML.read_text(encoding="utf-8")
+        css = STYLES_CSS.read_text(encoding="utf-8")
+        for marker in [
+            'id="macroDashboardTab"',
+            'id="macroSurface"',
+            'id="macroRefresh"',
+            'data-testid="macro-refresh"',
+            'id="macroBriefGenerate"',
+            'data-testid="macro-brief-generate"',
+            'id="macroReportExport"',
+            'data-testid="macro-report-export"',
+            'id="macroOverviewSurface"',
+            'id="macroIndicatorTable"',
+            'id="macroChartSurface"',
+            'id="macroInterestRatesSurface"',
+            'id="macroInflationSurface"',
+            'id="macroGrowthLaborSurface"',
+            'id="macroYieldCurveSurface"',
+            'id="macroLiquidityCreditSurface"',
+            'id="macroFxDollarSurface"',
+            'id="macroCommoditiesSurface"',
+            'id="macroRegimeSurface"',
+            'id="macroAssetImpactSurface"',
+            'id="macroPortfolioHintsSurface"',
+            'id="macroBriefSurface"',
+            'id="macroDataQualitySurface"',
+        ]:
+            self.assertIn(marker, html)
+        for marker in [
+            "API.macroOverview",
+            "API.macroBrief",
+            "API.macroReport",
+            "function loadMacro",
+            "function renderMacroOverview",
+            "function renderMacroIndicatorTable",
+            "function renderMacroSeriesChart",
+            "function generateMacroBrief",
+            "function exportMacroReport",
+            "function macroDataSurfaces",
+            "state.macroOverview",
+            "renderActionCompletion(\"매크로 데이터 갱신 완료\"",
+        ]:
+            self.assertIn(marker, self.source)
+        self.assertIn(".macro-surface", css)
+        self.assertIn('[data-dashboard-tab="macro"]', css)
+        self.assertIn(".decision-completion", css)
+
+    def test_quant_action_controls_have_stable_automation_selectors(self):
+        html = INDEX_HTML.read_text(encoding="utf-8")
+        for marker in [
+            'data-testid="quant-feature-run"',
+            'data-testid="quant-signal-run"',
+            'data-testid="quant-strategy-refresh"',
+            'data-testid="quant-strategy-new-draft"',
+            'data-testid="quant-strategy-generate"',
+            'data-testid="quant-strategy-dry-run"',
+            'data-testid="quant-strategy-save"',
+            'data-testid="quant-strategy-delete"',
+            'data-testid="quant-backtest-run"',
+            'data-testid="quant-export-storage-report"',
+            'data-testid="quant-cross-run-cleanup-preview"',
+            'data-testid="quant-run-history-refresh"',
+            'data-testid="portfolio-sync-backtest"',
+            'data-testid="portfolio-optimize"',
+        ]:
+            self.assertIn(marker, html)
+        for marker in [
+            'data-testid="quant-export-verify-latest"',
+            'data-testid="quant-export-verify-row"',
+            'data-testid="quant-run-open"',
+            'data-testid="quant-strategy-row-load"',
+            'data-action="enable-strict-freshness"',
+            "renderActionCompletion(\"백테스트 완료\"",
+            "renderActionCompletion(\"백테스트 실행 보류\"",
+            "renderActionCompletion(\"백테스트 실패\"",
+            "renderActionCompletion(\"팩터 미리보기 완료\"",
+            "renderActionCompletion(\"포트폴리오 최적화 완료\"",
+        ]:
+            self.assertIn(marker, self.source)
 
     def test_ai_portfolio_static_ui_contract(self):
         html = INDEX_HTML.read_text(encoding="utf-8")

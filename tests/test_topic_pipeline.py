@@ -4,6 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from core.schemas.macro import MacroDataQuality, MacroRegime, MacroResearchContext, PortfolioPolicyHint
 from core.schemas.retrieval import RetrievalItem
 from core.schemas.topic import TopicRequest
 from pipelines.collect.models import CollectionOutcome, SourceCollectionResult
@@ -24,6 +25,44 @@ def _context_item(doc_id: str, text: str) -> RetrievalItem:
         chunk=text,
         score=0.9,
         metadata={"doc_id": doc_id, "parent_doc_id": doc_id},
+    )
+
+
+def _macro_context() -> MacroResearchContext:
+    quality = MacroDataQuality(status="unavailable", provider="test", missing_series=["DGS10"])
+    regime = MacroRegime(
+        name="unknown",
+        display_name="Unknown",
+        confidence=0.1,
+        risk_level="unknown",
+        scores={},
+        missing_inputs=["growth_signal"],
+        interpretation="Insufficient macro inputs; regime is not inferred.",
+    )
+    hint = PortfolioPolicyHint(
+        regime="unknown",
+        equity_bias="unknown",
+        bond_bias="unknown",
+        cash_bias="unknown",
+        alternative_bias="unknown",
+        duration_bias="unknown",
+        credit_bias="unknown",
+        risk_level="unknown",
+        rebalance_attention=False,
+        explanation="Advisory only; insufficient macro data.",
+        warnings=["advisory only; no trade order is created"],
+        data_quality=quality,
+        advisory_only=True,
+    )
+    return MacroResearchContext(
+        regime=regime,
+        risk_level="unknown",
+        key_indicators=[],
+        signals=[],
+        asset_impacts=[],
+        portfolio_hints=hint,
+        ticker_relevance={"TLT": ["DGS10", "DFII10", "CPIAUCSL"]},
+        data_quality_warnings=["missing:DGS10"],
     )
 
 
@@ -259,11 +298,54 @@ class TopicPipelineTests(unittest.IsolatedAsyncioTestCase):
         deep_infer.assert_not_called()
         self.assertEqual(response.status, "success")
         self.assertTrue(response.key_metrics)
-        self.assertTrue(all(metric.as_of == "2026-04-20" for metric in response.key_metrics))
+        self.assertTrue(any(metric.as_of == "2026-04-20" for metric in response.key_metrics))
+        self.assertEqual(response.execution_meta.extras["macro_platform_context_status"], "attached")
         self.assertTrue(response.execution_meta.extras["deep_pass_skipped"])
         self.assertEqual(response.execution_meta.extras["retrieval_mode"], "fast_current_documents")
         self.assertTrue(any(event["event"] == "partial_result" for event in events))
         self.assertFalse(any(event.get("stage") == "ingest" for event in events))
+
+    async def test_topic_pipeline_attaches_macro_platform_context(self):
+        request = TopicRequest(
+            question="Does the current macro regime support TLT?",
+            theme="US duration and TLT",
+            related_tickers=["TLT"],
+            top_k=3,
+        )
+        doc_id = "tlt_macro_1"
+        outcome = CollectionOutcome(
+            documents=[
+                {
+                    "doc_id": doc_id,
+                    "ticker": "TLT",
+                    "symbol": "TLT",
+                    "doc_type": "macro",
+                    "source": "FRED:DGS30",
+                    "published_at": "2026-04-20",
+                    "title": "30Y Treasury yield",
+                    "text": "30Y Treasury yield remains elevated.",
+                }
+            ],
+            source_results=[SourceCollectionResult("topic_asset:TLT", "ok", 1, 0.1, "ok")],
+            current_doc_ids=[doc_id],
+        )
+        fast_context = [_context_item(doc_id, "30Y Treasury yield remains elevated.")]
+        fast_phase = _phase_result(doc_id, gate_ok=True, final_gate_ok=True)
+
+        with patch.object(topic_pipeline, "load_settings", return_value=SimpleNamespace(output_language="ko")), \
+             patch.object(topic_pipeline, "collect_topic_bundle", return_value=outcome), \
+             patch.object(topic_pipeline, "rank_topic_context_fast", return_value=fast_context), \
+             patch.object(topic_pipeline, "get_macro_research_context", return_value=_macro_context()), \
+             patch.object(topic_pipeline, "run_topic_fast_inference", return_value=fast_phase), \
+             patch.object(topic_pipeline, "run_topic_deep_inference") as deep_infer, \
+             patch.object(topic_pipeline, "build_topic_report", return_value=("# report", "<html></html>")), \
+             patch.object(topic_pipeline, "save_outputs"):
+            response = await topic_pipeline.run_topic_pipeline_async(request, mode="sector_macro")
+
+        deep_infer.assert_not_called()
+        self.assertEqual(response.execution_meta.extras["macro_platform_context_status"], "attached")
+        self.assertEqual(response.execution_meta.extras["macro_platform_context"]["regime"]["name"], "unknown")
+        self.assertTrue(any(item.source == "macro:platform" for item in response.raw_context))
 
     async def test_credit_topic_uses_deterministic_fast_path(self):
         request = TopicRequest(

@@ -41,8 +41,14 @@ Return exactly one JSON object matching the provided schema.
 The strategy is not Python code. It must be a strategy definition JSON object only.
 Do not include universe, tickers, benchmark, markdown, or explanations inside strategy.
 execution.trade_at must be next_bar_close.
-Use Korean for advantages and disadvantages.
+advantages and disadvantages must be natural Korean sentences only.
+Do not write Chinese, Japanese, Hanja, mojibake, or garbled text in any narrative field.
 """.strip()
+
+_HANGUL_RE = re.compile(r"[\uac00-\ud7a3]")
+_CJK_IDEOGRAPH_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+_JAPANESE_RE = re.compile(r"[\u3040-\u30ff]")
+_MOJIBAKE_RE = re.compile(r"[ÃÂ�]|(?:[ìíëê][\x80-\xff]?)|(?:[æäåçèé][\x80-\xff]?)")
 
 
 def generate_strategy_from_prompt(
@@ -77,14 +83,22 @@ def generate_strategy_from_prompt(
         strategy = _code_only_strategy(parsed.get("strategy") if isinstance(parsed.get("strategy"), dict) else parsed)
         strategy = _repair_required_strategy_fields(strategy, clean_prompt, context)
         validate_strategy(strategy)
+        advantages, advantages_repaired = _clean_korean_review_list(parsed.get("advantages"), fallback["advantages"])
+        disadvantages, disadvantages_repaired = _clean_korean_review_list(
+            parsed.get("disadvantages"),
+            fallback["disadvantages"],
+        )
+        warnings = []
+        if advantages_repaired or disadvantages_repaired:
+            warnings.append("strategy_review_language_repaired_to_korean")
         return {
             "status": "success",
             "model_status": "local_llm",
             "model": model,
             "strategy": strategy,
-            "advantages": _clean_text_list(parsed.get("advantages")) or fallback["advantages"],
-            "disadvantages": _clean_text_list(parsed.get("disadvantages")) or fallback["disadvantages"],
-            "warnings": [],
+            "advantages": advantages,
+            "disadvantages": disadvantages,
+            "warnings": warnings,
         }
     except Exception as exc:  # noqa: BLE001
         fallback["model_status"] = "fallback_after_llm_error"
@@ -119,11 +133,15 @@ def _strategy_prompt(prompt: str, context: dict[str, Any], fallback_strategy: di
     return "\n".join(
         [
             "사용자가 원하는 전략을 FinGPT Quant Lab 전략 JSON으로 변환하세요.",
-            "오른쪽 코드칸에는 strategy 객체만 들어가므로 strategy 안에는 설명을 넣지 마세요.",
-            "종목 유니버스와 벤치마크는 아래 백테스트 UI가 관리하므로 반드시 제외하세요.",
-            "지원 팩터: momentum_63d, realized_vol_21d, drawdown_current, ma_ratio_20_50, relative_strength_spy_63d, research_score.",
-            "지원 신호 예: rank_top_n, trend_filter, volatility_target.",
+            "응답은 반드시 JSON 객체 하나만 반환하세요. markdown, 주석, 코드펜스는 금지입니다.",
+            "strategy 객체에는 실제 전략 정의만 넣고, 설명 문장은 advantages/disadvantages 배열에만 넣으세요.",
+            "strategy 안에는 universe, tickers, benchmark를 넣지 마세요. 이 값들은 백테스트 UI가 별도로 관리합니다.",
+            "advantages와 disadvantages의 모든 항목은 자연스러운 한국어 문장이어야 합니다.",
+            "중국어, 일본어, 한자, 깨진 문자, mojibake를 사용하지 마세요. 확신이 없으면 쉬운 한국어로 다시 쓰세요.",
+            "지원 지표: momentum_63d, realized_vol_21d, drawdown_current, ma_ratio_20_50, relative_strength_spy_63d, research_score.",
+            "지원 신호: rank_top_n, trend_filter, volatility_target.",
             "지원 포트폴리오 방식: equal_weight, inverse_volatility, risk_parity, minimum_volatility, max_sharpe, momentum_tilt.",
+            "execution.trade_at은 반드시 next_bar_close로 설정하세요.",
             f"현재 UI 컨텍스트: {json.dumps(context, ensure_ascii=False, sort_keys=True)}",
             f"기본 안전 초안: {json.dumps(fallback_strategy, ensure_ascii=False, sort_keys=True)}",
             f"사용자 프롬프트: {prompt}",
@@ -154,13 +172,13 @@ def _fallback_generation(prompt: str, context: dict[str, Any]) -> dict[str, Any]
         "model": "deterministic_rules",
         "strategy": strategy,
         "advantages": [
-            "다음 봉 체결을 고정해 룩어헤드 편향을 줄입니다.",
-            "모멘텀과 변동성 팩터를 함께 사용해 단순 수익률 순위보다 리스크 점검이 쉽습니다.",
-            "종목 유니버스와 벤치마크를 전략 코드에서 분리해 같은 전략을 여러 조건에 재사용할 수 있습니다.",
+            "다음 봉 종가 체결을 고정해 룩어헤드 편향을 줄입니다.",
+            "모멘텀과 변동성 조건을 함께 사용해 단순 수익률 순위보다 위험을 더 명시적으로 반영합니다.",
+            "종목 유니버스와 벤치마크를 전략 정의에서 분리해 같은 전략을 여러 백테스트 조건에 재사용할 수 있습니다.",
         ],
         "disadvantages": [
-            "프롬프트가 모호하면 세부 진입/청산 조건은 보수적인 기본값으로 해석됩니다.",
-            "거래비용, 슬리피지, 리밸런싱 주기에 민감하므로 저장 전 백테스트 검증이 필요합니다.",
+            "프롬프트가 모호하면 진입, 청산, 리밸런싱 조건이 보수적인 기본값으로 해석됩니다.",
+            "거래비용, 슬리피지, 리밸런싱 주기에 민감하므로 실제 사용 전 백테스트 검증이 필요합니다.",
             "로컬 데이터 마트에 가격 이력이 없는 종목은 실행 유니버스에서 제외됩니다.",
         ],
         "warnings": [] if prompt else ["strategy_prompt_required"],
@@ -170,19 +188,33 @@ def _fallback_generation(prompt: str, context: dict[str, Any]) -> dict[str, Any]
 def _repair_required_strategy_fields(strategy: dict[str, Any], prompt: str, context: dict[str, Any]) -> dict[str, Any]:
     clean = _code_only_strategy(strategy)
     prompt_hash = hashlib.sha1(prompt.encode("utf-8", errors="ignore")).hexdigest()[:10]
-    lookback = _number_near(prompt, [r"(\d{2,4})\s*일", r"(\d{2,4})d", r"(\d{2,4})\s*day"], int(context.get("lookback") or 63))
-    vol_lookback = _number_near(prompt, [r"(\d{1,3})\s*일\s*변동", r"vol(?:atility)?\s*(\d{1,3})"], int(context.get("vol_lookback") or 21))
-    top_n = _number_near(prompt, [r"top\s*(\d{1,2})", r"상위\s*(\d{1,2})", r"(\d{1,2})\s*개"], int(context.get("top_n") or 2))
+    lookback = _number_near(
+        prompt,
+        [r"(\d{2,4})\s*일", r"(\d{2,4})\s*day", r"(\d{2,4})d"],
+        int(context.get("lookback") or 63),
+    )
+    vol_lookback = _number_near(
+        prompt,
+        [r"(\d{1,3})\s*일\s*변동성", r"변동성\s*(\d{1,3})", r"vol(?:atility)?\s*(\d{1,3})"],
+        int(context.get("vol_lookback") or 21),
+    )
+    top_n = _number_near(
+        prompt,
+        [r"top\s*(\d{1,2})", r"상위\s*(\d{1,2})", r"(\d{1,2})\s*개"],
+        int(context.get("top_n") or 2),
+    )
     top_n = max(1, min(top_n, 50))
 
     prompt_lower = prompt.lower()
-    use_research = bool(context.get("use_research_score")) or any(token in prompt_lower for token in ["research", "news", "리서치", "뉴스", "근거", "공시"])
+    use_research = bool(context.get("use_research_score")) or any(
+        token in prompt_lower for token in ["research", "news", "리서치", "뉴스", "근거", "공시"]
+    )
     portfolio_method = str(context.get("portfolio_method") or "equal_weight").lower()
     if "risk parity" in prompt_lower or "리스크 패리티" in prompt_lower:
         portfolio_method = "risk_parity"
     elif "minimum vol" in prompt_lower or "최소 변동" in prompt_lower:
         portfolio_method = "minimum_volatility"
-    elif "inverse vol" in prompt_lower or "역변동" in prompt_lower:
+    elif "inverse vol" in prompt_lower or "변동성 역가중" in prompt_lower or "역변동성" in prompt_lower:
         portfolio_method = "inverse_volatility"
     elif "max sharpe" in prompt_lower or "샤프" in prompt_lower:
         portfolio_method = "max_sharpe"
@@ -190,16 +222,17 @@ def _repair_required_strategy_fields(strategy: dict[str, Any], prompt: str, cont
     strategy_id = str(clean.get("strategy_id") or f"prompt_strategy_{prompt_hash}").strip().lower()
     strategy_id = re.sub(r"[^a-z0-9_-]+", "_", strategy_id).strip("_") or f"prompt_strategy_{prompt_hash}"
     clean["strategy_id"] = strategy_id[:80]
-    clean.setdefault("name", _strategy_name(prompt))
+    name = str(clean.get("name") or "").strip()
+    clean["name"] = _strategy_name(prompt) if not name or _has_disallowed_language(name) else name[:120]
     clean.setdefault("schema_version", "quant_strategy_v1")
     clean.setdefault("strategy_version", "1")
     clean.setdefault("frequency", "daily")
     features = clean.get("features") if isinstance(clean.get("features"), dict) else {}
     features.setdefault("momentum_63d", {"id": "momentum_63d", "lookback": lookback})
     features.setdefault("realized_vol_21d", {"id": "realized_vol_21d", "lookback": vol_lookback})
-    if "drawdown" in prompt_lower or "mdd" in prompt_lower or "낙폭" in prompt_lower:
+    if "drawdown" in prompt_lower or "mdd" in prompt_lower or "낙폭" in prompt_lower or "드로다운" in prompt_lower:
         features.setdefault("drawdown_current", {"id": "drawdown_current"})
-    if "trend" in prompt_lower or "이동평균" in prompt or "추세" in prompt:
+    if "trend" in prompt_lower or "이동평균" in prompt_lower or "추세" in prompt_lower:
         features.setdefault("ma_ratio_20_50", {"id": "ma_ratio_20_50"})
     if use_research:
         features.setdefault("research_score", {"id": "research_score", "max_age_days": int(context.get("research_max_age_days") or 7)})
@@ -233,7 +266,7 @@ def _repair_required_strategy_fields(strategy: dict[str, Any], prompt: str, cont
 
 def _strategy_name(prompt: str) -> str:
     cleaned = re.sub(r"\s+", " ", str(prompt or "").strip())
-    if not cleaned:
+    if not cleaned or _has_disallowed_language(cleaned):
         return "Prompt Strategy"
     return cleaned[:36].rstrip(" ,.;") or "Prompt Strategy"
 
@@ -255,10 +288,37 @@ def _clean_text_list(value: Any) -> list[str]:
         return []
     out: list[str] = []
     for item in value:
-        text = str(item or "").strip()
+        text = " ".join(str(item or "").split()).strip()
         if text:
             out.append(text[:240])
     return out[:6]
+
+
+def _clean_korean_review_list(value: Any, fallback: list[str]) -> tuple[list[str], bool]:
+    raw = _clean_text_list(value)
+    cleaned = [item for item in raw if _is_usable_korean_review_text(item)]
+    repaired = len(cleaned) != len(raw)
+    for fallback_item in fallback:
+        if len(cleaned) >= 2:
+            break
+        if fallback_item not in cleaned:
+            cleaned.append(fallback_item)
+            repaired = True
+    if not cleaned:
+        return fallback[:6], bool(raw)
+    return cleaned[:6], repaired
+
+
+def _is_usable_korean_review_text(text: Any) -> bool:
+    value = " ".join(str(text or "").split()).strip()
+    if not value or _has_disallowed_language(value):
+        return False
+    return len(_HANGUL_RE.findall(value)) >= 4
+
+
+def _has_disallowed_language(text: Any) -> bool:
+    value = str(text or "")
+    return bool(_CJK_IDEOGRAPH_RE.search(value) or _JAPANESE_RE.search(value) or _MOJIBAKE_RE.search(value))
 
 
 def _code_only_strategy(strategy: dict[str, Any] | None) -> dict[str, Any]:

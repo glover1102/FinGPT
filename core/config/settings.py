@@ -137,6 +137,9 @@ class Settings(BaseSettings):
     # When empty, the FRED provider fast-skips with ``credentials_missing`` and
     # the macro bundle falls back to yfinance price series + Google News.
     fred_api_key: str = Field(default="")
+    ecos_api_key: str = Field(default="")
+    macro_provider_timeout_s: float = Field(default=8.0)
+    macro_yahoo_default_period: str = Field(default="5y")
 
     # Macro bundle knobs. Price-history lookback is independent from news
     # lookback because macro charts benefit from a longer window even when the

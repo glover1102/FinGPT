@@ -25,3 +25,7 @@ def test_quant_lab_compatibility_routes_live_in_dedicated_routers() -> None:
     assert _route_module("/api/v1/watchlist", "GET") == "app.api.routers.watchlist"
     assert _route_module("/api/v1/config", "GET") == "app.api.routers.system"
     assert _route_module("/api/v1/health", "GET") == "app.api.routers.system"
+    assert _route_module("/api/v1/macro/overview", "GET") == "app.api.routers.macro"
+    assert _route_module("/api/v1/macro/series", "GET") == "app.api.routers.macro"
+    assert _route_module("/api/v1/macro/report", "GET") == "app.api.routers.macro"
+    assert _route_module("/api/macro/overview", "GET") == "app.api.routers.macro"

@@ -156,6 +156,7 @@ data/ai_portfolio/
 data/ai_portfolio_smoke/
 data/ai_portfolio_browser_smoke/
 reports/
+test-results/
 .playwright-cli/
 .ruff_cache/
 scratch/

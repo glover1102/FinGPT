@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 import re
 import time
 from datetime import datetime, timezone
@@ -47,6 +48,12 @@ from pipelines.infer.topic_prompt import (
     run_topic_fast_inference,
 )
 from pipelines.ingest.qdrant_ingestor import ingest_documents
+from pipelines.macro.macro_service import get_macro_research_context
+from pipelines.macro.research_context import (
+    TICKER_RELEVANCE,
+    macro_research_context_metrics,
+    macro_research_context_to_retrieval_item,
+)
 from pipelines.output.output_writer import save_outputs
 from pipelines.retrieve.topic_retriever import rank_topic_context_fast, retrieve_topic_context
 
@@ -176,6 +183,50 @@ def _needs_historical_context(question: str, phase: TopicInferencePhaseResult) -
     if phase.topic_plan.asset_class == "rates_bonds" and len(phase.evidence_pack.buckets["macro"].items) < 2:
         return True
     return False
+
+
+_TOPIC_MACRO_TERMS = (
+    "macro",
+    "rate",
+    "rates",
+    "yield",
+    "inflation",
+    "fed",
+    "liquidity",
+    "credit",
+    "dollar",
+    "gold",
+    "oil",
+    "duration",
+    "cycle",
+    "regime",
+)
+
+
+def _topic_macro_context_timeout_s() -> float:
+    if os.environ.get("FINGPT_VALIDATION_FAST_INFERENCE", "").strip().lower() in {"1", "true", "yes"}:
+        return 5.0
+    return 15.0
+
+
+def _topic_macro_target(request: TopicRequest, theme: str) -> str:
+    for ticker in request.related_tickers or []:
+        symbol = str(ticker or "").upper().strip()
+        if symbol:
+            return symbol
+    return str(theme or request.question or "GLOBAL").strip()[:32] or "GLOBAL"
+
+
+def _should_attach_topic_macro_context(request: TopicRequest, mode: str, topic_plan: Any) -> bool:
+    text = f"{request.question} {request.theme or ''} {' '.join(request.related_tickers or [])} {getattr(topic_plan, 'asset_class', '')}".lower()
+    tickers = {str(ticker or "").upper().strip() for ticker in request.related_tickers or []}
+    if tickers & set(TICKER_RELEVANCE):
+        return True
+    if str(mode or "").lower() == "sector_macro":
+        return True
+    if any(term in text for term in _TOPIC_MACRO_TERMS):
+        return True
+    return str(getattr(topic_plan, "asset_class", "") or "") in {"rates_bonds", "credit", "commodity", "fx", "equity_index"}
 
 
 def _drivers(raw: Any, direction: str) -> list[KeyDriver]:
@@ -1663,13 +1714,15 @@ async def run_topic_pipeline_async(
     blocking_errors: list[str] = []
     recovered_errors: list[str] = []
     stage_timings: dict[str, float] = {}
-    stage_order: list[str] = ["collect", "retrieve", "infer", "analyze", "report", "output"]
     fast_context: list[RetrievalItem] = []
     final_context: list[RetrievalItem] = []
     ingest_stats: dict[str, Any] | None = None
     deep_pass_reason: list[str] = []
     deep_pass_skipped = True
     retrieval_mode = "fast_current_documents"
+    macro_context: dict[str, Any] | None = None
+    macro_context_error = ""
+    macro_metric_dicts: list[dict[str, Any]] = []
 
     _emit(
         event_sink,
@@ -1748,6 +1801,49 @@ async def run_topic_pipeline_async(
         quant_snapshot.setdefault("metrics", [])
         quant_snapshot["metrics"].extend(structured_context_metrics(structured_context))
         quant_snapshot["structured_context"] = structured_context
+
+    if _should_attach_topic_macro_context(request, mode, preliminary_plan):
+        macro_target = _topic_macro_target(request, theme)
+        macro_started = time.time()
+        _emit(event_sink, "stage_started", stage="macro_context", ticker=macro_target)
+        try:
+            macro_context_model = await asyncio.wait_for(
+                asyncio.to_thread(get_macro_research_context, ticker=macro_target),
+                timeout=_topic_macro_context_timeout_s(),
+            )
+            macro_context = macro_context_model.model_dump(mode="json")
+            macro_item = macro_research_context_to_retrieval_item(macro_context_model, ticker=macro_target)
+            fast_context.append(macro_item)
+            macro_metric_dicts = macro_research_context_metrics(macro_context_model, ticker=macro_target)
+            quant_snapshot.setdefault("metrics", [])
+            quant_snapshot["metrics"].extend(macro_metric_dicts)
+            quant_snapshot["macro_platform_context"] = macro_context
+            stage_timings["macro_context"] = round(time.time() - macro_started, 2)
+            _emit(
+                event_sink,
+                "stage_completed",
+                stage="macro_context",
+                duration_s=stage_timings["macro_context"],
+                status="ok",
+                data_quality=macro_context.get("portfolio_hints", {}).get("data_quality", {}).get("status"),
+            )
+        except getattr(asyncio.exceptions, "TimeoutError", asyncio.TimeoutError):
+            macro_context_error = f"Macro platform context timed out after {_topic_macro_context_timeout_s():.1f}s; continuing without it."
+            stage_timings["macro_context"] = round(time.time() - macro_started, 2)
+            logger.warning("[TOPIC_MACRO_CONTEXT] %s", macro_context_error)
+            _emit(event_sink, "stage_completed", stage="macro_context", duration_s=stage_timings["macro_context"], status="timeout")
+        except Exception as exc:  # noqa: BLE001
+            macro_context_error = f"Macro platform context failed open: {exc}"
+            stage_timings["macro_context"] = round(time.time() - macro_started, 2)
+            logger.warning("[TOPIC_MACRO_CONTEXT] %s", macro_context_error)
+            _emit(
+                event_sink,
+                "stage_completed",
+                stage="macro_context",
+                duration_s=stage_timings["macro_context"],
+                status="failed",
+                error=str(exc),
+            )
 
     infer_fast_started = time.time()
     _emit(event_sink, "stage_started", stage="infer", phase="fast", chunks=len(fast_context))
@@ -1887,6 +1983,10 @@ async def run_topic_pipeline_async(
             "substituted_buckets": fast_meta.get("substituted_buckets") or list((quant_snapshot or {}).get("substituted_buckets") or []),
             "quant_snapshot": fast_meta.get("quant_snapshot") or quant_snapshot,
             "structured_context": structured_context,
+            "macro_platform_context": macro_context or {},
+            "macro_platform_context_status": "attached" if macro_context else ("failed_open" if macro_context_error else "not_applicable"),
+            "macro_platform_context_error": macro_context_error,
+            "macro_platform_metrics_count": len(macro_metric_dicts),
             "data_mart_freshness": structured_context.get("freshness") if isinstance(structured_context, dict) else {},
             "data_quality_summary": structured_context.get("data_quality_summary") if isinstance(structured_context, dict) else {},
             "llm_skipped_reason": fast_meta.get("llm_skipped_reason") or "",
@@ -1937,7 +2037,6 @@ async def run_topic_pipeline_async(
         substituted_buckets=list((quant_snapshot or {}).get("substituted_buckets") or []),
     )
     fast_blocking_buckets = fast_bucket_policy["blocking_missing"]
-    fast_warning_buckets = fast_bucket_policy["warning_missing"]
     need_deep_infer = not fast_phase.final_gate["ok"]
     need_deep_retrieval = bool(
         fast_blocking_buckets
@@ -2182,6 +2281,10 @@ async def run_topic_pipeline_async(
             "blocking_evidence_buckets": blocking_buckets,
             "quant_snapshot": final_meta.get("quant_snapshot") or fast_meta.get("quant_snapshot") or quant_snapshot,
             "structured_context": structured_context,
+            "macro_platform_context": macro_context or {},
+            "macro_platform_context_status": "attached" if macro_context else ("failed_open" if macro_context_error else "not_applicable"),
+            "macro_platform_context_error": macro_context_error,
+            "macro_platform_metrics_count": len(macro_metric_dicts),
             "data_mart_freshness": structured_context.get("freshness") if isinstance(structured_context, dict) else {},
             "data_quality_summary": structured_context.get("data_quality_summary") if isinstance(structured_context, dict) else {},
             "llm_skipped_reason": final_meta.get("llm_skipped_reason") or fast_meta.get("llm_skipped_reason") or "",
