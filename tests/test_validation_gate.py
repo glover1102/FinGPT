@@ -14,6 +14,7 @@ from scripts.validation_gate import (
     evaluate_preflight_gate,
     run_api_smoke_subprocess,
     run_browser_ui_gate,
+    run_forecast_ai_provider_policy_gate,
     run_openbb_agent_contract_gate,
     run_command,
     run_fingpt_eval_gate,
@@ -164,6 +165,23 @@ class ValidationGateTests(unittest.TestCase):
             result = run_openbb_agent_contract_gate()
         self.assertEqual(result["status"], "passed")
         self.assertFalse(result["enabled"])
+
+    def test_forecast_ai_provider_policy_gate_is_fail_closed(self) -> None:
+        with patch(
+            "pipelines.forecast.ai_interpretation.ai_provider_health",
+            return_value={
+                "status": "unavailable",
+                "provider": "ollama",
+                "model": "qwen2.5:7b",
+                "model_available": False,
+                "guard_policy": "deterministic_fallback_required",
+            },
+        ):
+            result = run_forecast_ai_provider_policy_gate()
+
+        self.assertEqual(result["status"], "passed")
+        self.assertTrue(result["latency_policy"]["fail_closed"])
+        self.assertTrue(result["fallback_required_when_unavailable"])
 
     def test_run_command_captures_utf8_output(self) -> None:
         result = run_command(
@@ -401,6 +419,7 @@ class ValidationGateTests(unittest.TestCase):
              patch.object(validation_gate, "run_fingpt_eval_gate", return_value={"status": "passed"}), \
              patch.object(validation_gate, "run_model_baseline_gate", return_value={"status": "passed"}), \
              patch.object(validation_gate, "run_provider_compat_gate", return_value={"status": "passed"}), \
+             patch.object(validation_gate, "run_forecast_ai_provider_policy_gate", return_value={"status": "passed"}), \
              patch.object(validation_gate, "run_openbb_agent_contract_gate", return_value={"status": "passed"}), \
              patch.object(validation_gate, "run_ui_contract_gate", return_value={"status": "passed"}), \
              patch.object(validation_gate, "run_infrastructure_gate", return_value={"status": "passed"}), \

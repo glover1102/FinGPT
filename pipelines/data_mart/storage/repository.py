@@ -309,6 +309,144 @@ def upsert_universe_metadata(
     return counts
 
 
+def upsert_sec_company_registry(
+    companies: Iterable[dict[str, Any]],
+    *,
+    db_path: str | Path | None = None,
+) -> dict[str, int]:
+    inserted = 0
+    updated = 0
+    now = utc_now_iso()
+    with _conn(db_path) as conn:
+        for item in companies:
+            ticker = str(item.get("ticker") or "").upper().strip()
+            cik = str(item.get("cik") or "").strip()
+            if not ticker or not cik:
+                continue
+            existing = conn.execute("SELECT 1 FROM sec_company_registry WHERE ticker=?", (ticker,)).fetchone()
+            conn.execute(
+                """
+                INSERT INTO sec_company_registry(ticker, cik, company_name, exchange, source, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(ticker) DO UPDATE SET
+                    cik=excluded.cik,
+                    company_name=COALESCE(NULLIF(excluded.company_name, ''), sec_company_registry.company_name),
+                    exchange=COALESCE(NULLIF(excluded.exchange, ''), sec_company_registry.exchange),
+                    source=excluded.source,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    ticker,
+                    cik,
+                    item.get("company_name") or item.get("name") or "",
+                    item.get("exchange") or "",
+                    item.get("source") or "sec_company_tickers",
+                    now,
+                ),
+            )
+            inserted += 0 if existing else 1
+            updated += 1 if existing else 0
+        conn.commit()
+    return {"inserted": inserted, "updated": updated}
+
+
+def _sec_fact_id(item: dict[str, Any]) -> str:
+    seed = "|".join(
+        [
+            str(item.get("ticker") or "").upper().strip(),
+            str(item.get("taxonomy") or ""),
+            str(item.get("concept") or ""),
+            str(item.get("unit") or ""),
+            str(item.get("form_type") or ""),
+            str(item.get("fiscal_year") or ""),
+            str(item.get("fiscal_period") or ""),
+            str(item.get("end_date") or ""),
+            str(item.get("filed_at") or ""),
+            str(item.get("accession_number") or ""),
+            str(item.get("frame") or ""),
+        ]
+    )
+    return hashlib.sha1(seed.encode("utf-8")).hexdigest()[:32]
+
+
+def upsert_sec_financial_facts(
+    facts: Iterable[dict[str, Any]],
+    *,
+    db_path: str | Path | None = None,
+) -> dict[str, int]:
+    inserted = 0
+    updated = 0
+    collected_at = utc_now_iso()
+    with _conn(db_path) as conn:
+        for item in facts:
+            ticker = str(item.get("ticker") or "").upper().strip()
+            cik = str(item.get("cik") or "").strip()
+            concept = str(item.get("concept") or "").strip()
+            unit = str(item.get("unit") or "").strip()
+            form_type = str(item.get("form_type") or "").upper().strip()
+            if not ticker or not cik or not concept or not unit or not form_type:
+                continue
+            fact_id = str(item.get("fact_id") or _sec_fact_id(item))
+            existing = conn.execute("SELECT 1 FROM sec_financial_facts WHERE fact_id=?", (fact_id,)).fetchone()
+            raw_json = json.dumps(item.get("raw") or item, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            conn.execute(
+                """
+                INSERT INTO sec_financial_facts(
+                    fact_id, ticker, cik, taxonomy, concept, label, unit, form_type,
+                    fiscal_year, fiscal_period, start_date, end_date, filed_at,
+                    accession_number, frame, value, raw_value, source, collected_at, raw_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(fact_id) DO UPDATE SET
+                    ticker=excluded.ticker,
+                    cik=excluded.cik,
+                    taxonomy=excluded.taxonomy,
+                    concept=excluded.concept,
+                    label=excluded.label,
+                    unit=excluded.unit,
+                    form_type=excluded.form_type,
+                    fiscal_year=excluded.fiscal_year,
+                    fiscal_period=excluded.fiscal_period,
+                    start_date=excluded.start_date,
+                    end_date=excluded.end_date,
+                    filed_at=excluded.filed_at,
+                    accession_number=excluded.accession_number,
+                    frame=excluded.frame,
+                    value=excluded.value,
+                    raw_value=excluded.raw_value,
+                    source=excluded.source,
+                    collected_at=excluded.collected_at,
+                    raw_json=excluded.raw_json
+                """,
+                (
+                    fact_id,
+                    ticker,
+                    cik,
+                    item.get("taxonomy") or "us-gaap",
+                    concept,
+                    item.get("label") or "",
+                    unit,
+                    form_type,
+                    item.get("fiscal_year"),
+                    item.get("fiscal_period") or "",
+                    item.get("start_date") or "",
+                    item.get("end_date") or "",
+                    item.get("filed_at") or "",
+                    item.get("accession_number") or "",
+                    item.get("frame") or "",
+                    item.get("value"),
+                    str(item.get("raw_value") if item.get("raw_value") is not None else item.get("value") or ""),
+                    item.get("source") or "sec_companyfacts",
+                    collected_at,
+                    raw_json,
+                ),
+            )
+            inserted += 0 if existing else 1
+            updated += 1 if existing else 0
+        conn.commit()
+    return {"inserted": inserted, "updated": updated}
+
+
 def upsert_fundamentals_card(card: Any, *, db_path: str | Path | None = None) -> dict[str, int]:
     """Store a provider-backed fundamentals card in normalized data-mart tables.
 
@@ -317,12 +455,12 @@ def upsert_fundamentals_card(card: Any, *, db_path: str | Path | None = None) ->
     deterministic numeric evidence without asking the LLM to invent fields.
     """
 
-    ticker = str(getattr(card, "ticker", "") or "").upper().strip()
-    as_of = str(getattr(card, "as_of", "") or "").strip()
-    source = str(getattr(card, "source", "") or "yfinance").strip() or "yfinance"
+    raw = card.model_dump(exclude_none=True) if hasattr(card, "model_dump") else dict(card or {})
+    ticker = str(raw.get("ticker") or getattr(card, "ticker", "") or "").upper().strip()
+    as_of = str(raw.get("as_of") or getattr(card, "as_of", "") or "").strip()
+    source = str(raw.get("source") or getattr(card, "source", "") or "yfinance").strip() or "yfinance"
     if not ticker or not as_of:
         return {"inserted": 0, "updated": 0}
-    raw = card.model_dump(exclude_none=True) if hasattr(card, "model_dump") else dict(card)
     collected_at = utc_now_iso()
     inserted = 0
     updated = 0
@@ -425,9 +563,10 @@ def upsert_fundamentals_card(card: Any, *, db_path: str | Path | None = None) ->
                 trailing_eps, forward_eps, book_value, gross_margin, operating_margin,
                 profit_margin, return_on_equity, revenue_growth, earnings_growth, ebitda,
                 free_cashflow, total_cash, total_debt, debt_to_equity, total_assets,
+                total_liabilities, stockholders_equity, gross_profit, operating_income, net_income,
                 net_assets, nav_price, expense_ratio, collected_at
             )
-            VALUES (?, ?, ?, 'provider_snapshot', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(ticker, as_of, source, statement_type) DO UPDATE SET
                 total_revenue=excluded.total_revenue,
                 revenue_per_share=excluded.revenue_per_share,
@@ -446,6 +585,11 @@ def upsert_fundamentals_card(card: Any, *, db_path: str | Path | None = None) ->
                 total_debt=excluded.total_debt,
                 debt_to_equity=excluded.debt_to_equity,
                 total_assets=excluded.total_assets,
+                total_liabilities=excluded.total_liabilities,
+                stockholders_equity=excluded.stockholders_equity,
+                gross_profit=excluded.gross_profit,
+                operating_income=excluded.operating_income,
+                net_income=excluded.net_income,
                 net_assets=excluded.net_assets,
                 nav_price=excluded.nav_price,
                 expense_ratio=excluded.expense_ratio,
@@ -455,6 +599,7 @@ def upsert_fundamentals_card(card: Any, *, db_path: str | Path | None = None) ->
                 ticker,
                 as_of,
                 source,
+                raw.get("statement_type") or "provider_snapshot",
                 raw.get("total_revenue"),
                 raw.get("revenue_per_share"),
                 raw.get("trailing_eps"),
@@ -472,6 +617,11 @@ def upsert_fundamentals_card(card: Any, *, db_path: str | Path | None = None) ->
                 raw.get("total_debt"),
                 raw.get("debt_to_equity"),
                 raw.get("total_assets"),
+                raw.get("total_liabilities"),
+                raw.get("stockholders_equity"),
+                raw.get("gross_profit"),
+                raw.get("operating_income"),
+                raw.get("net_income"),
                 raw.get("net_assets"),
                 raw.get("nav_price"),
                 raw.get("expense_ratio"),
@@ -703,6 +853,34 @@ def latest_macro(series_id: str, *, db_path: str | Path | None = None) -> dict[s
     return dict(row) if row else None
 
 
+def get_macro_observations(
+    series_id: str,
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    limit: int = 5000,
+    db_path: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    query = """
+        SELECT o.series_id, o.date, o.value, o.source, o.collected_at, s.title, s.units, s.frequency
+        FROM macro_observations o
+        LEFT JOIN macro_series s ON s.series_id = o.series_id
+        WHERE o.series_id=?
+    """
+    params: list[Any] = [series_id.upper().strip()]
+    if start_date:
+        query += " AND o.date>=?"
+        params.append(start_date)
+    if end_date:
+        query += " AND o.date<=?"
+        params.append(end_date)
+    query += " ORDER BY o.date ASC LIMIT ?"
+    params.append(max(1, int(limit)))
+    with _conn(db_path) as conn:
+        rows = conn.execute(query, params).fetchall()
+    return [dict(row) for row in rows]
+
+
 def upsert_news_articles(articles: Iterable[NewsArticle], *, db_path: str | Path | None = None) -> dict[str, int]:
     inserted = 0
     updated = 0
@@ -842,23 +1020,43 @@ def upsert_filings(filings: Iterable[Filing], *, db_path: str | Path | None = No
             existing = conn.execute("SELECT 1 FROM filings WHERE filing_id=?", (filing_id,)).fetchone()
             conn.execute(
                 """
-                INSERT INTO filings(filing_id, ticker, form_type, filed_at, url, source, collected_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO filings(
+                    filing_id, ticker, cik, accession_number, form_type, filed_at, report_date,
+                    fiscal_year, fiscal_period, primary_document, description, url, source,
+                    raw_json, collected_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(filing_id) DO UPDATE SET
                     ticker=excluded.ticker,
+                    cik=COALESCE(NULLIF(excluded.cik, ''), filings.cik),
+                    accession_number=COALESCE(NULLIF(excluded.accession_number, ''), filings.accession_number),
                     form_type=excluded.form_type,
                     filed_at=excluded.filed_at,
+                    report_date=COALESCE(NULLIF(excluded.report_date, ''), filings.report_date),
+                    fiscal_year=COALESCE(excluded.fiscal_year, filings.fiscal_year),
+                    fiscal_period=COALESCE(NULLIF(excluded.fiscal_period, ''), filings.fiscal_period),
+                    primary_document=COALESCE(NULLIF(excluded.primary_document, ''), filings.primary_document),
+                    description=COALESCE(NULLIF(excluded.description, ''), filings.description),
                     url=excluded.url,
                     source=excluded.source,
+                    raw_json=excluded.raw_json,
                     collected_at=excluded.collected_at
                 """,
                 (
                     filing_id,
                     ticker,
+                    getattr(filing, "cik", "") or "",
+                    getattr(filing, "accession_number", "") or "",
                     form_type,
                     filing.filed_at,
+                    getattr(filing, "report_date", "") or "",
+                    getattr(filing, "fiscal_year", None),
+                    getattr(filing, "fiscal_period", "") or "",
+                    getattr(filing, "primary_document", "") or "",
+                    getattr(filing, "description", "") or "",
                     filing.url,
                     filing.source,
+                    json.dumps(getattr(filing, "raw", {}) or {}, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
                     filing.collected_at,
                 ),
             )
@@ -960,6 +1158,116 @@ def fundamentals_availability(
             "status": "available" if count > 0 else "missing",
             "latest_as_of": row.get("latest_as_of") or "",
             "snapshot_count": count,
+        }
+    return out
+
+
+def latest_filings(
+    ticker: str,
+    *,
+    forms: Iterable[str] | None = None,
+    limit: int = 20,
+    db_path: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    clean = str(ticker or "").upper().strip()
+    if not clean:
+        return []
+    allowed_forms = [str(form or "").upper().strip() for form in forms or [] if str(form or "").strip()]
+    query = """
+        SELECT *
+        FROM filings
+        WHERE ticker=?
+    """
+    params: list[Any] = [clean]
+    if allowed_forms:
+        placeholders = ",".join("?" for _ in allowed_forms)
+        query += f" AND form_type IN ({placeholders})"
+        params.extend(allowed_forms)
+    query += " ORDER BY filed_at DESC, collected_at DESC LIMIT ?"
+    params.append(max(1, min(500, int(limit or 20))))
+    with _conn(db_path) as conn:
+        rows = conn.execute(query, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+def latest_sec_financial_facts(
+    ticker: str,
+    *,
+    concepts: Iterable[str] | None = None,
+    limit: int = 200,
+    db_path: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    clean = str(ticker or "").upper().strip()
+    if not clean:
+        return []
+    concept_list = [str(concept or "").strip() for concept in concepts or [] if str(concept or "").strip()]
+    query = """
+        SELECT *
+        FROM sec_financial_facts
+        WHERE ticker=?
+    """
+    params: list[Any] = [clean]
+    if concept_list:
+        placeholders = ",".join("?" for _ in concept_list)
+        query += f" AND concept IN ({placeholders})"
+        params.extend(concept_list)
+    query += " ORDER BY filed_at DESC, end_date DESC, concept ASC LIMIT ?"
+    params.append(max(1, min(2000, int(limit or 200))))
+    with _conn(db_path) as conn:
+        rows = conn.execute(query, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+def sec_data_availability(
+    tickers: Iterable[str],
+    *,
+    db_path: str | Path | None = None,
+) -> dict[str, dict[str, Any]]:
+    clean: list[str] = []
+    seen: set[str] = set()
+    for raw in tickers:
+        ticker = str(raw or "").upper().strip()
+        if ticker and ticker not in seen:
+            seen.add(ticker)
+            clean.append(ticker)
+    if not clean:
+        return {}
+    placeholders = ",".join("?" for _ in clean)
+    with _conn(db_path) as conn:
+        filings = conn.execute(
+            f"""
+            SELECT ticker, MAX(filed_at) AS latest_filing_at, COUNT(*) AS filing_count
+            FROM filings
+            WHERE ticker IN ({placeholders}) AND form_type IN ('10-K', '10-Q', '8-K')
+            GROUP BY ticker
+            """,
+            clean,
+        ).fetchall()
+        facts = conn.execute(
+            f"""
+            SELECT ticker, MAX(filed_at) AS latest_fact_filed_at, COUNT(*) AS fact_count
+            FROM sec_financial_facts
+            WHERE ticker IN ({placeholders})
+            GROUP BY ticker
+            """,
+            clean,
+        ).fetchall()
+    filing_by_ticker = {str(row["ticker"]).upper(): dict(row) for row in filings}
+    fact_by_ticker = {str(row["ticker"]).upper(): dict(row) for row in facts}
+    out: dict[str, dict[str, Any]] = {}
+    for ticker in clean:
+        filing_row = filing_by_ticker.get(ticker) or {}
+        fact_row = fact_by_ticker.get(ticker) or {}
+        filing_count = int(filing_row.get("filing_count") or 0)
+        fact_count = int(fact_row.get("fact_count") or 0)
+        out[ticker] = {
+            "ticker": ticker,
+            "available": filing_count > 0 or fact_count > 0,
+            "status": "available" if filing_count or fact_count else "missing",
+            "filing_count": filing_count,
+            "fact_count": fact_count,
+            "latest_filing_at": filing_row.get("latest_filing_at") or "",
+            "latest_fact_filed_at": fact_row.get("latest_fact_filed_at") or "",
         }
     return out
 
@@ -1098,6 +1406,8 @@ def data_health(*, db_path: str | Path | None = None) -> dict[str, Any]:
                 "macro_observations",
                 "news_articles",
                 "filings",
+                "sec_company_registry",
+                "sec_financial_facts",
                 "fundamentals_snapshots",
                 "valuation_metrics",
                 "financial_statements",
@@ -1112,6 +1422,37 @@ def data_health(*, db_path: str | Path | None = None) -> dict[str, Any]:
             FROM fundamentals_snapshots
             ORDER BY collected_at DESC
             LIMIT 1
+            """
+        ).fetchone()
+        latest_sec_filing = conn.execute(
+            """
+            SELECT ticker, cik, accession_number, form_type, filed_at, report_date, url, collected_at
+            FROM filings
+            WHERE source LIKE 'sec%'
+            ORDER BY filed_at DESC, collected_at DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        latest_sec_fact = conn.execute(
+            """
+            SELECT ticker, cik, concept, unit, form_type, fiscal_year, fiscal_period, end_date, filed_at, value, collected_at
+            FROM sec_financial_facts
+            ORDER BY filed_at DESC, collected_at DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        latest_macro_observation = conn.execute(
+            """
+            SELECT series_id, date, value, source, collected_at
+            FROM macro_observations
+            ORDER BY date DESC, collected_at DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        macro_series_with_observations = conn.execute(
+            """
+            SELECT COUNT(DISTINCT series_id) AS c
+            FROM macro_observations
             """
         ).fetchone()
         latest_run = conn.execute(
@@ -1138,6 +1479,10 @@ def data_health(*, db_path: str | Path | None = None) -> dict[str, Any]:
         "database": str(Path(db_path) if db_path else "default"),
         "table_counts": table_counts,
         "latest_fundamental": dict(latest_fundamental) if latest_fundamental else None,
+        "latest_sec_filing": dict(latest_sec_filing) if latest_sec_filing else None,
+        "latest_sec_fact": dict(latest_sec_fact) if latest_sec_fact else None,
+        "latest_macro_observation": dict(latest_macro_observation) if latest_macro_observation else None,
+        "macro_series_with_observations": int(macro_series_with_observations["c"] if macro_series_with_observations else 0),
         "latest_run": dict(latest_run) if latest_run else None,
         "recent_provider_status": [dict(row) for row in provider_rows],
         "recent_quality_checks": [dict(row) for row in quality_rows],

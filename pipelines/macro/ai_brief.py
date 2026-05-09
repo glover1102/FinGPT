@@ -16,13 +16,32 @@ from pipelines.macro.portfolio_hints import get_portfolio_policy_hint
 from pipelines.macro.prompts import AI_MACRO_BRIEF_SYSTEM_PROMPT, AI_MACRO_BRIEF_TEMPLATE
 
 
+def _fmt_number(value: Any, digits: int = 3) -> str:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "사용 불가"
+    return f"{numeric:.{digits}f}"
+
+
+def _change_text(item) -> str:
+    changes = item.changes or {}
+    one = changes.get("change_1_period")
+    three = changes.get("change_3_period")
+    twelve = changes.get("change_12_period")
+    return (
+        f"1기간 {_fmt_number(one)}, 3기간 {_fmt_number(three)}, "
+        f"12기간 {_fmt_number(twelve)}"
+    )
+
+
 def _indicator_line(item) -> str:
     latest = item.latest
     if not latest or latest.value is None:
-        return f"- {item.display_name} ({item.series_id}): 사용 불가 ({item.data_quality.status})"
+        return f"- {item.display_name} ({item.series_id}): 사용 가능한 최신 관측치 없음 (품질={item.data_quality.status})"
     return (
-        f"- {item.display_name} ({item.series_id}): {latest.value:.3f} {item.unit} "
-        f"기준일 {latest.date}; 품질={item.data_quality.status}; 공급자={item.provider}"
+        f"- {item.display_name} ({item.series_id}): {latest.value:.3f} {item.unit}, "
+        f"기준일 {latest.date}, {_change_text(item)}, 품질={item.data_quality.status}, 공급자={item.provider}"
     )
 
 
@@ -81,9 +100,9 @@ _NUMERIC_TOKEN_RE = re.compile(r"(?<![A-Za-z])[-+]?\d+(?:\.\d+)?%?")
 _HANGUL_RE = re.compile(r"[\uac00-\ud7a3]")
 _CJK_IDEOGRAPH_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 _JAPANESE_RE = re.compile(r"[\u3040-\u30ff]")
-_MOJIBAKE_RE = re.compile(r"[�]|(?:[ìíîï][\x80-\xff]?)|(?:[êë][\x80-\xff]?)")
+_MOJIBAKE_RE = re.compile(r"(?:占|筌|疫|梨|�|\?{3,})")
 _DIRECT_TRADE_RE = re.compile(
-    r"\b(buy|sell|short|go long|go short)\b|매수하|매도하|공매도하|롱\s*진입|숏\s*진입",
+    r"\b(buy|sell|short|go long|go short)\b|매수하라|매도하라|공매도|롱\s*진입|숏\s*진입",
     re.IGNORECASE,
 )
 
@@ -104,7 +123,6 @@ def _allowed_numeric_values(text: str) -> list[Decimal]:
         parsed = _decimal_token(token)
         if parsed is not None:
             values.append(parsed)
-    # Section numbers and ordinary confidence bounds are allowed.
     values.extend(Decimal(item) for item in range(0, 13))
     return values
 
@@ -137,7 +155,7 @@ def _korean_language_issue(output: str) -> str:
     latin_words = len(re.findall(r"\b[A-Za-z]{4,}\b", text))
     if japanese or mojibake:
         return "Macro brief language guard rejected Japanese or mojibake text."
-    if cjk >= max(8, hangul):
+    if cjk >= 3:
         return "Macro brief language guard rejected Chinese/Hanja-style prose."
     if hangul < 10 and latin_words >= 8:
         return "Macro brief language guard rejected mostly non-Korean prose."
@@ -164,7 +182,7 @@ def _call_ollama_macro_brief(*, prompt: str, model: str | None, timeout_s: float
             "stream": False,
             "options": {
                 "temperature": 0,
-                "num_predict": 1400,
+                "num_predict": 1200,
                 "num_ctx": 8192,
             },
             "keep_alive": "5m",
@@ -180,6 +198,48 @@ def _call_ollama_macro_brief(*, prompt: str, model: str | None, timeout_s: float
     return text, resolved_model, round(time.time() - started, 2)
 
 
+def _signal_value(overview: MacroOverview, name: str) -> str:
+    for signal in overview.signals:
+        if signal.name == name:
+            evidence = "; ".join(signal.evidence[:3]) if signal.evidence else "증거 부족"
+            return f"{signal.value} (점수 {signal.score:.1f}, 신뢰도 {signal.confidence:.2f}) - {evidence}"
+    return "unknown - 관련 신호를 계산할 입력이 부족합니다."
+
+
+def _indicator_block(overview: MacroOverview, category: str, limit: int = 8) -> str:
+    rows = [item for item in overview.key_indicators if item.category == category]
+    if not rows:
+        return "- 해당 범주의 핵심 지표가 현재 브리프 입력에 없습니다."
+    return "\n".join(_indicator_line(item) for item in rows[:limit])
+
+
+def _portfolio_block(hint) -> str:
+    lines = [
+        f"- 주식 비중 방향: {hint.equity_bias}",
+        f"- 채권 비중 방향: {hint.bond_bias}; 듀레이션 방향: {hint.duration_bias}; 신용위험 방향: {hint.credit_bias}",
+        f"- 현금/대체자산 방향: 현금 {hint.cash_bias}, 대체 {hint.alternative_bias}",
+        f"- 리밸런싱 주의: {hint.rebalance_attention}; 위험 수준: {hint.risk_level}",
+        f"- 해석: {hint.explanation}",
+    ]
+    if hint.etf_candidates:
+        lines.append("- ETF 슬리브 후보:")
+        for candidate in hint.etf_candidates:
+            tickers = ", ".join(candidate.tickers) if candidate.tickers else "지정 없음"
+            lines.append(
+                f"  - {candidate.sleeve}: {candidate.bias}; 후보 {tickers}; 역할 {candidate.role}; 근거 {candidate.rationale}"
+            )
+    lines.extend(
+        [
+            "- 구성 방식: 레짐 신뢰도가 낮거나 데이터 품질이 partial/stale이면 핵심 주식·채권·현금 슬리브를 넓은 범위로 유지하고, 단일 지표 하나로 비중을 크게 바꾸지 않습니다.",
+            "- 실행 점검: 금리, 인플레이션, 신용스프레드, 변동성 신호가 같은 방향으로 확인될 때만 리밸런싱 강도를 높입니다.",
+            "- 제한: 이 항목은 포트폴리오 리서치 메모이며 주문 생성이나 확정 비중 지시가 아닙니다.",
+        ]
+    )
+    if hint.warnings:
+        lines.append(f"- 경고: {'; '.join(hint.warnings[:5])}")
+    return "\n".join(lines)
+
+
 def _fallback_brief(
     overview: MacroOverview,
     *,
@@ -190,50 +250,69 @@ def _fallback_brief(
     impacts = get_asset_impacts(overview.regime, overview.signals)
     hint = get_portfolio_policy_hint(overview.regime, overview.data_quality)
     available = [item for item in overview.key_indicators if item.latest and item.latest.value is not None]
-    missing = overview.data_quality.missing_series
+    missing_or_stale = [*overview.data_quality.missing_series, *overview.data_quality.stale_series]
+    asset_lines = "\n".join(
+        f"- {item.asset_class}: {item.impact}; 신뢰도 {item.confidence:.2f}; 근거 {item.reason}; 주요 리스크 {', '.join(item.key_risks) or '없음'}"
+        for item in impacts
+    )
+    all_key_rows = "\n".join(_indicator_line(item) for item in overview.key_indicators[:18])
     brief = f"""1. 현재 매크로 레짐
-{overview.regime.display_name} (신뢰도 {overview.regime.confidence:.2f}, 위험 수준 {overview.regime.risk_level}). {overview.regime.interpretation}
+{overview.regime.display_name} ({overview.regime.name})로 분류됩니다. 신뢰도는 {overview.regime.confidence:.2f}, 위험 수준은 {overview.regime.risk_level}입니다. {overview.regime.interpretation or '레짐 해석을 만들 입력이 부족합니다.'}
 
-2. 핵심 데이터 포인트
-{chr(10).join(_indicator_line(item) for item in overview.key_indicators[:12]) if overview.key_indicators else "- 사용 가능한 핵심 지표가 없습니다."}
+2. 핵심 데이터 확인
+사용 가능한 핵심 지표는 {len(available)}/{len(overview.key_indicators)}개입니다.
+{all_key_rows if all_key_rows else '- 사용 가능한 핵심 지표가 없습니다.'}
 
 3. 최근 변화
-최근 변화는 변환된 시계열 관측치에서만 계산합니다. 관측치가 없거나 부족하면 변화 값은 사용 불가로 남깁니다.
+최근 변화는 저장된 관측치에서만 계산했습니다. 1기간, 3기간, 12기간 변화가 없으면 관측치 길이가 부족하거나 공급자 데이터가 비어 있다는 뜻입니다. 누락 또는 지연 지표: {', '.join(missing_or_stale) or '현재 표시된 항목 없음'}.
 
 4. 인플레이션 평가
-구조화된 인플레이션 지표만 기준으로 보면 현재 신호는 {next((signal.value for signal in overview.signals if signal.name == "inflation_signal"), "unknown")}입니다.
+신호: {_signal_value(overview, 'inflation_signal')}
+{_indicator_block(overview, 'inflation', 10)}
+해석: CPI, Core CPI, PCE, Core PCE, trimmed/median/sticky 계열을 함께 봐야 합니다. 헤드라인 CPI 하나만으로 물가 압력이 완화됐다고 결론 내리지 않고, 에너지·식품·근원·기대인플레이션이 같은 방향인지 확인해야 합니다.
 
 5. 성장과 고용 평가
-성장 신호는 {next((signal.value for signal in overview.signals if signal.name == "growth_signal"), "unknown")}, 고용 신호는 {next((signal.value for signal in overview.signals if signal.name == "labor_signal"), "unknown")}입니다.
+성장 신호: {_signal_value(overview, 'growth_signal')}
+고용 신호: {_signal_value(overview, 'labor_signal')}
+{_indicator_block(overview, 'growth', 8)}
+{_indicator_block(overview, 'labor', 8)}
+해석: GDP와 산업생산은 느린 지표이고, 실업률·신규실업수당청구·구인건수는 고용 둔화를 더 빨리 보여줄 수 있습니다. 서로 엇갈리면 레짐 신뢰도를 낮춰야 합니다.
 
-6. 금리 평가
-정책 신호는 {next((signal.value for signal in overview.signals if signal.name == "policy_signal"), "unknown")}입니다. FRED 또는 데이터 마트 입력이 누락되면 금리 해석은 보류합니다.
+6. 금리, 유동성, 신용 평가
+정책 신호: {_signal_value(overview, 'policy_signal')}
+유동성 신호: {_signal_value(overview, 'liquidity_signal')}
+신용 신호: {_signal_value(overview, 'credit_signal')}
+{_indicator_block(overview, 'interest_rates', 10)}
+{_indicator_block(overview, 'liquidity_credit', 8)}
+해석: 장단기 금리, 실질금리, 기대인플레이션, 신용스프레드를 같이 봐야 듀레이션·주식 밸류에이션·크레딧 위험을 분리할 수 있습니다.
 
 7. 자산군별 시사점
-{chr(10).join(f"- {item.asset_class}: {item.impact} ({item.reason})" for item in impacts[:6])}
+{asset_lines or '- 자산군 영향도를 만들 신호가 부족합니다.'}
 
-8. 포트폴리오 리스크 메모
-{hint.explanation} 이 내용은 자문용이며 AI Portfolio 정책을 변경하거나 주문을 생성하지 않습니다.
+8. ETF 기반 포트폴리오 구성 메모
+{_portfolio_block(hint)}
 
-9. 추적해야 할 핵심 지표
-먼저 확인해야 할 누락 또는 지연 시계열은 {", ".join([*missing, *overview.data_quality.stale_series]) or "현재 표시된 항목 없음"}입니다.
+9. 다음에 추적할 지표
+- 금리: DGS2, DGS10, T10Y2Y, DFII10, T5YIFR
+- 물가: CPIAUCSL, CPILFESL, CPIENGSL, CPIUFDSL, PCEPI, PCEPILFE, MEDCPIM158SFRBCLE
+- 성장/고용: GDPC1, INDPRO, RSAFS, UNRATE, PAYEMS, ICSA, JTSJOL
+- 위험/유동성: BAMLH0A0HYM2, BAMLC0A0CM, VIXCLS, M2SL, WALCL
 
 10. 결론
-구조화된 매크로 데이터는 핵심 지표 {len(available)}/{len(overview.key_indicators)}개에서 사용 가능합니다. 누락되거나 오래된 데이터는 중립 신호가 아니라 증거 부족으로 처리해야 합니다.
-"""
+현재 브리프는 구조화된 Macro payload만 사용했습니다. 데이터 품질이 {overview.data_quality.status}이면 결론을 확정하지 말고, 누락·지연 계열을 먼저 채운 뒤 포트폴리오 조정 강도를 정해야 합니다."""
     warnings = []
     if overview.data_quality.status != "ok":
-        warnings.append(f"매크로 데이터 품질={overview.data_quality.status} 상태에서 폴백 브리프를 생성했습니다.")
+        warnings.append(f"매크로 데이터 품질={overview.data_quality.status} 상태에서 브리프를 생성했습니다.")
     warnings.append(
-        "규칙 기반 폴백: 라이브 LLM을 시도했지만 수락하지 않았습니다."
+        "로컬 LLM 호출 실패 또는 제한 시간 초과로 구조화 규칙 기반 브리프를 반환했습니다."
         if llm_attempted
-        else "규칙 기반 폴백: 라이브 LLM을 호출하지 않았습니다."
+        else "타임아웃을 피하기 위해 로컬 LLM 호출 없이 구조화 규칙 기반 브리프를 반환했습니다."
     )
     warnings.extend(extra_warnings or [])
     return MacroBriefResponse(
         status="success",
-        provider="rule_based_fallback",
-        is_fallback=True,
+        provider="rule_based_fallback" if llm_attempted else "structured_macro_rules",
+        is_fallback=llm_attempted,
         content=brief,
         prompt_template=(AI_MACRO_BRIEF_SYSTEM_PROMPT + "\n\n" + AI_MACRO_BRIEF_TEMPLATE) if include_prompt else None,
         data_quality=overview.data_quality,
@@ -272,9 +351,12 @@ def generate_brief(
             raise ValueError("Macro brief guard rejected direct trading language.")
         warnings = []
         if overview.data_quality.status != "ok":
-            warnings.append(f"매크로 데이터 품질={overview.data_quality.status} 상태에서 LLM 브리프를 생성했습니다. 누락/지연 데이터는 여전히 불확실성입니다.")
+            warnings.append(
+                f"매크로 데이터 품질={overview.data_quality.status} 상태에서 LLM 브리프를 생성했습니다. "
+                "누락 또는 지연 데이터는 불확실성으로 처리해야 합니다."
+            )
         warnings.append("근거 검증 통과: 숫자 토큰을 구조화된 Macro payload와 대조했습니다.")
-        warnings.append("자문 전용: 포트폴리오 정책을 변경하지 않았고 주문도 생성하지 않았습니다.")
+        warnings.append("자문 전용: 포트폴리오 정책을 바로 변경하거나 주문을 생성하지 않습니다.")
         return MacroBriefResponse(
             status="success",
             provider=f"ollama:{resolved_model}",
@@ -288,6 +370,6 @@ def generate_brief(
         return _fallback_brief(
             overview,
             include_prompt=include_prompt,
-            extra_warnings=[f"라이브 LLM 매크로 브리프를 사용할 수 없거나 거부되어 폴백을 사용했습니다: {exc}"],
+            extra_warnings=[f"로컬 LLM 매크로 브리프를 사용할 수 없어 구조화 브리프를 사용했습니다: {exc}"],
             llm_attempted=True,
         )

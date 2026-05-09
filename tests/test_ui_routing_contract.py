@@ -109,11 +109,36 @@ class UiRoutingContractTests(unittest.TestCase):
             self.assertIn(marker, self.source)
         self.assertIn(".asset-detail-form", css)
         self.assertIn(".asset-detail-chart-grid", css)
+        self.assertIn('input[type="date"]::-webkit-calendar-picker-indicator', css)
+        self.assertIn('input[type="date"]::-webkit-datetime-edit-year-field', css)
+        self.assertIn("function bindDateInputs", self.source)
+        self.assertIn("input.showPicker", self.source)
+        self.assertIn('document.querySelectorAll(\'input[type="date"]\')', self.source)
+        self.assertIn("function assetDetailPriceQueryOptions", self.source)
+        self.assertIn("function assetDetailRefreshStart", self.source)
+        self.assertIn("API.dataPrices(ticker, 5000, priceQuery)", self.source)
+        self.assertIn("API.dataPrices(options.benchmark, 5000, priceQuery)", self.source)
+        self.assertIn('params.set("refresh", "true")', self.source)
 
     def test_quant_run_history_can_reopen_artifacts(self):
         self.assertIn("API.quantBacktestBundle", self.source)
         self.assertIn("function loadQuantBacktestArtifact", self.source)
         self.assertIn("data-quant-run-id", self.source)
+
+    def test_ml_forecast_registry_actions_preserve_action_name(self):
+        self.assertIn("Data Snapshot", self.source)
+        self.assertIn("source_coverage_hash", self.source)
+        self.assertIn("Registry Audit", self.source)
+        self.assertIn("API.forecastRegistryAudit", self.source)
+        html = INDEX_HTML.read_text(encoding="utf-8")
+        self.assertIn('value="walk_forward_plus_purged_cv"', html)
+        self.assertIn("Purged CV folds", self.source)
+        self.assertIn('target.dataset.action === "forecast-verify-artifact"', self.source)
+        self.assertIn('target.dataset.action === "forecast-promote"', self.source)
+        self.assertIn('target.dataset.action === "forecast-deprecate"', self.source)
+        self.assertIn("updateForecastModelStatus(target.dataset.action, target.dataset.modelId)", self.source)
+        self.assertIn('action === "forecast-promote" ? API.forecastPromoteModel : API.forecastDeprecateModel', self.source)
+        self.assertIn("verifyForecastModelArtifact(target.dataset.modelId)", self.source)
 
     def test_market_heatmap_has_manual_refresh_and_display_limit(self):
         html = INDEX_HTML.read_text(encoding="utf-8")
@@ -155,9 +180,42 @@ class UiRoutingContractTests(unittest.TestCase):
         )
         self.assertIsNotNone(match)
         body = match.group("body")
-        self.assertIn("setBacktestUniverse([...selectedBacktestUniverse(), ...symbols])", body)
+        self.assertIn("setSymbolTargetSymbols(target, [...readSymbolTargetSymbols(target), ...symbols])", body)
         self.assertNotIn("resolveBacktestUniverseAvailability", body)
         self.assertIn("state.lastUniverseResolution = null", self.source)
+
+    def test_symbol_picker_is_shared_across_ticker_inputs(self):
+        html = INDEX_HTML.read_text(encoding="utf-8")
+        for marker in [
+            'id="tickerSearchOpen"',
+            'id="assetDetailTickerOpen"',
+            'id="assetDetailBenchmarkOpen"',
+            'id="backtestBenchmarkOpen"',
+            'id="portfolioUniverseOpen"',
+            'id="portfolioUniverseChips"',
+            'id="portfolioBenchmarkOpen"',
+            'id="forecastTickerOpen"',
+            'id="forecastBenchmarkOpen"',
+            'id="aiPortfolioCustomUniverseOpen"',
+            'id="aiPortfolioCustomUniverseChips"',
+            'id="aiPortfolioBenchmarkOpen"',
+            'id="symbolPickerDescription"',
+        ]:
+            self.assertIn(marker, html)
+        for marker in [
+            "const SYMBOL_PICKER_TARGETS",
+            "function setSymbolTargetSymbols",
+            "function renderSymbolTargetChips",
+            'openSymbolPicker("research")',
+            'openSymbolPicker("assetDetailTicker")',
+            'openSymbolPicker("backtestBenchmark")',
+            'openSymbolPicker("portfolio")',
+            'openSymbolPicker("forecastTicker")',
+            'openSymbolPicker("aiPortfolioCustomUniverse")',
+            'renderSymbolTargetChips("portfolio")',
+            'renderSymbolTargetChips("aiPortfolioCustomUniverse")',
+        ]:
+            self.assertIn(marker, self.source)
 
     def test_quant_universe_resolve_hydrates_missing_prices_before_execution(self):
         self.assertIn("hydrate_missing", self.source)
@@ -234,13 +292,16 @@ class UiRoutingContractTests(unittest.TestCase):
             'id="macroReportExport"',
             'data-testid="macro-report-export"',
             'id="macroOverviewSurface"',
+            'id="macroCoverageSurface"',
             'id="macroIndicatorTable"',
             'id="macroChartSurface"',
             'id="macroInterestRatesSurface"',
             'id="macroInflationSurface"',
             'id="macroGrowthLaborSurface"',
+            'id="macroHousingConsumerSurface"',
             'id="macroYieldCurveSurface"',
             'id="macroLiquidityCreditSurface"',
+            'id="macroFinancialConditionsSurface"',
             'id="macroFxDollarSurface"',
             'id="macroCommoditiesSurface"',
             'id="macroRegimeSurface"',
@@ -248,16 +309,32 @@ class UiRoutingContractTests(unittest.TestCase):
             'id="macroPortfolioHintsSurface"',
             'id="macroBriefSurface"',
             'id="macroDataQualitySurface"',
+            '<section class="home-card macro-card macro-hints-card macro-surface">',
+            '<section class="home-card macro-card macro-brief-card macro-surface">',
+            '<button type="button" id="macroBriefGenerate"',
         ]:
             self.assertIn(marker, html)
+        self.assertLess(
+            html.index('class="home-card macro-card macro-hints-card macro-surface"'),
+            html.index('class="home-card macro-card macro-brief-card macro-surface"'),
+        )
         for marker in [
             "API.macroOverview",
+            "API.macroSeriesList",
+            "API.macroHousingConsumer",
+            "API.macroFinancialConditions",
+            "API.macroRefreshRun",
+            "API.macroRefreshStatus",
             "API.macroBrief",
             "API.macroReport",
             "function loadMacro",
+            "function refreshMacroData",
             "function renderMacroOverview",
+            "function renderMacroCoverage",
             "function renderMacroIndicatorTable",
             "function renderMacroSeriesChart",
+            "function renderMacroEtfCandidates",
+            "function macroFallbackEtfCandidates",
             "function generateMacroBrief",
             "function exportMacroReport",
             "function macroDataSurfaces",
@@ -266,6 +343,11 @@ class UiRoutingContractTests(unittest.TestCase):
         ]:
             self.assertIn(marker, self.source)
         self.assertIn(".macro-surface", css)
+        self.assertIn(".macro-coverage-grid", css)
+        self.assertIn(".macro-coverage-chip", css)
+        self.assertIn(".macro-etf-grid", css)
+        self.assertIn(".macro-etf-card", css)
+        self.assertIn('.dashboard-surface-grid[data-dashboard-tab="macro"] .macro-hints-card', css)
         self.assertIn('[data-dashboard-tab="macro"]', css)
         self.assertIn(".decision-completion", css)
 

@@ -153,6 +153,8 @@ def _normalise_sources_for_pipeline(ticker: str, question: str, sources: Any) ->
             source == "transcript" and profile.supports_transcripts
         ) or (
             source == "macro" and (profile.supports_macro or profile.supports_equity_sources)
+        ) or (
+            source in {"fundamentals", "filings"} and profile.supports_equity_sources
         )
     ]
     if compatible:

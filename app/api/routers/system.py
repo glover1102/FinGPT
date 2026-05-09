@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 
 from core.config.settings import load_settings
+from core.utils.build_info import build_info
 from core.preflight import run_preflight
 from core.schemas.request import (
     COMPARE_MAX_CONCURRENCY,
@@ -228,7 +229,7 @@ async def export_jsonl(run_id: str | None = None, include_raw_context: bool = Tr
 
 @router.get("/health")
 async def health() -> dict[str, Any]:
-    return {"status": "ok", "version": API_VERSION}
+    return {"status": "ok", "version": API_VERSION, "build": build_info()}
 
 
 @router.get("/runs")

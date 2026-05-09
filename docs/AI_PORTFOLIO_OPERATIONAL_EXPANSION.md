@@ -257,10 +257,35 @@ Status: `DONE`
 | Rebalance state details | Added signal expiry, next review, turnover estimate, post-trade policy check, decision reason, actor, approval/reject/defer metadata, and action audit. | `test_rebalance_action_body_records_reason_actor_and_audit` |
 | Operations UI | Added policy list, hydrate/retry buttons, snapshot job button, operations history, and recommendation diff surfaces. | `node --check app\web\app.js`; `python scripts\check_ui_contract.py --output reports\ui_contract_ai_portfolio_ops.json` |
 
+## 2026-05-09 SEC Financials And Filing Refresh
+
+Status: `DONE`
+
+| Area | Change | Verification |
+|---|---|---|
+| SEC storage | Added `sec_company_registry` and `sec_financial_facts`, extended `filings`, and added additive SQLite migration guards for existing local DBs. | `tests/test_data_mart_schema.py`, `tests/test_data_mart_repository.py`, `tests/test_sec_company_data.py` |
+| SEC provider | Added SEC EDGAR ticker-map, submissions, and companyfacts collection for 10-K, 10-Q, and 8-K. | Live SEC smoke and targeted tests |
+| Universe operation | Added `POST /api/v1/ai-portfolio/operations/sec-refresh` so the current policy, selected universe, or direct ticker list can be refreshed on demand. | `test_sec_data_refresh_operation_records_result_without_network` |
+| Automatic refresh | Added a stdlib in-process data mart scheduler that starts with FastAPI, waits a non-blocking startup delay, then refreshes the configured universe and Macro platform data on a 24-hour interval. | `/api/v1/data/auto-refresh/status`, `/api/v1/macro/refresh/status` |
+| Data API/UI | Added `/api/v1/data/sec/{ticker}`, SEC rows to data health, and an AI Portfolio SEC refresh button. | `node --check app\web\app.js`; `python scripts\check_ui_contract.py --output reports\sec_data_ui_contract.json` |
+
+Live seed performed during implementation:
+
+- `custom:AAPL,MSFT,SPY,005930.KS`: 2 SEC-covered companies collected, 2 non-company assets skipped, 1,031 rows inserted and 52 updated.
+- `sp500_top_200`, `max_assets=50`: 50 companies collected, 24,246 rows inserted and 2,469 updated.
+- Final local data mart counts from `repository.data_health()`: `filings=7,768`, `sec_company_registry=200`, `sec_financial_facts=89,615`, `fundamentals_snapshots=206`, `financial_statements=206`.
+
+Operational notes:
+
+- The scheduler defaults to `DATA_MART_AUTO_REFRESH_ENABLED=true`, `DATA_MART_AUTO_REFRESH_SEC_ENABLED=true`, `DATA_MART_AUTO_REFRESH_MACRO_ENABLED=true`, `DATA_MART_AUTO_REFRESH_UNIVERSE_ID=all_supported`, `DATA_MART_AUTO_REFRESH_MAX_ASSETS=250`, `DATA_MART_AUTO_REFRESH_INTERVAL_HOURS=24`, and `DATA_MART_AUTO_REFRESH_INITIAL_DELAY_S=120`.
+- Pytest contexts disable the scheduler unless `DATA_MART_AUTO_REFRESH_ENABLED` is explicitly set, so test runs do not silently call SEC.
+- SEC fair-access behavior still depends on a valid `SEC_USER_AGENT`; replace the default contact string before sustained automated use.
+- ETF, crypto, cash, and non-US exchange assets are recorded as skipped where SEC company 10-K/10-Q/8-K data is not applicable.
+
 Remaining production-only work:
 
 - Remote PostgreSQL/Supabase migration is still not implemented because the current app is a local single-user workstation and no remote DB credentials or deployment target were provided.
-- Scheduled daily jobs are not installed as OS/CI tasks; the manual operation endpoints and UI controls are implemented and can be scheduled later.
+- OS/CI-level scheduled jobs are still not installed; local FastAPI now has an in-process scheduler for workstation use.
 - Rich ETF holdings exposure, ISIN/CUSIP, delisting status, and detailed Korean sector taxonomy require provider-specific metadata sources beyond the current deterministic universe registry.
 
 ## Validation Runbook

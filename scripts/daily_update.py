@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 import argparse
 import json
 import sys
@@ -11,7 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from pipelines.data_mart.jobs.quality_checks import run_data_quality_checks
 from pipelines.data_mart.jobs.update_filings_daily import update_filings_daily
-from pipelines.data_mart.jobs.update_macro_daily import DEFAULT_US_MACRO_SERIES, update_macro_daily
+from pipelines.data_mart.jobs.update_macro_daily import update_macro_platform_data
 from pipelines.data_mart.jobs.update_news_daily import update_news_daily
 from pipelines.data_mart.jobs.update_prices_daily import update_prices_daily
 from pipelines.data_mart.storage.repository import data_health
@@ -75,8 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     results["jobs"].append(price_result.__dict__)
 
     if not args.skip_macro:
-        macro_result = update_macro_daily(
-            DEFAULT_US_MACRO_SERIES,
+        macro_result = update_macro_platform_data(
             market=args.market,
             start_date=args.start_date,
             end_date=args.end_date,

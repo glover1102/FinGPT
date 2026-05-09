@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 DDL_STATEMENTS: tuple[str, ...] = (
     """
@@ -92,11 +92,53 @@ DDL_STATEMENTS: tuple[str, ...] = (
     CREATE TABLE IF NOT EXISTS filings (
         filing_id TEXT PRIMARY KEY,
         ticker TEXT NOT NULL,
+        cik TEXT,
+        accession_number TEXT,
         form_type TEXT NOT NULL,
         filed_at TEXT,
+        report_date TEXT,
+        fiscal_year INTEGER,
+        fiscal_period TEXT,
+        primary_document TEXT,
+        description TEXT,
         url TEXT,
         source TEXT NOT NULL DEFAULT 'sec',
+        raw_json TEXT NOT NULL DEFAULT '{}',
         collected_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS sec_company_registry (
+        ticker TEXT PRIMARY KEY,
+        cik TEXT NOT NULL,
+        company_name TEXT,
+        exchange TEXT,
+        source TEXT NOT NULL DEFAULT 'sec_company_tickers',
+        updated_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS sec_financial_facts (
+        fact_id TEXT PRIMARY KEY,
+        ticker TEXT NOT NULL,
+        cik TEXT NOT NULL,
+        taxonomy TEXT NOT NULL,
+        concept TEXT NOT NULL,
+        label TEXT,
+        unit TEXT NOT NULL,
+        form_type TEXT NOT NULL,
+        fiscal_year INTEGER,
+        fiscal_period TEXT,
+        start_date TEXT,
+        end_date TEXT,
+        filed_at TEXT,
+        accession_number TEXT,
+        frame TEXT,
+        value REAL,
+        raw_value TEXT,
+        source TEXT NOT NULL DEFAULT 'sec_companyfacts',
+        collected_at TEXT NOT NULL,
+        raw_json TEXT NOT NULL DEFAULT '{}'
     )
     """,
     """
@@ -239,6 +281,11 @@ DDL_STATEMENTS: tuple[str, ...] = (
         total_debt REAL,
         debt_to_equity REAL,
         total_assets REAL,
+        total_liabilities REAL,
+        stockholders_equity REAL,
+        gross_profit REAL,
+        operating_income REAL,
+        net_income REAL,
         net_assets REAL,
         nav_price REAL,
         expense_ratio REAL,
@@ -296,6 +343,10 @@ DDL_STATEMENTS: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_fundamentals_ticker_asof ON fundamentals_snapshots(ticker, as_of DESC)",
     "CREATE INDEX IF NOT EXISTS idx_valuation_ticker_asof ON valuation_metrics(ticker, as_of DESC)",
     "CREATE INDEX IF NOT EXISTS idx_financials_ticker_asof ON financial_statements(ticker, as_of DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_filings_ticker_form_date ON filings(ticker, form_type, filed_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_sec_company_cik ON sec_company_registry(cik)",
+    "CREATE INDEX IF NOT EXISTS idx_sec_facts_ticker_concept_date ON sec_financial_facts(ticker, concept, filed_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_sec_facts_accession ON sec_financial_facts(accession_number)",
     "CREATE INDEX IF NOT EXISTS idx_asset_classification_class_sector ON asset_classification(asset_class, sector)",
     "CREATE INDEX IF NOT EXISTS idx_etf_exposure_ticker ON etf_exposure(ticker)",
     "CREATE INDEX IF NOT EXISTS idx_kr_equity_profile_market ON kr_equity_profile(market)",

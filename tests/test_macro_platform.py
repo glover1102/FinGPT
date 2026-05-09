@@ -4,15 +4,19 @@ from fastapi.testclient import TestClient
 
 from app.api.server import app
 from core.schemas.macro import MacroDataQuality, MacroObservation, MacroSeriesResponse
+from pipelines.data_mart.jobs.update_macro_daily import update_macro_platform_data
+from pipelines.data_mart.models import MacroObservation as StoredMacroObservation
+from pipelines.data_mart.models import ProviderFetchResult
+from pipelines.data_mart.storage import repository
 from pipelines.macro import macro_service
 from pipelines.macro.asset_impact import ASSET_CLASSES, get_asset_impacts
-from pipelines.macro.research_context import macro_research_context_to_retrieval_item
 from pipelines.macro.portfolio_hints import get_portfolio_policy_hint
 from pipelines.macro.providers.ecos import EcosProvider
 from pipelines.macro.providers.oecd import OecdProvider
 from pipelines.macro.providers.worldbank import WorldBankProvider
 from pipelines.macro.providers.yahoo import YahooFinanceProvider
 from pipelines.macro.regime_engine import classify_macro_regime
+from pipelines.macro.research_context import macro_research_context_to_retrieval_item
 from pipelines.macro.series_registry import get_series_definition, list_macro_series
 
 
@@ -23,8 +27,7 @@ def _contains_chinese_japanese_or_hanja(text: str) -> bool:
 def _reset_macro_runtime(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("DATA_MART_DB_PATH", str(tmp_path / "macro_test.db"))
     monkeypatch.setenv("FRED_API_KEY", "")
-    macro_service._SERIES_CACHE.clear()
-    macro_service._OVERVIEW_CACHE.clear()
+    macro_service.clear_macro_caches()
 
 
 def _series(series_id: str, value: float, *, change_3: float = 0.0) -> MacroSeriesResponse:
@@ -50,12 +53,106 @@ def _series(series_id: str, value: float, *, change_3: float = 0.0) -> MacroSeri
     )
 
 
+def test_compact_macro_payload_trims_observations_without_mutation() -> None:
+    series = _series("DGS10", 4.0)
+    observations = [
+        MacroObservation(date=f"2026-04-{day:02d}", value=float(day), raw_value=float(day), source="test")
+        for day in range(1, 4)
+    ]
+    series.observations = observations
+    series.latest = observations[-1]
+    payload = {
+        "status": "success",
+        "items": [series.model_dump(mode="json")],
+        "key_indicators": [series.model_dump(mode="json")],
+    }
+
+    compact = macro_service.compact_macro_payload(payload, observation_limit=1)
+    empty = macro_service.compact_macro_payload(payload, observation_limit=0)
+
+    assert [row["date"] for row in compact["items"][0]["observations"]] == ["2026-04-03"]
+    assert [row["date"] for row in compact["key_indicators"][0]["observations"]] == ["2026-04-03"]
+    assert empty["items"][0]["observations"] == []
+    assert len(payload["items"][0]["observations"]) == 3
+
+
 def test_macro_registry_loads_required_series() -> None:
-    ids = {item.series_id for item in list_macro_series(include_disabled=True)}
-    for required in ["FEDFUNDS", "DGS3MO", "DGS2", "DGS10", "DGS30", "T10Y2Y", "T10Y3M", "DFII10", "CPIAUCSL", "CPILFESL", "PCEPI", "PCEPILFE", "GDPC1", "INDPRO", "RSAFS", "UMCSENT", "UNRATE", "PAYEMS", "ICSA", "JTSJOL", "M2SL", "WALCL", "RRPONTSYD", "BAMLH0A0HYM2", "BAMLC0A0CM", "VIXCLS"]:
+    all_items = list_macro_series(include_disabled=True)
+    enabled_items = list_macro_series()
+    ids = {item.series_id for item in all_items}
+    for required in [
+        "FEDFUNDS",
+        "SOFR",
+        "DGS3MO",
+        "DGS1",
+        "DGS2",
+        "DGS5",
+        "DGS7",
+        "DGS10",
+        "DGS30",
+        "T10Y2Y",
+        "T10Y3M",
+        "DFII10",
+        "T5YIFR",
+        "MORTGAGE30US",
+        "CPIAUCSL",
+        "CPILFESL",
+        "PCEPI",
+        "PCEPILFE",
+        "PCETRIM12M159SFRBDAL",
+        "MEDCPIM158SFRBCLE",
+        "STICKCPIM157SFRBATL",
+        "CPIENGSL",
+        "CPIUFDSL",
+        "GDPC1",
+        "INDPRO",
+        "IPMAN",
+        "TCU",
+        "BUSINV",
+        "DGORDER",
+        "RSAFS",
+        "UMCSENT",
+        "HOUST",
+        "PERMIT",
+        "CSUSHPISA",
+        "MSPUS",
+        "PCEC96",
+        "DSPIC96",
+        "PSAVERT",
+        "TOTALSL",
+        "UNRATE",
+        "U6RATE",
+        "CIVPART",
+        "PAYEMS",
+        "CES0500000003",
+        "AWHMAN",
+        "ICSA",
+        "JTSJOL",
+        "M2SL",
+        "WALCL",
+        "RRPONTSYD",
+        "BAMLH0A0HYM2",
+        "BAMLC0A0CM",
+        "BAMLC0A4CBBB",
+        "BAMLH0A3HYC",
+        "NFCI",
+        "STLFSI4",
+        "DRTSCILM",
+        "BUSLOANS",
+        "DTWEXBGS",
+        "DEXUSEU",
+        "DEXJPUS",
+        "DEXKOUS",
+        "DCOILWTICO",
+        "DHHNGSP",
+        "DCOILBRENTEU",
+        "VIXCLS",
+    ]:
         assert required in ids
     for extension in ["ECOS_KR_POLICY_RATE", "OECD_CLI", "WORLD_BANK_GDP", "YAHOO_DXY_PROXY", "YAHOO_GLD", "YAHOO_USO"]:
         assert extension in ids
+    assert len(enabled_items) >= 70
+    assert {"housing_consumer", "financial_conditions", "fx_dollar", "commodities"}.issubset({item.category for item in enabled_items})
 
 
 def test_provider_unavailable_returns_no_fake_observations(monkeypatch, tmp_path) -> None:
@@ -75,6 +172,26 @@ def test_unknown_series_is_controlled_404(monkeypatch, tmp_path) -> None:
     assert response.json()["detail"] == "macro_series_not_found:NOT_A_SERIES"
 
 
+def test_macro_search_matches_human_alias_and_detail_components(monkeypatch, tmp_path) -> None:
+    _reset_macro_runtime(monkeypatch, tmp_path)
+    client = TestClient(app)
+
+    search = client.get("/api/v1/macro/series/search", params={"q": "US 10Y", "limit": 5})
+    assert search.status_code == 200
+    body = search.json()
+    assert body["items"]
+    assert body["items"][0]["series_id"] == "DGS10"
+
+    detail = client.get("/api/v1/macro/series/CPIAUCSL/detail", params={"observation_limit": 12})
+    assert detail.status_code == 200
+    payload = detail.json()
+    component_ids = {item["series_id"] for item in payload["component_series"]}
+    assert {"CPILFESL", "CPIENGSL", "CPIUFDSL"}.issubset(component_ids)
+    assert payload["definition"]["series_id"] == "CPIAUCSL"
+    assert "statistics" in payload
+    assert "interpretation" in payload
+
+
 def test_macro_overview_schema_and_unknown_regime_on_insufficient_data(monkeypatch, tmp_path) -> None:
     _reset_macro_runtime(monkeypatch, tmp_path)
     overview = macro_service.get_macro_overview()
@@ -88,11 +205,36 @@ def test_macro_overview_schema_and_unknown_regime_on_insufficient_data(monkeypat
 def test_api_responses_include_data_quality(monkeypatch, tmp_path) -> None:
     _reset_macro_runtime(monkeypatch, tmp_path)
     client = TestClient(app)
-    for path in ["/api/v1/macro/overview", "/api/v1/macro/series", "/api/v1/macro/interest-rates", "/api/macro/data-quality"]:
+    for path in [
+        "/api/v1/macro/overview",
+        "/api/v1/macro/series",
+        "/api/v1/macro/interest-rates",
+        "/api/v1/macro/housing-consumer",
+        "/api/v1/macro/financial-conditions",
+        "/api/macro/data-quality",
+    ]:
         response = client.get(path)
         assert response.status_code == 200
         body = response.json()
         assert "data_quality" in body
+
+
+def test_expanded_macro_category_surfaces_have_visible_items(monkeypatch, tmp_path) -> None:
+    _reset_macro_runtime(monkeypatch, tmp_path)
+    monkeypatch.setattr("pipelines.macro.providers.yahoo.yf", None)
+    housing = macro_service.get_housing_consumer()
+    financial = macro_service.get_financial_conditions()
+    yield_curve = macro_service.get_yield_curve()
+    fx = macro_service.get_fx_dollar()
+    commodities = macro_service.get_commodities()
+
+    assert housing["count"] >= 8
+    assert financial["count"] >= 4
+    assert yield_curve["count"] >= 10
+    assert fx["count"] >= 5
+    assert commodities["count"] >= 5
+    assert {"HOUST", "PCEC96"}.issubset({item["series_id"] for item in housing["items"]})
+    assert {"NFCI", "BUSLOANS"}.issubset({item["series_id"] for item in financial["items"]})
 
 
 def test_synthetic_goldilocks_regime_classification() -> None:
@@ -142,6 +284,10 @@ def test_portfolio_policy_hint_is_advisory_only() -> None:
     assert hint.advisory_only is True
     assert "no trade order" in " ".join(hint.warnings).lower()
     assert hint.data_quality.status == "partial"
+    assert hint.etf_candidates
+    tickers = {ticker for candidate in hint.etf_candidates for ticker in candidate.tickers}
+    assert {"SPY", "BND", "SGOV", "GLD", "LQD"}.issubset(tickers)
+    assert not {"AAPL", "MSFT", "NVDA"}.intersection(tickers)
 
 
 def test_research_context_and_brief_fallback_do_not_fabricate(monkeypatch, tmp_path) -> None:
@@ -150,10 +296,12 @@ def test_research_context_and_brief_fallback_do_not_fabricate(monkeypatch, tmp_p
     assert "TLT" in context.ticker_relevance
     assert context.regime.name == "unknown"
     brief = macro_service.generate_macro_brief(include_prompt=True)
-    assert brief.is_fallback is True
+    assert brief.is_fallback is False
+    assert brief.provider == "structured_macro_rules"
     assert "No key indicators are available" not in brief.content
-    assert "누락되거나 오래된 데이터는 중립 신호가 아니라 증거 부족" in brief.content
-    assert "경제 지표 값을 지어내지 마세요" in (brief.prompt_template or "")
+    assert "증거 부족" in brief.content or "관측치 없음" in brief.content
+    assert "ETF 기반 포트폴리오 구성 메모" in brief.content
+    assert "경제 지표값을 지어내지 말고" in (brief.prompt_template or "")
     assert "중국어" in (brief.prompt_template or "")
 
 
@@ -231,7 +379,7 @@ def test_live_macro_brief_rejects_non_korean_llm_response(monkeypatch, tmp_path)
         text = "{}"
 
         def json(self):
-            return {"response": "当前宏观环境显示增长稳定，通胀压力有限，资产配置应保持谨慎。3.0"}
+            return {"response": "壤볟뎺若뤺쭆??쥊?양ㅊ罌욇빣葉녑츣竊뚪싪??뗥뒟?됮솏竊뚩탡雅㏝뀓營?틪岳앮똻瘟ⓩ뀕??.0"}
 
     monkeypatch.setattr(macro_service, "get_macro_overview", fake_overview)
     monkeypatch.setattr("pipelines.macro.ai_brief.httpx.post", lambda *_, **__: Response())
@@ -252,6 +400,56 @@ def test_macro_report_endpoint_returns_markdown(monkeypatch, tmp_path) -> None:
     assert not _contains_chinese_japanese_or_hanja(body["content"])
     assert not _contains_chinese_japanese_or_hanja(" ".join(body["warnings"]))
     assert body["data_quality"]["status"] in {"ok", "partial", "stale", "unavailable"}
+
+
+def test_macro_refresh_job_stores_fred_and_yahoo_series(monkeypatch, tmp_path) -> None:
+    db_path = tmp_path / "macro_refresh.db"
+    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
+
+    def fake_fred(series_ids, **kwargs):
+        return ProviderFetchResult(
+            provider="fred",
+            status="ok",
+            rows=1,
+            records=[
+                StoredMacroObservation(
+                    series_id="FEDFUNDS",
+                    date="2026-05-01",
+                    value=4.5,
+                    source="fred",
+                )
+            ],
+            detail={"requested_series": list(series_ids)},
+        )
+
+    monkeypatch.setattr("pipelines.data_mart.jobs.update_macro_daily.fetch_macro_series", fake_fred)
+
+    import pandas as pd
+
+    frame = pd.DataFrame(
+        {"Close": [100.0, 102.0], "Adj Close": [100.0, 102.0], "Volume": [10, 20]},
+        index=pd.to_datetime(["2026-05-01", "2026-05-02"]),
+    )
+    monkeypatch.setattr("pipelines.macro.providers.yahoo.yf.download", lambda **_: frame)
+
+    result = update_macro_platform_data(["FEDFUNDS", "YAHOO_GLD"], lookback_days=10, db_path=db_path)
+
+    assert result.status == "success"
+    assert repository.latest_macro("FEDFUNDS", db_path=db_path)["value"] == 4.5
+    assert repository.latest_macro("YAHOO_GLD", db_path=db_path)["value"] == 102.0
+    health = repository.data_health(db_path=db_path)
+    assert health["macro_series_with_observations"] == 2
+
+
+def test_macro_refresh_api_supports_dry_run(monkeypatch, tmp_path) -> None:
+    _reset_macro_runtime(monkeypatch, tmp_path)
+    client = TestClient(app)
+    response = client.post("/api/v1/macro/refresh", json={"series_ids": ["FEDFUNDS"], "dry_run": True})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "dry_run"
+    assert body["refresh"]["providers"][0]["status"] == "dry_run"
+    assert "data_quality" in body
 
 
 def test_factor_regime_classifier_uses_same_signal_contract() -> None:
@@ -358,7 +556,11 @@ def test_fx_and_commodities_categories_use_enabled_market_proxies(monkeypatch, t
     monkeypatch.setattr("pipelines.macro.providers.yahoo.yf.download", lambda **_: frame)
     fx = macro_service.get_fx_dollar()
     commodities = macro_service.get_commodities()
-    assert fx["count"] >= 1
-    assert commodities["count"] >= 2
-    assert all(item["provider"] == "yahoo" for item in fx["items"])
-    assert all(item["observations"] for item in commodities["items"])
+    fx_ids = {item["series_id"] for item in fx["items"]}
+    commodity_ids = {item["series_id"] for item in commodities["items"]}
+    assert fx["count"] >= 5
+    assert commodities["count"] >= 5
+    assert {"DTWEXBGS", "YAHOO_DXY_PROXY"}.issubset(fx_ids)
+    assert {"DCOILWTICO", "DCOILBRENTEU", "YAHOO_GLD", "YAHOO_USO"}.issubset(commodity_ids)
+    assert any(item["provider"] == "yahoo" and item["observations"] for item in fx["items"])
+    assert any(item["provider"] == "yahoo" and item["observations"] for item in commodities["items"])

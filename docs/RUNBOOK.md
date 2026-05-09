@@ -160,7 +160,7 @@ python scripts/daily_update.py --market us --start-date 2025-01-01 --json
 python scripts/daily_update.py --market kr --skip-macro --json
 ```
 
-`--market us` captures yfinance prices, FRED macro, Google News RSS metadata, and SEC EDGAR filing metadata by default. Use `--skip-filings` for provider-isolation recovery runs or when SEC is rate-limited. KR runs skip SEC filings because they are not SEC-covered instruments.
+`--market us` captures yfinance prices, Macro registry data, Google News RSS metadata, and SEC EDGAR filing metadata by default. Macro registry data includes active FRED economic series plus Yahoo Finance market proxies used by the Macro tab. Use `--skip-filings` for provider-isolation recovery runs or when SEC is rate-limited. KR runs skip SEC filings because they are not SEC-covered instruments.
 
 Watchlists live at:
 ```text
@@ -171,7 +171,7 @@ config/watchlists/core_kr.yaml
 Operational interpretation:
 - `provider_status.status=ok`: provider returned usable rows.
 - `provider_status.status=partial`: some tickers/series failed; inspect `details_json`.
-- `provider_status.status=credentials_missing`: expected for FRED until `FRED_API_KEY` is set.
+- `provider_status.status=credentials_missing`: expected for direct FRED API collection until `FRED_API_KEY` is set. The Macro tab refresh job can fall back to FRED public CSV when no key is configured, and records that as `provider=fred_csv`.
 - `provider_status.status=empty`: provider was reachable but returned no usable current rows; this is common for thin news/filing coverage and should be shown as no coverage, not as a hard failure.
 - `data_quality_checks.status=warn`: data is stale or incomplete; UI must not render this as success.
 - `data_quality_checks.status=fail`: duplicate or structurally invalid data; fix before using reports for decisions.
@@ -180,6 +180,7 @@ Manual stale-data recovery:
 ```powershell
 python scripts/daily_update.py --market us --retry-failed --json
 python scripts/daily_update.py --market us --watchlist config/watchlists/core_us.yaml --start-date 2024-01-01 --json
+python -c "from pipelines.data_mart.jobs.update_macro_daily import update_macro_platform_data; print(update_macro_platform_data().status)"
 ```
 
 If the mart DB is corrupt, move it aside rather than deleting it blindly:
@@ -204,6 +205,26 @@ powershell.exe -ExecutionPolicy Bypass -File F:\LLM\FinGPT\scripts\run_daily_upd
 For Korea close:
 ```powershell
 powershell.exe -ExecutionPolicy Bypass -File F:\LLM\FinGPT\scripts\run_daily_update.ps1 -Market kr -SkipMacro
+```
+
+## In-Process Data Mart Auto Refresh
+FastAPI also starts a local in-process data mart scheduler. It is intended for workstation freshness while the web app is running, not as a distributed job runner.
+
+Useful controls:
+```text
+DATA_MART_AUTO_REFRESH_ENABLED=true
+DATA_MART_AUTO_REFRESH_SEC_ENABLED=true
+DATA_MART_AUTO_REFRESH_MACRO_ENABLED=true
+DATA_MART_AUTO_REFRESH_INTERVAL_HOURS=24
+DATA_MART_AUTO_REFRESH_INITIAL_DELAY_S=120
+DATA_MART_AUTO_REFRESH_MACRO_LOOKBACK_DAYS=1825
+```
+
+Status endpoints:
+```text
+GET /api/v1/data/auto-refresh/status
+GET /api/v1/macro/refresh/status
+POST /api/v1/macro/refresh
 ```
 
 ## Verification Gate

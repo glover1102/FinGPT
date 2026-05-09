@@ -115,6 +115,70 @@ def test_filing_upsert_is_idempotent(tmp_path) -> None:
     assert health["table_counts"]["filings"] == 1
 
 
+def test_sec_company_registry_and_facts_are_queryable(tmp_path) -> None:
+    db_path = tmp_path / "research_mart.db"
+
+    company_counts = repository.upsert_sec_company_registry(
+        [{"ticker": "AAPL", "cik": "0000320193", "company_name": "Apple Inc.", "exchange": "Nasdaq"}],
+        db_path=db_path,
+    )
+    filing_counts = repository.upsert_filings(
+        [
+            Filing(
+                ticker="AAPL",
+                cik="0000320193",
+                accession_number="0000320193-26-000001",
+                form_type="10-K",
+                filed_at="2026-01-31",
+                report_date="2025-12-31",
+                fiscal_year=2025,
+                fiscal_period="FY",
+                primary_document="aapl-20251231.htm",
+                description="10-K filing",
+                url="https://www.sec.gov/Archives/edgar/data/320193/000032019326000001/aapl-20251231.htm",
+                filing_id="AAPL:0000320193-26-000001",
+            )
+        ],
+        db_path=db_path,
+    )
+    fact_counts = repository.upsert_sec_financial_facts(
+        [
+            {
+                "ticker": "AAPL",
+                "cik": "0000320193",
+                "taxonomy": "us-gaap",
+                "concept": "RevenueFromContractWithCustomerExcludingAssessedTax",
+                "label": "Revenue",
+                "unit": "USD",
+                "form_type": "10-K",
+                "fiscal_year": 2025,
+                "fiscal_period": "FY",
+                "end_date": "2025-12-31",
+                "filed_at": "2026-01-31",
+                "accession_number": "0000320193-26-000001",
+                "value": 390000000000,
+            }
+        ],
+        db_path=db_path,
+    )
+    availability = repository.sec_data_availability(["AAPL", "MSFT"], db_path=db_path)
+    filings = repository.latest_filings("AAPL", forms=["10-K"], db_path=db_path)
+    facts = repository.latest_sec_financial_facts("AAPL", concepts=["RevenueFromContractWithCustomerExcludingAssessedTax"], db_path=db_path)
+    health = repository.data_health(db_path=db_path)
+
+    assert company_counts == {"inserted": 1, "updated": 0}
+    assert filing_counts == {"inserted": 1, "updated": 0}
+    assert fact_counts == {"inserted": 1, "updated": 0}
+    assert availability["AAPL"]["available"] is True
+    assert availability["AAPL"]["filing_count"] == 1
+    assert availability["AAPL"]["fact_count"] == 1
+    assert availability["MSFT"]["status"] == "missing"
+    assert filings[0]["accession_number"] == "0000320193-26-000001"
+    assert facts[0]["value"] == 390000000000
+    assert health["table_counts"]["sec_company_registry"] == 1
+    assert health["table_counts"]["sec_financial_facts"] == 1
+
+
 def test_update_run_provider_status_and_health(tmp_path) -> None:
     db_path = tmp_path / "research_mart.db"
     run_id = repository.start_update_run(market="us", provider="yfinance", db_path=db_path)

@@ -2,8 +2,8 @@ from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-KNOWN_COLLECTION_SOURCES = ("news", "transcript", "report", "macro")
-DEFAULT_COLLECTION_SOURCES = ("news", "macro", "transcript")
+KNOWN_COLLECTION_SOURCES = ("news", "transcript", "report", "macro", "fundamentals", "filings")
+DEFAULT_COLLECTION_SOURCES = ("news", "macro", "fundamentals", "filings", "transcript")
 # ``news`` is the only *required* primary source — if it fails we degrade to
 # ``partial``. ``macro`` is treated as primary for non-equity assets (bonds,
 # FX, commodities), where it is the only relevant ground-truth channel.

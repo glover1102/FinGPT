@@ -27,20 +27,32 @@ const API = {
   dashboardMarket: "/api/v1/dashboard/market",
   dashboardEquityHeatmap: "/api/v1/dashboard/equity-heatmap",
   macroSeriesList: "/api/v1/macro/series",
-  macroOverview: "/api/v1/macro/overview",
-  macroInterestRates: "/api/v1/macro/interest-rates",
-  macroInflation: "/api/v1/macro/inflation",
-  macroGrowthLabor: "/api/v1/macro/growth-labor",
-  macroYieldCurve: "/api/v1/macro/yield-curve",
-  macroLiquidityCredit: "/api/v1/macro/liquidity-credit",
-  macroFxDollar: "/api/v1/macro/fx-dollar",
-  macroCommodities: "/api/v1/macro/commodities",
+  macroSeriesSearch: (query, limit = 12) => `/api/v1/macro/series/search?q=${encodeURIComponent(query || "")}&limit=${encodeURIComponent(limit)}`,
+  macroSeriesDetail: (seriesId, observationLimit = 240) => `/api/v1/macro/series/${encodeURIComponent(seriesId || "")}/detail?observation_limit=${encodeURIComponent(observationLimit)}`,
+  macroOverview: "/api/v1/macro/overview?compact=true&observation_limit=120",
+  macroInterestRates: "/api/v1/macro/interest-rates?compact=true&observation_limit=0",
+  macroInflation: "/api/v1/macro/inflation?compact=true&observation_limit=0",
+  macroGrowthLabor: "/api/v1/macro/growth-labor?compact=true&observation_limit=0",
+  macroHousingConsumer: "/api/v1/macro/housing-consumer?compact=true&observation_limit=0",
+  macroYieldCurve: "/api/v1/macro/yield-curve?compact=true&observation_limit=0",
+  macroLiquidityCredit: "/api/v1/macro/liquidity-credit?compact=true&observation_limit=0",
+  macroFinancialConditions: "/api/v1/macro/financial-conditions?compact=true&observation_limit=0",
+  macroFxDollar: "/api/v1/macro/fx-dollar?compact=true&observation_limit=0",
+  macroCommodities: "/api/v1/macro/commodities?compact=true&observation_limit=0",
   macroPortfolioHints: "/api/v1/macro/portfolio-policy-hints",
   macroBrief: "/api/v1/macro/brief",
   macroReport: "/api/v1/macro/report",
   macroDataQuality: "/api/v1/macro/data-quality",
+  macroRefreshRun: "/api/v1/macro/refresh",
+  macroRefreshStatus: "/api/v1/macro/refresh/status",
   dataHealth: "/api/v1/data/health",
-  dataPrices: (ticker, limit = 252) => `/api/v1/data/prices/${encodeURIComponent(ticker)}?limit=${encodeURIComponent(limit)}`,
+  dataPrices: (ticker, limit = 252, options = {}) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (options.refresh) params.set("refresh", "true");
+    if (options.startDate) params.set("start_date", options.startDate);
+    if (options.endDate) params.set("end_date", options.endDate);
+    return `/api/v1/data/prices/${encodeURIComponent(ticker)}?${params.toString()}`;
+  },
   dataFundamentals: (ticker) => `/api/v1/data/fundamentals/${encodeURIComponent(ticker)}`,
   backtestRun: "/api/v1/backtest/run",
   quantFeatures: "/api/v1/quant/features/preview",
@@ -64,6 +76,24 @@ const API = {
   quantStrategyGenerate: "/api/v1/quant/strategy/generate",
   quantStrategySave: "/api/v1/quant/strategy/save",
   quantUniverseResolve: "/api/v1/quant/universe/resolve",
+  forecastHealth: "/api/v1/forecast/health",
+  forecastModels: "/api/v1/forecast/models",
+  forecastDatasetPreview: "/api/v1/forecast/dataset/preview",
+  forecastDatasetHydrate: "/api/v1/forecast/dataset/hydrate",
+  forecastFeaturesBuild: "/api/v1/forecast/features/build",
+  forecastLeakageCheck: "/api/v1/forecast/leakage/check",
+  forecastTrain: "/api/v1/forecast/train",
+  forecastAiInterpretation: "/api/v1/forecast/ai-interpretation",
+  forecastAiProviderHealth: "/api/v1/forecast/ai-provider/health",
+  forecastVisualization: (experimentId) => `/api/v1/forecast/visualization/${encodeURIComponent(experimentId)}`,
+  forecastExperiments: "/api/v1/forecast/experiments",
+  forecastRegistry: "/api/v1/forecast/model-registry",
+  forecastRegistryAudit: "/api/v1/forecast/model-registry/audit",
+  forecastVerifyArtifact: "/api/v1/forecast/model-registry/verify-artifact",
+  forecastPromoteModel: "/api/v1/forecast/model-registry/promote",
+  forecastDeprecateModel: "/api/v1/forecast/model-registry/deprecate",
+  forecastDriftCheck: "/api/v1/forecast/drift/check",
+  forecastModelComparison: "/api/v1/forecast/model-comparison",
   portfolioOptimize: "/api/v1/portfolio/optimize",
   aiPortfolioInvestmentTypes: "/api/v1/ai-portfolio/investment-types",
   aiPortfolioUniverses: "/api/v1/ai-portfolio/universes",
@@ -71,6 +101,7 @@ const API = {
   aiPortfolioOperations: "/api/v1/ai-portfolio/operations",
   aiPortfolioHydrate: "/api/v1/ai-portfolio/operations/hydrate",
   aiPortfolioSnapshotJob: "/api/v1/ai-portfolio/operations/snapshots",
+  aiPortfolioSecRefresh: "/api/v1/ai-portfolio/operations/sec-refresh",
   aiPortfolioPolicies: "/api/v1/ai-portfolio/policies",
   aiPortfolioPolicy: (policyId) => `/api/v1/ai-portfolio/policies/${encodeURIComponent(policyId)}`,
   aiPortfolioActivate: (policyId) => `/api/v1/ai-portfolio/policies/${encodeURIComponent(policyId)}/activate`,
@@ -95,8 +126,11 @@ const STAGES = ["collect", "ingest", "retrieve", "infer", "analyze", "report", "
 
 const els = {
   homeBtn: document.getElementById("homeBtn"),
+  controlPanel: document.querySelector(".control-panel"),
+  commandPanelToggle: document.getElementById("commandPanelToggle"),
   form: document.getElementById("analysisForm"),
   ticker: document.getElementById("ticker"),
+  tickerSearchOpen: document.getElementById("tickerSearchOpen"),
   researchModeInputs: () => document.querySelectorAll('input[name="researchMode"]'),
   tickerChips: document.getElementById("tickerChips"),
   question: document.getElementById("question"),
@@ -144,6 +178,8 @@ const els = {
   qualityPanel: document.getElementById("qualityPanel"),
   qualitySubtitle: document.getElementById("qualitySubtitle"),
   qualitySummary: document.getElementById("qualitySummary"),
+  qualityDataHealth: document.getElementById("qualityDataHealth"),
+  qualityMacroData: document.getElementById("qualityMacroData"),
   qualityCategories: document.getElementById("qualityCategories"),
   qualityCases: document.getElementById("qualityCases"),
   qualityCasesNote: document.getElementById("qualityCasesNote"),
@@ -214,10 +250,12 @@ const els = {
   homeNewsCategories: document.getElementById("homeNewsCategories"),
   homeNewsRefresh: document.getElementById("homeNewsRefresh"),
   homeDashboardTabs: document.getElementById("homeDashboardTabs"),
+  dashboardContextStrip: document.getElementById("dashboardContextStrip"),
   homeSurfaceGrid: document.getElementById("homeSurfaceGrid"),
   marketDashboardTab: document.getElementById("marketDashboardTab"),
   macroDashboardTab: document.getElementById("macroDashboardTab"),
   quantLabTab: document.getElementById("quantLabTab"),
+  mlForecastTab: document.getElementById("mlForecastTab"),
   aiPortfolioTab: document.getElementById("aiPortfolioTab"),
   homeHeatmap: document.getElementById("homeHeatmap"),
   homeHeatmapMeta: document.getElementById("homeHeatmapMeta"),
@@ -229,13 +267,16 @@ const els = {
   macroBriefGenerate: document.getElementById("macroBriefGenerate"),
   macroReportExport: document.getElementById("macroReportExport"),
   macroOverviewSurface: document.getElementById("macroOverviewSurface"),
+  macroCoverageSurface: document.getElementById("macroCoverageSurface"),
   macroIndicatorTable: document.getElementById("macroIndicatorTable"),
   macroChartSurface: document.getElementById("macroChartSurface"),
   macroInterestRatesSurface: document.getElementById("macroInterestRatesSurface"),
   macroInflationSurface: document.getElementById("macroInflationSurface"),
   macroGrowthLaborSurface: document.getElementById("macroGrowthLaborSurface"),
+  macroHousingConsumerSurface: document.getElementById("macroHousingConsumerSurface"),
   macroYieldCurveSurface: document.getElementById("macroYieldCurveSurface"),
   macroLiquidityCreditSurface: document.getElementById("macroLiquidityCreditSurface"),
+  macroFinancialConditionsSurface: document.getElementById("macroFinancialConditionsSurface"),
   macroFxDollarSurface: document.getElementById("macroFxDollarSurface"),
   macroCommoditiesSurface: document.getElementById("macroCommoditiesSurface"),
   macroRegimeSurface: document.getElementById("macroRegimeSurface"),
@@ -243,12 +284,18 @@ const els = {
   macroPortfolioHintsSurface: document.getElementById("macroPortfolioHintsSurface"),
   macroBriefSurface: document.getElementById("macroBriefSurface"),
   macroDataQualitySurface: document.getElementById("macroDataQualitySurface"),
+  macroSeriesSearchInput: document.getElementById("macroSeriesSearchInput"),
+  macroSeriesSearchRun: document.getElementById("macroSeriesSearchRun"),
+  macroSeriesSearchResults: document.getElementById("macroSeriesSearchResults"),
+  macroSeriesDetailSurface: document.getElementById("macroSeriesDetailSurface"),
   assetDetailTicker: document.getElementById("assetDetailTicker"),
+  assetDetailTickerOpen: document.getElementById("assetDetailTickerOpen"),
   assetDetailRange: document.getElementById("assetDetailRange"),
   assetDetailStartDate: document.getElementById("assetDetailStartDate"),
   assetDetailEndDate: document.getElementById("assetDetailEndDate"),
   assetDetailView: document.getElementById("assetDetailView"),
   assetDetailBenchmark: document.getElementById("assetDetailBenchmark"),
+  assetDetailBenchmarkOpen: document.getElementById("assetDetailBenchmarkOpen"),
   assetDetailBenchmarkCompare: document.getElementById("assetDetailBenchmarkCompare"),
   assetDetailLoad: document.getElementById("assetDetailLoad"),
   assetDetailSurface: document.getElementById("assetDetailSurface"),
@@ -258,6 +305,7 @@ const els = {
   backtestStrategy: document.getElementById("backtestStrategy"),
   backtestStrategyRegistry: document.getElementById("backtestStrategyRegistry"),
   backtestBenchmark: document.getElementById("backtestBenchmark"),
+  backtestBenchmarkOpen: document.getElementById("backtestBenchmarkOpen"),
   backtestBenchmarkCompare: document.getElementById("backtestBenchmarkCompare"),
   backtestStartDate: document.getElementById("backtestStartDate"),
   backtestEndDate: document.getElementById("backtestEndDate"),
@@ -292,9 +340,51 @@ const els = {
   quantExportStorageReport: document.getElementById("quantExportStorageReport"),
   quantCrossRunCleanupPreview: document.getElementById("quantCrossRunCleanupPreview"),
   quantRunHistorySurface: document.getElementById("quantRunHistorySurface"),
+  forecastTicker: document.getElementById("forecastTicker"),
+  forecastTickerOpen: document.getElementById("forecastTickerOpen"),
+  forecastBenchmark: document.getElementById("forecastBenchmark"),
+  forecastBenchmarkOpen: document.getElementById("forecastBenchmarkOpen"),
+  forecastStartDate: document.getElementById("forecastStartDate"),
+  forecastEndDate: document.getElementById("forecastEndDate"),
+  forecastHorizon: document.getElementById("forecastHorizon"),
+  forecastTargetType: document.getElementById("forecastTargetType"),
+  forecastModel: document.getElementById("forecastModel"),
+  forecastValidation: document.getElementById("forecastValidation"),
+  forecastIncludeMacro: document.getElementById("forecastIncludeMacro"),
+  forecastIncludeCrossAsset: document.getElementById("forecastIncludeCrossAsset"),
+  forecastPreviewDataset: document.getElementById("forecastPreviewDataset"),
+  forecastHydrateDataset: document.getElementById("forecastHydrateDataset"),
+  forecastBuildFeatures: document.getElementById("forecastBuildFeatures"),
+  forecastRunTrain: document.getElementById("forecastRunTrain"),
+  forecastGenerateAi: document.getElementById("forecastGenerateAi"),
+  forecastGenerateProviderAi: document.getElementById("forecastGenerateProviderAi"),
+  forecastDatasetSurface: document.getElementById("forecastDatasetSurface"),
+  forecastFeatureSurface: document.getElementById("forecastFeatureSurface"),
+  forecastLeakageSurface: document.getElementById("forecastLeakageSurface"),
+  forecastResultSurface: document.getElementById("forecastResultSurface"),
+  forecastSignalSurface: document.getElementById("forecastSignalSurface"),
+  forecastSignalQualitySurface: document.getElementById("forecastSignalQualitySurface"),
+  forecastVizSurface: document.getElementById("forecastVizSurface"),
+  forecastBacktestSurface: document.getElementById("forecastBacktestSurface"),
+  forecastEvaluationSurface: document.getElementById("forecastEvaluationSurface"),
+  forecastExplainSurface: document.getElementById("forecastExplainSurface"),
+  forecastAiSurface: document.getElementById("forecastAiSurface"),
+  forecastAiProviderCheck: document.getElementById("forecastAiProviderCheck"),
+  forecastAiProviderSurface: document.getElementById("forecastAiProviderSurface"),
+  forecastDriftRefresh: document.getElementById("forecastDriftRefresh"),
+  forecastDriftSurface: document.getElementById("forecastDriftSurface"),
+  forecastModelComparisonRefresh: document.getElementById("forecastModelComparisonRefresh"),
+  forecastModelComparisonSurface: document.getElementById("forecastModelComparisonSurface"),
+  forecastHistoryRefresh: document.getElementById("forecastHistoryRefresh"),
+  forecastHistorySurface: document.getElementById("forecastHistorySurface"),
+  forecastRegistryRefresh: document.getElementById("forecastRegistryRefresh"),
+  forecastRegistrySurface: document.getElementById("forecastRegistrySurface"),
   portfolioTickers: document.getElementById("portfolioTickers"),
+  portfolioUniverseOpen: document.getElementById("portfolioUniverseOpen"),
+  portfolioUniverseChips: document.getElementById("portfolioUniverseChips"),
   portfolioMethod: document.getElementById("portfolioMethod"),
   portfolioBenchmark: document.getElementById("portfolioBenchmark"),
+  portfolioBenchmarkOpen: document.getElementById("portfolioBenchmarkOpen"),
   portfolioCovarianceMethod: document.getElementById("portfolioCovarianceMethod"),
   portfolioShrinkageAlpha: document.getElementById("portfolioShrinkageAlpha"),
   portfolioStartDate: document.getElementById("portfolioStartDate"),
@@ -311,6 +401,7 @@ const els = {
   aiPortfolioHydrateData: document.getElementById("aiPortfolioHydrateData"),
   aiPortfolioRetryMissing: document.getElementById("aiPortfolioRetryMissing"),
   aiPortfolioSnapshotJob: document.getElementById("aiPortfolioSnapshotJob"),
+  aiPortfolioSecRefresh: document.getElementById("aiPortfolioSecRefresh"),
   aiPortfolioPolicyListSurface: document.getElementById("aiPortfolioPolicyListSurface"),
   aiPortfolioRecommendationDiffSurface: document.getElementById("aiPortfolioRecommendationDiffSurface"),
   aiPortfolioOperationsSurface: document.getElementById("aiPortfolioOperationsSurface"),
@@ -319,11 +410,14 @@ const els = {
   aiPortfolioUniverse: document.getElementById("aiPortfolioUniverse"),
   aiPortfolioCustomUniverseWrap: document.getElementById("aiPortfolioCustomUniverseWrap"),
   aiPortfolioCustomUniverse: document.getElementById("aiPortfolioCustomUniverse"),
+  aiPortfolioCustomUniverseOpen: document.getElementById("aiPortfolioCustomUniverseOpen"),
+  aiPortfolioCustomUniverseChips: document.getElementById("aiPortfolioCustomUniverseChips"),
   aiPortfolioUniverseStatus: document.getElementById("aiPortfolioUniverseStatus"),
   aiPortfolioInitialCapital: document.getElementById("aiPortfolioInitialCapital"),
   aiPortfolioMonthlyContribution: document.getElementById("aiPortfolioMonthlyContribution"),
   aiPortfolioTargetReturn: document.getElementById("aiPortfolioTargetReturn"),
   aiPortfolioBenchmark: document.getElementById("aiPortfolioBenchmark"),
+  aiPortfolioBenchmarkOpen: document.getElementById("aiPortfolioBenchmarkOpen"),
   aiPortfolioAutomation: document.getElementById("aiPortfolioAutomation"),
   aiPortfolioAdvancedToggle: document.getElementById("aiPortfolioAdvancedToggle"),
   aiPortfolioPolicyForm: document.getElementById("aiPortfolioPolicyForm"),
@@ -366,6 +460,8 @@ const els = {
   tvHeatmapWidget: document.getElementById("tvHeatmapWidget"),
   tvHeatmapFallback: document.getElementById("tvHeatmapFallback"),
   symbolPickerModal: document.getElementById("symbolPickerModal"),
+  symbolPickerTitle: document.getElementById("symbolPickerTitle"),
+  symbolPickerDescription: document.getElementById("symbolPickerDescription"),
   symbolPickerClose: document.getElementById("symbolPickerClose"),
   symbolPickerSearch: document.getElementById("symbolPickerSearch"),
   symbolPickerTabs: document.getElementById("symbolPickerTabs"),
@@ -408,7 +504,13 @@ const state = {
   macroLoaded: false,
   macroLoading: false,
   macroOverview: null,
+  macroPortfolioHint: null,
+  macroDataQuality: null,
+  macroRefreshStatus: null,
   macroBrief: null,
+  macroSeriesList: null,
+  macroSeriesSearch: null,
+  macroSeriesDetail: null,
   lastBacktestRequest: null,
   lastQuantBacktestRequest: null,
   lastBacktestResult: null,
@@ -420,9 +522,14 @@ const state = {
   quantStrategyItems: [],
   activeStrategyId: "",
   symbolPickerType: "all",
+  symbolPickerTarget: null,
   symbolPickerFilteredSymbols: [],
   quantRunHistoryLoaded: false,
   lastCrossRunExportCleanupPreview: null,
+  forecastLoaded: false,
+  forecastModelsLoaded: false,
+  forecastModels: [],
+  lastForecastPayload: null,
   chartTooltipBound: false,
   aiPortfolioLoaded: false,
   aiPortfolioOpsLoaded: false,
@@ -1303,7 +1410,111 @@ function isSupportedExplicitTickerToken(ticker, { marked = false } = {}) {
   return marked && /^[A-Z]{1,2}(?:[.-][A-Z0-9]{1,4})?$/.test(clean);
 }
 
-function setBacktestUniverse(tickers) {
+const SYMBOL_PICKER_TARGETS = {
+  research: {
+    inputKey: "ticker",
+    mode: () => (els.compareMode?.checked ? "multi" : "single"),
+    title: "리서치 티커 선택",
+    description: "종목 분석은 단일 선택, 비교 모드에서는 여러 심볼을 선택합니다.",
+    emptyLabel: "리서치에 사용할 심볼을 선택하세요.",
+    applyLabel: "티커 적용",
+  },
+  assetDetailTicker: {
+    inputKey: "assetDetailTicker",
+    mode: "single",
+    title: "자산 상세 종목 선택",
+    description: "가격, 수익률, 리스크를 조회할 단일 종목을 선택합니다.",
+    emptyLabel: "자산 상세에 사용할 심볼을 선택하세요.",
+    applyLabel: "종목 적용",
+  },
+  assetDetailBenchmark: {
+    inputKey: "assetDetailBenchmark",
+    mode: "single",
+    title: "자산 상세 벤치마크 선택",
+    description: "자산 상세 비교에 사용할 벤치마크 심볼을 선택합니다.",
+    emptyLabel: "비교 기준 심볼을 선택하세요.",
+    applyLabel: "벤치마크 적용",
+  },
+  backtest: {
+    inputKey: "backtestTicker",
+    chipsKey: "backtestUniverseChips",
+    mode: "multi",
+    title: "백테스트 유니버스 선택",
+    description: "검색하거나 필터를 조합해 백테스트에 사용할 종목 유니버스를 선택합니다.",
+    emptyLabel: "백테스트에 사용할 심볼을 선택하세요.",
+    applyLabel: "유니버스 적용",
+  },
+  backtestBenchmark: {
+    inputKey: "backtestBenchmark",
+    mode: "single",
+    title: "백테스트 벤치마크 선택",
+    description: "성과 비교에 사용할 벤치마크 심볼을 선택합니다.",
+    emptyLabel: "백테스트 벤치마크를 선택하세요.",
+    applyLabel: "벤치마크 적용",
+  },
+  portfolio: {
+    inputKey: "portfolioTickers",
+    chipsKey: "portfolioUniverseChips",
+    mode: "multi",
+    title: "포트폴리오 유니버스 선택",
+    description: "포트폴리오 최적화에 사용할 종목군을 검색하고 선택합니다.",
+    emptyLabel: "포트폴리오에 사용할 심볼을 선택하세요.",
+    applyLabel: "유니버스 적용",
+  },
+  portfolioBenchmark: {
+    inputKey: "portfolioBenchmark",
+    mode: "single",
+    title: "포트폴리오 벤치마크 선택",
+    description: "포트폴리오 성과 비교 기준을 선택합니다.",
+    emptyLabel: "포트폴리오 벤치마크를 선택하세요.",
+    applyLabel: "벤치마크 적용",
+  },
+  forecastTicker: {
+    inputKey: "forecastTicker",
+    mode: "single",
+    title: "ML Forecast 티커 선택",
+    description: "예측 실험 대상 단일 종목을 선택합니다.",
+    emptyLabel: "예측 대상 심볼을 선택하세요.",
+    applyLabel: "티커 적용",
+  },
+  forecastBenchmark: {
+    inputKey: "forecastBenchmark",
+    mode: "single",
+    title: "ML Forecast 벤치마크 선택",
+    description: "excess return과 비교 평가에 사용할 벤치마크를 선택합니다.",
+    emptyLabel: "예측 벤치마크를 선택하세요.",
+    applyLabel: "벤치마크 적용",
+  },
+  aiPortfolioCustomUniverse: {
+    inputKey: "aiPortfolioCustomUniverse",
+    chipsKey: "aiPortfolioCustomUniverseChips",
+    mode: "multi",
+    title: "AI Portfolio 직접 유니버스 선택",
+    description: "직접 입력 모드에서 사용할 종목 목록을 검색하고 선택합니다.",
+    emptyLabel: "직접 유니버스에 사용할 심볼을 선택하세요.",
+    applyLabel: "유니버스 적용",
+  },
+  aiPortfolioBenchmark: {
+    inputKey: "aiPortfolioBenchmark",
+    mode: "single",
+    title: "AI Portfolio 벤치마크 선택",
+    description: "AI Portfolio 성과 비교에 사용할 벤치마크를 선택합니다.",
+    emptyLabel: "AI Portfolio 벤치마크를 선택하세요.",
+    applyLabel: "벤치마크 적용",
+  },
+};
+
+function symbolPickerTarget(targetKey = "backtest") {
+  const key = SYMBOL_PICKER_TARGETS[targetKey] ? targetKey : "backtest";
+  return { key, ...SYMBOL_PICKER_TARGETS[key] };
+}
+
+function symbolPickerMode(target = null) {
+  const mode = target?.mode;
+  return typeof mode === "function" ? mode() : (mode || "multi");
+}
+
+function normalizeSymbolSelection(tickers, mode = "multi") {
   const clean = [];
   const seen = new Set();
   (tickers || []).map(normalizeTickerToken).forEach((ticker) => {
@@ -1311,9 +1522,57 @@ function setBacktestUniverse(tickers) {
     seen.add(ticker);
     clean.push(ticker);
   });
-  state.lastUniverseResolution = null;
-  if (els.backtestTicker) els.backtestTicker.value = clean.join(",");
-  renderBacktestUniverseChips();
+  return mode === "single" ? clean.slice(-1) : clean;
+}
+
+function symbolTargetInput(target) {
+  return target?.inputKey ? els[target.inputKey] : null;
+}
+
+function readSymbolTargetSymbols(targetKeyOrTarget = "backtest") {
+  const target = typeof targetKeyOrTarget === "string" ? symbolPickerTarget(targetKeyOrTarget) : targetKeyOrTarget;
+  const input = symbolTargetInput(target);
+  return normalizeSymbolSelection(parseTickerInput(input?.value || ""), symbolPickerMode(target));
+}
+
+function setSymbolTargetSymbols(targetKeyOrTarget, tickers, options = {}) {
+  const target = typeof targetKeyOrTarget === "string" ? symbolPickerTarget(targetKeyOrTarget) : targetKeyOrTarget;
+  const input = symbolTargetInput(target);
+  if (!input) return;
+  const mode = symbolPickerMode(target);
+  const clean = normalizeSymbolSelection(tickers, mode);
+  input.value = mode === "single" ? (clean[0] || "") : clean.join(",");
+  if (target.key === "backtest") state.lastUniverseResolution = null;
+  renderSymbolTargetChips(target);
+  if (options.dispatch !== false) input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function renderSymbolTargetChips(targetKeyOrTarget = "backtest") {
+  const target = typeof targetKeyOrTarget === "string" ? symbolPickerTarget(targetKeyOrTarget) : targetKeyOrTarget;
+  const chips = target?.chipsKey ? els[target.chipsKey] : null;
+  if (!chips) return;
+  const tickers = readSymbolTargetSymbols(target);
+  const visibleTickers = tickers.slice(0, 48);
+  const hiddenCount = Math.max(0, tickers.length - visibleTickers.length);
+  chips.innerHTML = tickers.length
+    ? `
+        <span class="selected-symbol-count">선택 ${escapeHtml(_fmtNumber(tickers.length))}개</span>
+        ${visibleTickers.map((ticker) => `
+          <button type="button" data-symbol-chip-remove="${escapeHtml(ticker)}" title="${escapeHtml(ticker)} 제거">${escapeHtml(ticker)}</button>
+        `).join("")}
+        ${hiddenCount ? `<span class="selected-symbol-more">+${escapeHtml(_fmtNumber(hiddenCount))}개 더 있음</span>` : ""}
+      `
+    : '<span>선택된 심볼 없음</span>';
+  chips.querySelectorAll("[data-symbol-chip-remove]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setSymbolTargetSymbols(target, tickers.filter((ticker) => ticker !== button.dataset.symbolChipRemove));
+      if (!els.symbolPickerModal?.classList.contains("hidden")) renderSymbolPicker();
+    });
+  });
+}
+
+function setBacktestUniverse(tickers) {
+  setSymbolTargetSymbols("backtest", tickers, { dispatch: false });
 }
 
 function selectedBacktestUniverse() {
@@ -1390,7 +1649,10 @@ async function resolveBacktestUniverseAvailability(surface = null, options = {})
     const unavailable = Array.isArray(data?.unavailable) ? data.unavailable : [];
     if (available.length && unavailable.length) {
       setBacktestUniverse(available);
-      if (els.portfolioTickers) els.portfolioTickers.value = available.join(",");
+      if (els.portfolioTickers) {
+        els.portfolioTickers.value = available.join(",");
+        renderSymbolTargetChips("portfolio");
+      }
       renderSymbolPicker();
     }
     if (!available.length) {
@@ -1422,6 +1684,7 @@ async function resolvePortfolioUniverseAvailability(surface = null) {
     const unavailable = Array.isArray(data?.unavailable) ? data.unavailable : [];
     if (available.length && unavailable.length && els.portfolioTickers) {
       els.portfolioTickers.value = available.join(",");
+      renderSymbolTargetChips("portfolio");
     }
     if (!available.length) {
       if (surface) surface.innerHTML = decisionEmpty("포트폴리오 최적화에 사용할 가격 이력이 있는 종목이 없습니다.");
@@ -1435,24 +1698,7 @@ async function resolvePortfolioUniverseAvailability(surface = null) {
 }
 
 function renderBacktestUniverseChips() {
-  if (!els.backtestUniverseChips) return;
-  const tickers = selectedBacktestUniverse();
-  const visibleTickers = tickers.slice(0, 48);
-  const hiddenCount = Math.max(0, tickers.length - visibleTickers.length);
-  els.backtestUniverseChips.innerHTML = tickers.length
-    ? `
-        <span class="selected-symbol-count">선택 ${escapeHtml(_fmtNumber(tickers.length))}개</span>
-        ${visibleTickers.map((ticker) => `
-        <button type="button" data-universe-remove="${escapeHtml(ticker)}" title="${escapeHtml(ticker)} 제거">${escapeHtml(ticker)}</button>
-      `).join("")}
-        ${hiddenCount ? `<span class="selected-symbol-more">+${escapeHtml(_fmtNumber(hiddenCount))}개 더 있음</span>` : ""}
-      `
-    : '<span>선택된 심볼 없음</span>';
-  els.backtestUniverseChips.querySelectorAll("[data-universe-remove]").forEach((button) => {
-    button.addEventListener("click", () => {
-      setBacktestUniverse(selectedBacktestUniverse().filter((ticker) => ticker !== button.dataset.universeRemove));
-    });
-  });
+  renderSymbolTargetChips("backtest");
 }
 
 function symbolPickerMatches(item, query, selectedType, country, sector) {
@@ -1520,11 +1766,16 @@ function applySymbolPickerScope(scope) {
 
 function renderSymbolPicker() {
   if (!els.symbolPickerList) return;
-  const selected = new Set(selectedBacktestUniverse());
+  const target = state.symbolPickerTarget || symbolPickerTarget("backtest");
+  const mode = symbolPickerMode(target);
+  const bulkEnabled = mode !== "single";
+  const selected = new Set(readSymbolTargetSymbols(target));
   const items = currentSymbolPickerItems()
     .sort((a, b) => Number(selected.has(b.symbol)) - Number(selected.has(a.symbol)) || a.symbol.localeCompare(b.symbol));
   state.symbolPickerFilteredSymbols = items.map((item) => item.symbol);
   renderSymbolPickerSummary(items.length, selected.size);
+  els.symbolPickerAddFiltered?.classList.toggle("hidden", !bulkEnabled);
+  els.symbolPickerRemoveFiltered?.classList.toggle("hidden", !bulkEnabled);
 
   if (els.symbolPickerSelected) {
     const selectedItems = Array.from(selected);
@@ -1535,12 +1786,12 @@ function renderSymbolPicker() {
           <span class="symbol-picker-count">선택 ${escapeHtml(_fmtNumber(selected.size))}개</span>
           ${visibleSelected.map((ticker) => `<span>${escapeHtml(ticker)}</span>`).join("")}
           ${hiddenSelected ? `<span>+${escapeHtml(_fmtNumber(hiddenSelected))}개</span>` : ""}
-          <button type="button" class="symbol-picker-inline-action" data-symbol-select-all>전체 선택</button>
+          ${bulkEnabled ? '<button type="button" class="symbol-picker-inline-action" data-symbol-select-all>전체 선택</button>' : ""}
           <button type="button" class="symbol-picker-inline-action muted" data-symbol-clear-selected>선택 해제</button>
         `
       : `
-          <span>백테스트에 사용할 심볼을 선택하세요.</span>
-          <button type="button" class="symbol-picker-inline-action" data-symbol-select-all>전체 선택</button>
+          <span>${escapeHtml(target.emptyLabel || "심볼을 선택하세요.")}</span>
+          ${bulkEnabled ? '<button type="button" class="symbol-picker-inline-action" data-symbol-select-all>전체 선택</button>' : ""}
         `;
   }
   els.symbolPickerList.innerHTML = items.length
@@ -1557,12 +1808,18 @@ function renderSymbolPicker() {
     : '<div class="symbol-picker-empty">검색 조건과 일치하는 심볼이 없습니다.</div>';
 }
 
-function openSymbolPicker() {
+function openSymbolPicker(targetKey = "backtest") {
   if (!els.symbolPickerModal) return;
+  state.symbolPickerTarget = symbolPickerTarget(targetKey);
   setSymbolPickerType("all");
   if (els.symbolPickerSearch) els.symbolPickerSearch.value = "";
   if (els.symbolPickerCountry) els.symbolPickerCountry.value = "all";
   if (els.symbolPickerSector) els.symbolPickerSector.value = "all";
+  if (els.symbolPickerTitle) els.symbolPickerTitle.textContent = state.symbolPickerTarget.title || "심볼 찾기";
+  if (els.symbolPickerDescription) {
+    els.symbolPickerDescription.textContent = state.symbolPickerTarget.description || "검색하거나 필터를 조합해 심볼을 선택합니다.";
+  }
+  if (els.symbolPickerApply) els.symbolPickerApply.textContent = state.symbolPickerTarget.applyLabel || "적용";
   els.symbolPickerModal.classList.remove("hidden");
   renderSymbolPicker();
   window.setTimeout(() => els.symbolPickerSearch?.focus(), 0);
@@ -1575,11 +1832,14 @@ function closeSymbolPicker() {
 function toggleSymbolPickerItem(symbol) {
   const ticker = normalizeTickerToken(symbol);
   if (!ticker) return;
-  const selected = selectedBacktestUniverse();
-  if (selected.includes(ticker)) {
-    setBacktestUniverse(selected.filter((item) => item !== ticker));
+  const target = state.symbolPickerTarget || symbolPickerTarget("backtest");
+  const selected = readSymbolTargetSymbols(target);
+  if (symbolPickerMode(target) === "single") {
+    setSymbolTargetSymbols(target, selected.includes(ticker) ? [] : [ticker]);
+  } else if (selected.includes(ticker)) {
+    setSymbolTargetSymbols(target, selected.filter((item) => item !== ticker));
   } else {
-    setBacktestUniverse([...selected, ticker]);
+    setSymbolTargetSymbols(target, [...selected, ticker]);
   }
   renderSymbolPicker();
 }
@@ -1587,14 +1847,20 @@ function toggleSymbolPickerItem(symbol) {
 async function addFilteredSymbolsToBacktestUniverse() {
   const symbols = currentSymbolPickerItems().map((item) => item.symbol);
   if (!symbols.length) return;
-  setBacktestUniverse([...selectedBacktestUniverse(), ...symbols]);
+  const target = state.symbolPickerTarget || symbolPickerTarget("backtest");
+  if (symbolPickerMode(target) === "single") {
+    setSymbolTargetSymbols(target, symbols.slice(0, 1));
+  } else {
+    setSymbolTargetSymbols(target, [...readSymbolTargetSymbols(target), ...symbols]);
+  }
   renderSymbolPicker();
 }
 
 function removeFilteredSymbolsFromBacktestUniverse() {
   const filtered = new Set(currentSymbolPickerItems().map((item) => item.symbol));
   if (!filtered.size) return;
-  setBacktestUniverse(selectedBacktestUniverse().filter((ticker) => !filtered.has(ticker)));
+  const target = state.symbolPickerTarget || symbolPickerTarget("backtest");
+  setSymbolTargetSymbols(target, readSymbolTargetSymbols(target).filter((ticker) => !filtered.has(ticker)));
   renderSymbolPicker();
 }
 
@@ -1886,23 +2152,148 @@ function closeQualityPanel() {
   if (els.qualityPanel) els.qualityPanel.classList.add("hidden");
 }
 
+async function qualityFetchJson(url) {
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: data.detail || `HTTP ${res.status}`, data };
+    }
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: String(err.message || err), data: null };
+  }
+}
+
+function renderQualityDataHealth(data) {
+  if (!data) return decisionEmpty("데이터 마트 상태를 불러오지 못했습니다.");
+  const summary = data.summary || {};
+  const status = summary.decision_status || data.status || "unknown";
+  const counts = data.table_counts || {};
+  const latest = data.latest_run || {};
+  const providerRows = Array.isArray(data.recent_provider_status) ? data.recent_provider_status.slice(0, 5) : [];
+  const qualityRows = Array.isArray(data.recent_quality_checks) ? data.recent_quality_checks.slice(0, 5) : [];
+  const failedCount = Number(summary.failed_provider_rows || 0);
+  const staleCount = Number(summary.stale_or_failed_quality_rows || 0);
+  const runRows = Number(latest.rows_inserted || 0) + Number(latest.rows_updated || 0);
+  return `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(decisionStatusLabel(status))}</span>
+      <span>${escapeHtml(latest.finished_at || latest.started_at || "업데이트 실행 이력 없음")} · ${escapeHtml(latest.market || "all")}</span>
+    </div>
+    <div class="decision-summary ${escapeHtml(decisionStatusClass(status))}">
+      ${failedCount || staleCount
+        ? `주의 필요: provider 실패 ${escapeHtml(_fmtNumber(failedCount))}건, 품질 경고 ${escapeHtml(_fmtNumber(staleCount))}건`
+        : `업데이트 ${escapeHtml(latest.status || "ok")} · 이번 실행 반영 ${escapeHtml(_fmtNumber(runRows))}행`}
+    </div>
+    <div class="decision-metric-grid">
+      ${decisionMetric("가격 행", _fmtNumber(counts.prices_daily), status)}
+      ${decisionMetric("재무 스냅샷", _fmtNumber(counts.fundamentals_snapshots || 0), counts.fundamentals_snapshots ? "ok" : "warn")}
+      ${decisionMetric("SEC 공시", _fmtNumber(counts.filings || 0), counts.filings ? "ok" : "warn")}
+      ${decisionMetric("SEC 재무팩트", _fmtNumber(counts.sec_financial_facts || 0), counts.sec_financial_facts ? "ok" : "warn")}
+      ${decisionMetric("거시 관측치", _fmtNumber(counts.macro_observations || 0), status)}
+      ${decisionMetric("뉴스 evidence", _fmtNumber(counts.news_articles || 0), counts.news_articles ? "ok" : "warn")}
+    </div>
+    <div class="decision-section-title">최근 공급자 상태</div>
+    <div class="decision-list compact">
+      ${providerRows.length ? providerRows.map((row) => `
+        <div class="decision-list-row">
+          <span>${escapeHtml(row.provider || "provider")}${row.ticker ? ` · ${escapeHtml(row.ticker)}` : ""}</span>
+          <strong class="${escapeHtml(decisionStatusClass(row.status))}">${escapeHtml(decisionStatusLabel(row.status || "unknown"))}</strong>
+        </div>
+      `).join("") : '<div class="muted small">No provider status rows yet.</div>'}
+    </div>
+    <div class="decision-section-title">최근 품질 점검</div>
+    <div class="decision-list compact">
+      ${qualityRows.length ? qualityRows.map((row) => `
+        <div class="decision-list-row">
+          <span>${escapeHtml(row.check_name || "quality")}${row.entity_id ? ` · ${escapeHtml(row.entity_id)}` : ""}</span>
+          <strong class="${escapeHtml(decisionStatusClass(row.status))}">${escapeHtml(row.status || "unknown")}</strong>
+        </div>
+      `).join("") : '<div class="muted small">No quality checks recorded yet.</div>'}
+    </div>
+  `;
+}
+
+function renderQualityMacroData(data = {}, refreshStatus = {}) {
+  const quality = data.data_quality || data;
+  const rows = Array.isArray(data.series) ? data.series.slice(0, 12) : [];
+  const scheduler = refreshStatus.scheduler || {};
+  const lastResult = scheduler.last_result || {};
+  const macroJob = lastResult.jobs?.macro_platform_data || {};
+  const intervalHours = Number(scheduler.interval_s || 0) / 3600;
+  return `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(quality.status))}">${escapeHtml(quality.status || "unknown")}</span>
+      <span>공급자 ${escapeHtml(quality.provider || "mixed")} · 마지막 갱신 ${escapeHtml(quality.last_updated || "사용 불가")}</span>
+    </div>
+    <div class="macro-quality-grid">
+      ${decisionMetric("누락 시계열", _fmtNumber((quality.missing_series || []).length), (quality.missing_series || []).length ? "warn" : "ok")}
+      ${decisionMetric("지연 시계열", _fmtNumber((quality.stale_series || []).length), (quality.stale_series || []).length ? "warn" : "ok")}
+      ${decisionMetric("오류", _fmtNumber((quality.errors || []).length), (quality.errors || []).length ? "warn" : "ok")}
+      ${decisionMetric("갱신 주기", intervalHours ? `${fmtDecimal(intervalHours, 1)}시간` : "대기", "ok")}
+      ${decisionMetric("최근 갱신", macroJob.status || "대기", decisionStatusClass(macroJob.status || "unknown"))}
+      ${decisionMetric("저장 행", _fmtNumber(Number(macroJob.rows_inserted || 0) + Number(macroJob.rows_updated || 0)), "ok")}
+    </div>
+    ${(quality.errors || []).length ? `<div class="macro-warning">${escapeHtml(quality.errors.slice(0, 6).join("; "))}</div>` : ""}
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead><tr><th>시계열</th><th>상태</th><th>최근일</th><th>공급자</th></tr></thead>
+        <tbody>
+          ${rows.map((row) => `
+            <tr>
+              <td>${escapeHtml(row.series_id || "")}</td>
+              <td><span class="table-status ${escapeHtml(decisionStatusClass(row.status))}">${escapeHtml(row.status || "unknown")}</span></td>
+              <td>${escapeHtml(row.latest_date || "사용 불가")}</td>
+              <td>${escapeHtml(row.provider || "unknown")}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
 async function loadQualityDashboard() {
   if (!els.qualitySummary) return;
   els.qualitySummary.innerHTML = "<span class='muted'>Loading…</span>";
   els.qualitySubtitle.textContent = "평가 결과를 로드 중…";
-  try {
-    const res = await fetch(API.evalDashboard);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    renderQualityDashboard(data);
-  } catch (err) {
-    els.qualitySummary.innerHTML = `<span class='error'>조회 실패: ${escapeHtml(String(err.message || err))}</span>`;
-    els.qualitySubtitle.textContent = "조회 실패";
-  }
+  if (els.qualityDataHealth) els.qualityDataHealth.innerHTML = decisionEmpty("데이터 마트 품질을 불러오는 중입니다.");
+  if (els.qualityMacroData) els.qualityMacroData.innerHTML = decisionEmpty("매크로 시계열 품질을 불러오는 중입니다.");
+  const [evalResult, dataHealthResult, macroQualityResult, macroRefreshResult] = await Promise.all([
+    qualityFetchJson(API.evalDashboard),
+    qualityFetchJson(API.dataHealth),
+    qualityFetchJson(API.macroDataQuality),
+    qualityFetchJson(API.macroRefreshStatus),
+  ]);
+  renderQualityDashboard(evalResult.ok ? evalResult.data : null, {
+    evalError: evalResult.error,
+    dataHealth: dataHealthResult,
+    macroQuality: macroQualityResult,
+    macroRefresh: macroRefreshResult,
+  });
 }
 
-function renderQualityDashboard(data) {
-  if (!data) return;
+function renderQualityDashboard(data, extras = {}) {
+  if (els.qualityDataHealth) {
+    els.qualityDataHealth.innerHTML = extras.dataHealth?.ok
+      ? renderQualityDataHealth(extras.dataHealth.data)
+      : decisionEmpty(`데이터 마트 품질 조회 실패: ${extras.dataHealth?.error || "unknown"}`);
+  }
+  if (els.qualityMacroData) {
+    els.qualityMacroData.innerHTML = extras.macroQuality?.ok
+      ? renderQualityMacroData(extras.macroQuality.data, extras.macroRefresh?.data || {})
+      : decisionEmpty(`매크로 데이터 품질 조회 실패: ${extras.macroQuality?.error || "unknown"}`);
+  }
+  if (!data) {
+    els.qualitySummary.innerHTML = `<span class='error'>평가 품질 조회 실패: ${escapeHtml(extras.evalError || "unknown")}</span>`;
+    els.qualitySubtitle.textContent = "데이터 품질은 아래 섹션에서 확인할 수 있습니다.";
+    if (els.qualityCategories) els.qualityCategories.innerHTML = "<li class='muted'>평가 카테고리 데이터 없음.</li>";
+    if (els.qualityCases) els.qualityCases.innerHTML = "<li class='muted'>평가 케이스가 없습니다.</li>";
+    if (els.qualityCasesNote) els.qualityCasesNote.textContent = "";
+    if (els.qualityReport) els.qualityReport.textContent = "(평가 리포트를 불러오지 못했습니다)";
+    return;
+  }
   const summary = data.summary || {};
   const hasAnything = data.has_report || data.has_results;
   if (!hasAnything) {
@@ -2215,14 +2606,80 @@ function setCardHeader(surfaceId, title, subtitle = "") {
   if (caption && subtitle) caption.textContent = subtitle;
 }
 
+function setDashboardContextStrip(tab = "market") {
+  if (!els.dashboardContextStrip) return;
+  const itemsByTab = {
+    market: [
+      ["데이터", "TradingView / Yahoo"],
+      ["범위", "시장 스냅샷"],
+      ["최신성", "가능 시 장중 데이터"],
+      ["작업", "새로고침과 점검"],
+    ],
+    macro: [
+      ["데이터", "FRED / Yahoo / data mart"],
+      ["경계", "관측 데이터 우선"],
+      ["레짐", "신호와 AI 해석 분리"],
+      ["출력", "정책 힌트 전용"],
+    ],
+    quant: [
+      ["데이터", "저장 가격 이력"],
+      ["경계", "No-lookahead 검사"],
+      ["체결", "다음 봉 기준"],
+      ["출력", "아티팩트와 리플레이"],
+    ],
+    forecast: [
+      ["데이터", "data_mart 가격"],
+      ["검증", "Walk-forward 기본"],
+      ["가드", "Leakage / embargo"],
+      ["출력", "자문용 신호만"],
+    ],
+    "ai-portfolio": [
+      ["저장소", "Local SQLite"],
+      ["정책", "제약조건 우선"],
+      ["승인", "사용자 확인 작업"],
+      ["감사", "Hash와 이력"],
+    ],
+  };
+  const items = itemsByTab[tab] || itemsByTab.market;
+  els.dashboardContextStrip.innerHTML = items
+    .map(([label, value]) => `<span><strong>${escapeHtml(label)}</strong>${escapeHtml(value)}</span>`)
+    .join("");
+}
+
+function setCommandPanelCollapsed(collapsed) {
+  if (!els.controlPanel || !els.commandPanelToggle) return;
+  els.controlPanel.classList.toggle("is-collapsed", collapsed);
+  els.commandPanelToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  const stateLabel = els.commandPanelToggle.querySelector(".command-panel-state");
+  if (stateLabel) stateLabel.textContent = collapsed ? "컨트롤 열기" : "컨트롤 숨기기";
+}
+
+function syncCommandPanelForViewport() {
+  if (!els.commandPanelToggle) return;
+  const shouldCollapse = window.matchMedia?.("(max-width: 760px)")?.matches;
+  setCommandPanelCollapsed(Boolean(shouldCollapse));
+}
+
+function bindCommandPanelToggle() {
+  if (!els.commandPanelToggle) return;
+  els.commandPanelToggle.addEventListener("click", () => {
+    const nextCollapsed = !els.controlPanel?.classList.contains("is-collapsed");
+    setCommandPanelCollapsed(nextCollapsed);
+  });
+  syncCommandPanelForViewport();
+  window.addEventListener("resize", syncCommandPanelForViewport);
+}
+
 function dashboardTabFromLocation() {
   const params = new URLSearchParams(window.location.search);
   const fromParam = params.get("tab") || params.get("dashboard");
   if (fromParam === "ai-portfolio" || fromParam === "ai") return "ai-portfolio";
+  if (fromParam === "ml-forecast" || fromParam === "forecast") return "forecast";
   if (fromParam === "macro") return "macro";
   if (fromParam === "quant") return "quant";
   if (fromParam === "market") return "market";
   if (window.location.hash === "#ai-portfolio" || window.location.hash === "#ai") return "ai-portfolio";
+  if (window.location.hash === "#ml-forecast" || window.location.hash === "#forecast-lab" || window.location.hash === "#forecast") return "forecast";
   if (window.location.hash === "#macro") return "macro";
   if (window.location.hash === "#quant-lab" || window.location.hash === "#quant") return "quant";
   if (window.location.hash === "#market-dashboard" || window.location.hash === "#market") return "market";
@@ -2230,15 +2687,17 @@ function dashboardTabFromLocation() {
 }
 
 function setDashboardTab(tab = "market", options = {}) {
-  const active = tab === "quant" ? "quant" : (tab === "macro" ? "macro" : (tab === "ai-portfolio" || tab === "ai" ? "ai-portfolio" : "market"));
+  const active = tab === "quant" ? "quant" : (tab === "forecast" || tab === "ml-forecast" ? "forecast" : (tab === "macro" ? "macro" : (tab === "ai-portfolio" || tab === "ai" ? "ai-portfolio" : "market")));
   state.activeDashboardTab = active;
   if (els.homeSurfaceGrid) {
     els.homeSurfaceGrid.dataset.dashboardTab = active;
   }
+  setDashboardContextStrip(active);
   const buttons = [
     { el: els.marketDashboardTab, tab: "market" },
     { el: els.macroDashboardTab, tab: "macro" },
     { el: els.quantLabTab, tab: "quant" },
+    { el: els.mlForecastTab, tab: "forecast" },
     { el: els.aiPortfolioTab, tab: "ai-portfolio" },
   ];
   buttons.forEach(({ el, tab: buttonTab }) => {
@@ -2254,6 +2713,10 @@ function setDashboardTab(tab = "market", options = {}) {
     if (homeCopy) homeCopy.textContent = "저장 가격 기반 리스크, 전략 검증, 포트폴리오 배분을 같은 조건으로 점검합니다.";
     loadQuantRunHistory(false);
     loadQuantStrategies(false);
+  } else if (active === "forecast") {
+    if (homeTitle) homeTitle.textContent = "ML Forecast";
+    if (homeCopy) homeCopy.textContent = "검증 가능한 예측 실험실입니다. 가격 경로가 아니라 OOS forward return, 확률, 신뢰도, 신호, 비용 반영 백테스트를 분리해 점검합니다.";
+    loadForecastLab(false);
   } else if (active === "macro") {
     if (homeTitle) homeTitle.textContent = "매크로";
     if (homeCopy) homeCopy.textContent = "데이터 품질, 레짐, 자산군 영향, 정책 힌트, 리서치 맥락을 AI 해석과 분리해 점검합니다.";
@@ -2268,7 +2731,7 @@ function setDashboardTab(tab = "market", options = {}) {
     loadMarketDashboard(false);
   }
   if (options.updateUrl && window.history?.replaceState) {
-    const hash = active === "quant" ? "#quant-lab" : (active === "macro" ? "#macro" : (active === "ai-portfolio" ? "#ai-portfolio" : "#market-dashboard"));
+    const hash = active === "quant" ? "#quant-lab" : (active === "forecast" ? "#ml-forecast" : (active === "macro" ? "#macro" : (active === "ai-portfolio" ? "#ai-portfolio" : "#market-dashboard")));
     window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${hash}`);
   }
 }
@@ -2308,15 +2771,22 @@ function normalizeStaticLabels() {
   setText(".home-heatmap-card .home-card-head h3", "미국 주식 5분봉 히트맵");
   setText(".home-market-panel .home-card-head h3", "내부 시장 스냅샷");
   setText(".data-mart-card .home-card-head h3", "데이터 마트 상태");
-  if (els.macroDashboardTab) els.macroDashboardTab.textContent = "매크로";
+  if (els.marketDashboardTab) els.marketDashboardTab.textContent = "Market Dashboard";
+  if (els.macroDashboardTab) els.macroDashboardTab.textContent = "Macro";
+  if (els.quantLabTab) els.quantLabTab.textContent = "Quant Lab";
+  if (els.mlForecastTab) els.mlForecastTab.textContent = "ML Forecast";
+  if (els.aiPortfolioTab) els.aiPortfolioTab.textContent = "AI Portfolio";
   setCardHeader("macroOverviewSurface", "매크로 레짐 요약", "데이터, 신호, 해석 분리");
+  setCardHeader("macroCoverageSurface", "매크로 데이터 커버리지", "레지스트리, 공급자, 범주");
   setCardHeader("macroIndicatorTable", "핵심 지표", "최근값, 변화, 품질");
   setCardHeader("macroChartSurface", "매크로 차트", "관측 데이터만 표시");
   setCardHeader("macroInterestRatesSurface", "금리", "정책금리, 커브, 실질금리");
   setCardHeader("macroInflationSurface", "인플레이션", "CPI, PCE, 기대 인플레이션");
   setCardHeader("macroGrowthLaborSurface", "성장·고용", "활동, 고용, 실업수당");
+  setCardHeader("macroHousingConsumerSurface", "주택·소비", "주택, 소득, 소비신용");
   setCardHeader("macroYieldCurveSurface", "수익률 곡선", "듀레이션과 역전");
   setCardHeader("macroLiquidityCreditSurface", "유동성·신용", "통화량, 연준 자산, 스프레드");
+  setCardHeader("macroFinancialConditionsSurface", "금융여건", "스트레스, 대출태도, 은행신용");
   setCardHeader("macroFxDollarSurface", "FX·달러", "시장 프록시와 확장 공급자");
   setCardHeader("macroCommoditiesSurface", "원자재", "금, 에너지, 원자재 프록시");
   setCardHeader("macroRegimeSurface", "매크로 레짐", "규칙 기반 MVP");
@@ -2330,6 +2800,8 @@ function normalizeStaticLabels() {
   setText(".asset-detail-card .home-card-head h3", "자산 상세");
   setText(".backtest-card .home-card-head h3", "백테스트");
   setText(".portfolio-card .home-card-head h3", "포트폴리오");
+  setText(".forecast-setup-card .home-card-head h3", "ML Forecast");
+  setText(".forecast-setup-card .home-card-head span", "검증 가능한 예측 실험실");
   setText(".ai-portfolio-overview-card .home-card-head h3", "AI Portfolio");
   setText(".ai-portfolio-overview-card .home-card-head span", "정책 기반 포트폴리오 관리");
   setText(".ai-portfolio-ops-card .home-card-head h3", "운영 상태");
@@ -3362,6 +3834,11 @@ function isoDateOffset(dateText, { months = 0, years = 0 } = {}) {
   return date.toISOString().slice(0, 10);
 }
 
+function localIsoDate(date = new Date()) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
 function assetDetailOptionsFromControls() {
   return {
     range: els.assetDetailRange?.value || "1y",
@@ -3379,6 +3856,29 @@ function assetDetailRangeStart(latestDate, range) {
   if (range === "6m") return isoDateOffset(latestDate, { months: 6 });
   if (range === "3y") return isoDateOffset(latestDate, { years: 3 });
   return isoDateOffset(latestDate, { years: 1 });
+}
+
+function assetDetailRefreshStart(options) {
+  if (options.startDate) return options.startDate;
+  if (options.range === "all") return "";
+  return assetDetailRangeStart(options.endDate || localIsoDate(), options.range);
+}
+
+function assetDetailPriceQueryOptions(options) {
+  return {
+    refresh: true,
+    startDate: assetDetailRefreshStart(options),
+    endDate: options.endDate || "",
+  };
+}
+
+function assetDetailRefreshWarning(data, ticker) {
+  const refresh = data?.refresh || {};
+  if (!refresh.enabled || !refresh.attempted) return "";
+  const status = String(refresh.status || "").toLowerCase();
+  if (!status || ["success", "ok", "partial"].includes(status)) return "";
+  const message = refresh.error ? ` · ${refresh.error}` : "";
+  return `${ticker} 최신 종가 보강 실패${message}`;
 }
 
 function filterPriceRowsByAssetOptions(rows, options) {
@@ -3624,6 +4124,70 @@ function macroQualitySummary(quality = {}) {
   return `${quality.status || "unknown"} · 누락 ${missing} · 지연 ${stale} · 오류 ${errors}`;
 }
 
+const MACRO_CATEGORY_LABELS = {
+  interest_rates: "금리",
+  inflation: "인플레이션",
+  growth: "성장",
+  labor: "고용",
+  housing_consumer: "주택·소비",
+  liquidity_credit: "유동성·신용",
+  financial_conditions: "금융여건",
+  fx_dollar: "FX·달러",
+  commodities: "원자재",
+  market: "시장",
+};
+
+function macroCountBy(items = [], key) {
+  return (Array.isArray(items) ? items : []).reduce((acc, item) => {
+    const value = String(item?.[key] || "unknown");
+    acc[value] = (acc[value] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function renderMacroCoverage(data = {}) {
+  if (!els.macroCoverageSurface) return;
+  const items = Array.isArray(data.items) ? data.items : [];
+  const enabled = items.filter((item) => item.enabled !== false);
+  const categoryCounts = macroCountBy(enabled, "category");
+  const providerCounts = macroCountBy(enabled, "provider");
+  const countryCounts = macroCountBy(enabled, "country");
+  const categoryRows = Object.entries(categoryCounts)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([name, count]) => `
+      <span class="macro-coverage-chip">
+        <strong>${escapeHtml(MACRO_CATEGORY_LABELS[name] || name.replace(/_/g, " "))}</strong>
+        <em>${escapeHtml(_fmtNumber(count))}</em>
+      </span>
+    `)
+    .join("");
+  const providerRows = Object.entries(providerCounts)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([name, count]) => `<span>${escapeHtml(name)} ${escapeHtml(_fmtNumber(count))}</span>`)
+    .join("");
+  const countryRows = Object.entries(countryCounts)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([name, count]) => `<span>${escapeHtml(name)} ${escapeHtml(_fmtNumber(count))}</span>`)
+    .join("");
+  els.macroCoverageSurface.innerHTML = `
+    <div class="macro-coverage-grid">
+      ${decisionMetric("활성 시계열", _fmtNumber(enabled.length || data.count || 0), enabled.length >= 60 ? "ok" : "warn")}
+      ${decisionMetric("범주", _fmtNumber(Object.keys(categoryCounts).length), "ok")}
+      ${decisionMetric("FRED", _fmtNumber(providerCounts.fred || 0), "ok")}
+      ${decisionMetric("시장 프록시", _fmtNumber(providerCounts.yahoo || 0), providerCounts.yahoo ? "ok" : "muted")}
+      ${decisionMetric("국가/지역", _fmtNumber(Object.keys(countryCounts).length), "ok")}
+    </div>
+    <div class="macro-coverage-section">
+      <div class="decision-section-title">범주별 커버리지</div>
+      <div class="macro-coverage-chips">${categoryRows || "<span>표시할 범주가 없습니다.</span>"}</div>
+    </div>
+    <div class="macro-coverage-meta">
+      <div><strong>공급자</strong>${providerRows || "<span>없음</span>"}</div>
+      <div><strong>국가</strong>${countryRows || "<span>없음</span>"}</div>
+    </div>
+  `;
+}
+
 function renderMacroOverview(data) {
   if (!els.macroOverviewSurface) return;
   const regime = data.regime || {};
@@ -3769,6 +4333,175 @@ function renderMacroCategory(surface, data) {
   `;
 }
 
+function renderMacroSearchStarter(seriesList = {}) {
+  if (!els.macroSeriesSearchResults) return;
+  const items = Array.isArray(seriesList.items) ? seriesList.items : [];
+  const preferred = ["DGS10", "CPIAUCSL", "CPILFESL", "UNRATE", "T10Y2Y", "BAMLH0A0HYM2", "DCOILWTICO", "DTWEXBGS"];
+  const rows = preferred
+    .map((id) => items.find((item) => item.series_id === id))
+    .filter(Boolean);
+  els.macroSeriesSearchResults.innerHTML = `
+    <div class="macro-series-result-grid">
+      ${(rows.length ? rows : items.slice(0, 8)).map((item) => `
+        <button type="button" class="macro-series-result" data-macro-series-id="${escapeHtml(item.series_id || "")}">
+          <strong>${escapeHtml(item.series_id || "")}</strong>
+          <span>${escapeHtml(item.display_name || "")}</span>
+          <em>${escapeHtml(MACRO_CATEGORY_LABELS[item.category] || item.category || "macro")}</em>
+        </button>
+      `).join("") || decisionEmpty("표시할 매크로 시계열이 없습니다.")}
+    </div>
+  `;
+}
+
+function renderMacroSeriesSearchResults(data = {}) {
+  if (!els.macroSeriesSearchResults) return;
+  const items = Array.isArray(data.items) ? data.items : [];
+  if (!items.length) {
+    els.macroSeriesSearchResults.innerHTML = decisionEmpty("검색 결과가 없습니다. DGS10, CPI, unemployment, oil처럼 다른 표현을 시도해보세요.");
+    return;
+  }
+  els.macroSeriesSearchResults.innerHTML = `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(data.data_quality?.status))}">${escapeHtml(data.data_quality?.status || "registry")}</span>
+      <span>${escapeHtml(data.query || "popular")} · ${escapeHtml(_fmtNumber(items.length))}개 결과</span>
+    </div>
+    <div class="macro-series-result-grid">
+      ${items.map((item) => {
+        const latest = item.latest || {};
+        return `
+          <button type="button" class="macro-series-result" data-macro-series-id="${escapeHtml(item.series_id || "")}">
+            <strong>${escapeHtml(item.series_id || "")}</strong>
+            <span>${escapeHtml(item.display_name || "")}</span>
+            <em>${escapeHtml(MACRO_CATEGORY_LABELS[item.category] || item.category || "macro")} · ${escapeHtml(macroValueText(latest.value, item.unit))}</em>
+            <small>${escapeHtml(item.interpretation_hint || item.description || "구조화된 매크로 레지스트리 항목")}</small>
+          </button>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderMacroSeriesSearchItems(items = [], label = "") {
+  const rows = Array.isArray(items) ? items : [];
+  if (!rows.length) return "";
+  return `
+    <div class="macro-related-block">
+      <div class="decision-section-title">${escapeHtml(label)}</div>
+      <div class="macro-series-result-grid compact">
+        ${rows.map((item) => `
+          <button type="button" class="macro-series-result" data-macro-series-id="${escapeHtml(item.series_id || "")}">
+            <strong>${escapeHtml(item.series_id || "")}</strong>
+            <span>${escapeHtml(item.display_name || "")}</span>
+            <em>${escapeHtml(macroValueText(item.latest?.value, item.unit))} · ${escapeHtml(item.latest?.date || "사용 불가")}</em>
+          </button>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderMacroObservationRows(series = {}) {
+  const observations = Array.isArray(series.observations) ? series.observations.slice(-24).reverse() : [];
+  if (!observations.length) return decisionEmpty("표시할 원자료 관측치가 없습니다.");
+  return `
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead><tr><th>날짜</th><th>표시값</th><th>원값</th><th>변환</th><th>비교 기준</th><th>공급원</th></tr></thead>
+        <tbody>
+          ${observations.map((row) => `
+            <tr>
+              <td>${escapeHtml(row.date || "-")}</td>
+              <td>${escapeHtml(macroValueText(row.value, series.unit))}</td>
+              <td>${escapeHtml(row.raw_value === null || row.raw_value === undefined ? "사용 불가" : fmtDecimal(Number(row.raw_value), 3))}</td>
+              <td>${escapeHtml(row.metadata?.transform || "level")}</td>
+              <td>${escapeHtml(row.metadata?.comparison_date || "-")}</td>
+              <td>${escapeHtml(row.source || "unknown")}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderMacroSeriesDetail(data = {}) {
+  if (!els.macroSeriesDetailSurface) return;
+  const series = data.series || {};
+  const definition = data.definition || {};
+  const stats = data.statistics || {};
+  const quality = data.data_quality || series.data_quality || {};
+  const interpretation = data.interpretation || {};
+  els.macroSeriesDetailSurface.innerHTML = `
+    <div class="macro-detail-head">
+      <div>
+        <strong>${escapeHtml(series.series_id || definition.series_id || "")}</strong>
+        <span>${escapeHtml(series.display_name || definition.display_name || "")}</span>
+      </div>
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(quality.status))}">${escapeHtml(quality.status || "unknown")}</span>
+    </div>
+    <div class="decision-metric-grid dense">
+      ${decisionMetric("최근값", macroValueText(series.latest?.value, series.unit), decisionStatusClass(quality.status))}
+      ${decisionMetric("최근일", series.latest?.date || "사용 불가", series.latest ? "ok" : "warn")}
+      ${decisionMetric("1기간 변화", stats.change_1_period === null || stats.change_1_period === undefined ? "사용 불가" : fmtDecimal(Number(stats.change_1_period), 3), "ok")}
+      ${decisionMetric("3기간 변화", stats.change_3_period === null || stats.change_3_period === undefined ? "사용 불가" : fmtDecimal(Number(stats.change_3_period), 3), "ok")}
+      ${decisionMetric("관측치", _fmtNumber(stats.observation_count || 0), stats.observation_count ? "ok" : "warn")}
+      ${decisionMetric("범위", `${stats.start_date || "-"} / ${stats.end_date || "-"}`, stats.start_date ? "ok" : "warn")}
+      ${decisionMetric("최소/최대", `${fmtDecimal(Number(stats.min || 0), 2)} / ${fmtDecimal(Number(stats.max || 0), 2)}`, stats.observation_count ? "ok" : "warn")}
+      ${decisionMetric("빈도", series.frequency || definition.frequency || "-", "ok")}
+    </div>
+    <div class="decision-summary ${escapeHtml(decisionStatusClass(quality.status))}">
+      ${escapeHtml(interpretation.latest_summary || "")}
+      ${escapeHtml(interpretation.trend_summary ? ` ${interpretation.trend_summary}` : "")}
+      ${escapeHtml(interpretation.macro_use ? ` ${interpretation.macro_use}` : "")}
+    </div>
+    ${renderMacroSeriesChart(series, series.display_name || series.series_id || "Macro series")}
+    ${renderMacroSeriesSearchItems(data.component_series || [], "구성·분해 지표")}
+    ${renderMacroSeriesSearchItems(data.related_series || [], "관련 시계열")}
+    <div class="decision-section-title">최근 원자료</div>
+    ${renderMacroObservationRows(series)}
+    ${(quality.errors || quality.notes || []).length ? `<div class="macro-warning">${escapeHtml([...(quality.errors || []), ...(quality.notes || [])].join(" "))}</div>` : ""}
+  `;
+}
+
+async function loadMacroSeriesDetail(seriesId) {
+  const id = String(seriesId || "").trim();
+  if (!id || !els.macroSeriesDetailSurface) return;
+  els.macroSeriesDetailSurface.innerHTML = decisionEmpty(`${escapeHtml(id)} 상세 데이터를 불러오는 중입니다.`);
+  try {
+    const data = await macroFetchJson(API.macroSeriesDetail(id, 240));
+    state.macroSeriesDetail = data;
+    renderMacroSeriesDetail(data);
+  } catch (err) {
+    els.macroSeriesDetailSurface.innerHTML = decisionEmpty(`시계열 상세 로드 실패: ${err.message || err}`);
+  }
+}
+
+async function searchMacroSeries() {
+  if (!els.macroSeriesSearchInput) return;
+  const query = els.macroSeriesSearchInput.value.trim();
+  if (!query) {
+    renderMacroSearchStarter(state.macroSeriesList || {});
+    return;
+  }
+  setButtonBusy(els.macroSeriesSearchRun, true, "검색 중");
+  if (els.macroSeriesSearchResults) {
+    els.macroSeriesSearchResults.innerHTML = decisionEmpty("매크로 레지스트리와 저장된 관측치를 검색하는 중입니다.");
+  }
+  try {
+    const data = await macroFetchJson(API.macroSeriesSearch(query, 12));
+    state.macroSeriesSearch = data;
+    renderMacroSeriesSearchResults(data);
+    const first = data.items?.[0]?.series_id;
+    if (first) await loadMacroSeriesDetail(first);
+  } catch (err) {
+    if (els.macroSeriesSearchResults) {
+      els.macroSeriesSearchResults.innerHTML = decisionEmpty(`매크로 검색 실패: ${err.message || err}`);
+    }
+  } finally {
+    setButtonBusy(els.macroSeriesSearchRun, false);
+  }
+}
+
 function renderMacroRegime(regime = {}, signals = []) {
   if (!els.macroRegimeSurface) return;
   const scores = regime.scores || {};
@@ -3824,6 +4557,175 @@ function renderMacroAssetImpact(data) {
   `;
 }
 
+function macroFallbackEtfCandidates(hint = {}) {
+  const rows = [];
+  const equityBias = hint.equity_bias || "unknown";
+  const bondBias = hint.bond_bias || "unknown";
+  const cashBias = hint.cash_bias || "unknown";
+  const alternativeBias = hint.alternative_bias || "unknown";
+  const durationBias = hint.duration_bias || "unknown";
+  const creditBias = hint.credit_bias || "unknown";
+  rows.push({
+    sleeve: "equity",
+    bias: equityBias,
+    tickers: equityBias === "lower_range" ? ["USMV", "SPLV"] : (["upper_range", "increase"].includes(equityBias) ? ["SPY", "QQQ", "IWM"] : ["SPY", "VT"]),
+    role: equityBias === "lower_range" ? "defensive_equity_or_reduce" : "equity_core",
+    rationale: "개별 종목이 아닌 광범위 주식 ETF 후보입니다.",
+  });
+  rows.push({
+    sleeve: "bonds",
+    bias: bondBias,
+    tickers: durationBias === "shorter" ? ["SHY", "SGOV", "BIL"] : (String(durationBias).startsWith("longer") ? ["BND", "IEF", "TLT"] : ["BND", "IEF"]),
+    role: durationBias === "shorter" ? "short_duration_defense" : "core_duration",
+    rationale: "금리 민감도와 듀레이션 정책에 맞춘 채권 ETF 후보입니다.",
+  });
+  rows.push({
+    sleeve: "cash",
+    bias: cashBias,
+    tickers: cashBias === "increase" ? ["SGOV", "BIL"] : ["SGOV"],
+    role: "liquidity_buffer",
+    rationale: "현금성 유동성 관리용 단기 국채 ETF 후보입니다.",
+  });
+  rows.push({
+    sleeve: "alternatives",
+    bias: alternativeBias,
+    tickers: ["GLD", "TIP", ...(alternativeBias === "upper_range" ? ["DBC"] : [])],
+    role: "diversifier",
+    rationale: "인플레이션과 실물자산 민감도 관찰용 ETF 후보입니다.",
+  });
+  rows.push({
+    sleeve: "credit",
+    bias: creditBias,
+    tickers: creditBias === "higher_quality" || creditBias === "lower_quality" ? ["LQD", "IGSB"] : ["LQD", "HYG"],
+    role: "credit_watch",
+    rationale: "신용 스프레드와 등급 선호를 반영한 회사채 ETF 후보입니다.",
+  });
+  return rows;
+}
+
+function renderMacroEtfCandidates(hint = {}) {
+  const candidates = macroEtfCandidatesFromHint(hint);
+  return `
+    <div class="macro-etf-panel">
+      <div class="decision-section-title">ETF 편입 후보 · 개별종목 제외</div>
+      <div class="macro-etf-grid">
+        ${candidates.map((item) => `
+          <article class="macro-etf-card">
+            <div class="macro-etf-card-head">
+              <strong>${escapeHtml(item.sleeve || "sleeve")}</strong>
+              <span>${escapeHtml(item.bias || "unknown")}</span>
+            </div>
+            <div class="macro-etf-tickers">
+              ${(Array.isArray(item.tickers) ? item.tickers : []).map((ticker) => `<span>${escapeHtml(ticker)}</span>`).join(" ")}
+            </div>
+            <small>${escapeHtml(item.role || "")}</small>
+            <p>${escapeHtml(item.rationale || "")}</p>
+          </article>
+        `).join("")}
+      </div>
+      <div class="macro-etf-note">자문용 후보만 표시합니다. AI Portfolio 정책 변경, 주문 생성, 자동 리밸런싱은 실행하지 않습니다.</div>
+    </div>
+  `;
+}
+
+function macroEtfCandidatesFromHint(hint = {}) {
+  return Array.isArray(hint.etf_candidates) && hint.etf_candidates.length
+    ? hint.etf_candidates
+    : macroFallbackEtfCandidates(hint);
+}
+
+function macroSleevePlan(item = {}, hint = {}) {
+  const sleeve = String(item.sleeve || "").toLowerCase();
+  const riskLevel = String(hint.risk_level || "").toLowerCase();
+  const equityBias = String(hint.equity_bias || "").toLowerCase();
+  const durationBias = String(hint.duration_bias || "").toLowerCase();
+  const creditBias = String(hint.credit_bias || "").toLowerCase();
+  if (sleeve.includes("equity")) {
+    const range = riskLevel === "reduce" || equityBias === "lower_range" ? "25-40%" : (["increase", "upper_range"].includes(equityBias) ? "45-60%" : "35-50%");
+    return {
+      title: "주식 코어",
+      range,
+      action: "광범위 주식 ETF를 코어로 두되, 신용·유동성 경고가 있으면 저변동성 ETF를 우선 검토합니다.",
+    };
+  }
+  if (sleeve.includes("bond")) {
+    const range = durationBias === "shorter" ? "25-40%" : "30-50%";
+    return {
+      title: "채권·듀레이션",
+      range,
+      action: durationBias === "shorter"
+        ? "금리 변동성이 높을 때는 단기 국채 ETF로 듀레이션을 줄이고 장기채 편입은 백테스트로 확인합니다."
+        : "중기·장기 국채 ETF를 방어축으로 쓰되 금리 상승 구간의 손실 민감도를 별도로 점검합니다.",
+    };
+  }
+  if (sleeve.includes("cash")) {
+    return {
+      title: "현금성 완충",
+      range: riskLevel === "reduce" ? "10-20%" : "5-12%",
+      action: "리밸런싱 대기 자금과 변동성 완충 자금입니다. 신호가 약하거나 데이터 품질이 낮을 때 비중을 높입니다.",
+    };
+  }
+  if (sleeve.includes("alternative")) {
+    return {
+      title: "대체·인플레이션 방어",
+      range: "5-15%",
+      action: "금, 물가연동채, 원자재 ETF는 주식·채권 동시 약세 구간의 분산효과를 확인한 뒤 제한 비중으로 사용합니다.",
+    };
+  }
+  if (sleeve.includes("credit")) {
+    const range = creditBias === "higher_quality" || riskLevel === "reduce" ? "0-8%" : "5-12%";
+    return {
+      title: "신용 스프레드 관찰",
+      range,
+      action: "회사채 ETF는 경기·신용 스프레드 민감도가 커서 품질 경고가 있으면 투자등급 중심으로 제한합니다.",
+    };
+  }
+  return {
+    title: item.sleeve || "기타",
+    range: "0-10%",
+    action: "핵심 ETF와 상관관계, 비용, 유동성을 확인한 뒤 보조 비중으로만 검토합니다.",
+  };
+}
+
+function renderMacroBriefPortfolioPlaybook(hint = {}, brief = {}) {
+  const candidates = macroEtfCandidatesFromHint(hint);
+  const regime = hint.regime || brief.regime || "unknown";
+  const riskLevel = hint.risk_level || "unknown";
+  return `
+    <div class="macro-brief-playbook">
+      <div class="decision-section-title">ETF 포트폴리오 구성 초안</div>
+      <div class="decision-summary ok">
+        위 포트폴리오 정책 힌트의 ETF 후보를 사용한 자문용 구성 절차입니다. 자동 주문이나 확정 투자비중이 아니며, 실제 적용 전 백테스트와 데이터 품질 확인이 필요합니다.
+      </div>
+      <div class="decision-status-row">
+        <span class="decision-badge ok">Advisory only</span>
+        <span>레짐 ${escapeHtml(regime)} · 위험 수준 ${escapeHtml(riskLevel)} · 후보 ${escapeHtml(_fmtNumber(candidates.length))}개 sleeve</span>
+      </div>
+      <div class="macro-playbook-grid">
+        ${candidates.map((item) => {
+          const plan = macroSleevePlan(item, hint);
+          const tickers = Array.isArray(item.tickers) ? item.tickers : [];
+          return `
+            <article class="macro-playbook-card">
+              <strong>${escapeHtml(plan.title)} · ${escapeHtml(plan.range)}</strong>
+              <div class="macro-etf-tickers">${tickers.map((ticker) => `<span>${escapeHtml(ticker)}</span>`).join(" ")}</div>
+              <p>${escapeHtml(plan.action)}</p>
+            </article>
+          `;
+        }).join("")}
+      </div>
+      <div class="decision-section-title">실행 전 점검 순서</div>
+      <div class="macro-portfolio-steps">
+        <div class="macro-portfolio-step"><strong>1. 후보 ETF 확정</strong><p>각 sleeve에서 비용, 평균 거래량, 추적오차, 중복 노출을 비교해 대표 ETF 1-2개만 남깁니다.</p></div>
+        <div class="macro-portfolio-step"><strong>2. 초기 비중 산정</strong><p>위 범위를 출발점으로 삼고, 주식·채권·현금·대체자산의 합계가 100%가 되도록 현금 sleeve에서 미세 조정합니다.</p></div>
+        <div class="macro-portfolio-step"><strong>3. 백테스트 검증</strong><p>Quant Lab에서 같은 ETF 묶음과 기간을 넣고 CAGR, 변동성, Sharpe, MDD, 회전율, SPY 대비 성과를 확인합니다.</p></div>
+        <div class="macro-portfolio-step"><strong>4. 리밸런싱 규칙</strong><p>월 1회 또는 목표 비중 대비 3-5%p 이탈 시 재검토하고, 매크로 품질 경고가 있으면 신호보다 방어 비중을 우선합니다.</p></div>
+        <div class="macro-portfolio-step"><strong>5. 리스크 기록</strong><p>금리 급등, 신용 스프레드 확대, 달러 강세, 원자재 급변 같은 시나리오별 손실 경로를 저장해 다음 의사결정과 비교합니다.</p></div>
+      </div>
+    </div>
+  `;
+}
+
 function renderMacroPolicyHint(hint = {}) {
   if (!els.macroPortfolioHintsSurface) return;
   els.macroPortfolioHintsSurface.innerHTML = `
@@ -3840,14 +4742,20 @@ function renderMacroPolicyHint(hint = {}) {
       ${decisionMetric("위험 수준", hint.risk_level || "unknown", hint.risk_level === "reduce" ? "warn" : "ok")}
     </div>
     <div class="decision-summary ${escapeHtml(decisionStatusClass(hint.data_quality?.status))}">${escapeHtml(hint.explanation || "")}</div>
+    ${renderMacroEtfCandidates(hint)}
     ${(hint.warnings || []).length ? `<div class="macro-warning">${escapeHtml(hint.warnings.join(" "))}</div>` : ""}
   `;
 }
 
-function renderMacroDataQuality(data = {}) {
+function renderMacroDataQuality(data = {}, refreshStatus = {}) {
   if (!els.macroDataQualitySurface) return;
   const quality = data.data_quality || data;
   const rows = Array.isArray(data.series) ? data.series : [];
+  const scheduler = refreshStatus.scheduler || {};
+  const lastResult = scheduler.last_result || {};
+  const macroJob = lastResult.jobs?.macro_platform_data || {};
+  const autoEnabled = scheduler.enabled && scheduler.jobs?.macro_platform_data;
+  const intervalHours = Number(scheduler.interval_s || 0) / 3600;
   els.macroDataQualitySurface.innerHTML = `
     <div class="decision-status-row">
       <span class="decision-badge ${escapeHtml(decisionStatusClass(quality.status))}">${escapeHtml(quality.status || "unknown")}</span>
@@ -3858,6 +4766,10 @@ function renderMacroDataQuality(data = {}) {
       ${decisionMetric("지연 시계열", _fmtNumber((quality.stale_series || []).length), (quality.stale_series || []).length ? "warn" : "ok")}
       ${decisionMetric("오류", _fmtNumber((quality.errors || []).length), (quality.errors || []).length ? "warn" : "ok")}
       ${decisionMetric("메모", _fmtNumber((quality.notes || []).length), "ok")}
+      ${decisionMetric("자동 갱신", autoEnabled ? "켜짐" : "꺼짐", autoEnabled ? "ok" : "warn")}
+      ${decisionMetric("갱신 주기", intervalHours ? `${fmtDecimal(intervalHours, 1)}시간` : "대기", "ok")}
+      ${decisionMetric("최근 갱신", macroJob.status || "대기", decisionStatusClass(macroJob.status || "unknown"))}
+      ${decisionMetric("저장 행", _fmtNumber(Number(macroJob.rows_inserted || 0) + Number(macroJob.rows_updated || 0)), "ok")}
     </div>
     ${(quality.errors || []).length ? `<div class="macro-warning">${escapeHtml(quality.errors.slice(0, 6).join("; "))}</div>` : ""}
     <div class="decision-table-wrap">
@@ -3889,13 +4801,16 @@ async function macroFetchJson(url, options = {}) {
 function macroDataSurfaces() {
   return [
     els.macroOverviewSurface,
+    els.macroCoverageSurface,
     els.macroIndicatorTable,
     els.macroChartSurface,
     els.macroInterestRatesSurface,
     els.macroInflationSurface,
     els.macroGrowthLaborSurface,
+    els.macroHousingConsumerSurface,
     els.macroYieldCurveSurface,
     els.macroLiquidityCreditSurface,
+    els.macroFinancialConditionsSurface,
     els.macroFxDollarSurface,
     els.macroCommoditiesSurface,
     els.macroRegimeSurface,
@@ -3914,40 +4829,56 @@ async function loadMacro(force = false) {
   try {
     const overview = await macroFetchJson(API.macroOverview);
     const [
+      seriesList,
       interestRates,
       inflation,
       growthLabor,
+      housingConsumer,
       yieldCurve,
       liquidityCredit,
+      financialConditions,
       fxDollar,
       commodities,
       dataQuality,
+      refreshStatus,
     ] = await Promise.all([
+      macroFetchJson(API.macroSeriesList),
       macroFetchJson(API.macroInterestRates),
       macroFetchJson(API.macroInflation),
       macroFetchJson(API.macroGrowthLabor),
+      macroFetchJson(API.macroHousingConsumer),
       macroFetchJson(API.macroYieldCurve),
       macroFetchJson(API.macroLiquidityCredit),
+      macroFetchJson(API.macroFinancialConditions),
       macroFetchJson(API.macroFxDollar),
       macroFetchJson(API.macroCommodities),
       macroFetchJson(API.macroDataQuality),
+      macroFetchJson(API.macroRefreshStatus),
     ]);
     state.macroOverview = overview;
+    state.macroSeriesList = seriesList;
     renderMacroOverview(overview);
+    renderMacroCoverage(seriesList);
+    renderMacroSearchStarter(seriesList);
     renderMacroIndicatorTable(overview.key_indicators || []);
     renderMacroCharts(overview);
     renderMacroCategory(els.macroInterestRatesSurface, interestRates);
     renderMacroCategory(els.macroInflationSurface, inflation);
     renderMacroCategory(els.macroGrowthLaborSurface, growthLabor);
+    renderMacroCategory(els.macroHousingConsumerSurface, housingConsumer);
     renderMacroCategory(els.macroYieldCurveSurface, yieldCurve);
     renderMacroCategory(els.macroLiquidityCreditSurface, liquidityCredit);
+    renderMacroCategory(els.macroFinancialConditionsSurface, financialConditions);
     renderMacroCategory(els.macroFxDollarSurface, fxDollar);
     renderMacroCategory(els.macroCommoditiesSurface, commodities);
     renderMacroRegime(overview.regime || {}, overview.signals || []);
     renderMacroAssetImpact(overview.asset_impact_summary || []);
     const hint = await macroFetchJson(API.macroPortfolioHints);
+    state.macroPortfolioHint = hint;
+    state.macroDataQuality = dataQuality;
+    state.macroRefreshStatus = refreshStatus;
     renderMacroPolicyHint(hint);
-    renderMacroDataQuality(dataQuality);
+    renderMacroDataQuality(dataQuality, refreshStatus);
     state.macroLoaded = true;
     if (els.macroOverviewSurface) {
       els.macroOverviewSurface.insertAdjacentHTML(
@@ -3965,26 +4896,71 @@ async function loadMacro(force = false) {
   }
 }
 
+async function refreshMacroData() {
+  if (!els.macroOverviewSurface) return;
+  const startedAt = Date.now();
+  setButtonBusy(els.macroRefresh, true, "공급자 갱신 중");
+  if (els.macroDataQualitySurface) {
+    els.macroDataQualitySurface.innerHTML = decisionEmpty("최신 매크로 공급자 데이터를 데이터마트에 저장하는 중입니다.");
+  }
+  try {
+    const result = await macroFetchJson(API.macroRefreshRun, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lookback_days: 365 * 5 }),
+    });
+    const refresh = result.refresh || {};
+    state.macroLoaded = false;
+    await loadMacro(true);
+    if (els.macroOverviewSurface) {
+      els.macroOverviewSurface.insertAdjacentHTML(
+        "afterbegin",
+        renderActionCompletion(
+          "매크로 공급자 갱신 완료",
+          startedAt,
+          `${escapeHtml(refresh.status || "unknown")} · 저장 ${_fmtNumber(Number(refresh.rows_inserted || 0) + Number(refresh.rows_updated || 0))}행`
+        )
+      );
+    }
+  } catch (err) {
+    macroDataSurfaces().forEach((surface) => {
+      surface.innerHTML = decisionEmpty(`매크로 공급자 갱신 실패: ${err.message || err}`);
+    });
+  } finally {
+    setButtonBusy(els.macroRefresh, false);
+  }
+}
+
 async function generateMacroBrief() {
   if (!els.macroBriefSurface) return;
   const startedAt = Date.now();
   setButtonBusy(els.macroBriefGenerate, true, "생성 중");
-  els.macroBriefSurface.innerHTML = decisionEmpty("구조화된 매크로 데이터로 브리프를 생성하는 중입니다.");
+  els.macroBriefSurface.innerHTML = decisionEmpty("구조화된 매크로 데이터로 상세 브리프를 생성하는 중입니다.");
   try {
     const data = await macroFetchJson(API.macroBrief, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ include_prompt: false, use_llm: true, timeout_s: 45 }),
+      body: JSON.stringify({ include_prompt: false, use_llm: false, timeout_s: 8 }),
     });
     state.macroBrief = data;
+    let hint = state.macroPortfolioHint;
+    if (!hint) {
+      try {
+        hint = await macroFetchJson(API.macroPortfolioHints);
+        state.macroPortfolioHint = hint;
+      } catch (hintErr) {
+        hint = {};
+      }
+    }
     els.macroBriefSurface.innerHTML = `
-      ${renderActionCompletion("매크로 브리프 생성 완료", startedAt, data.is_fallback ? "규칙 기반 폴백" : "로컬 LLM")}
+      ${renderActionCompletion("매크로 브리프 생성 완료", startedAt, data.is_fallback ? "규칙 기반 폴백" : "구조화 브리프")}
       <div class="decision-status-row">
         <span class="decision-badge ${escapeHtml(data.is_fallback ? "warn" : "ok")}">${escapeHtml(data.provider || "macro")}</span>
-        <span>${data.is_fallback ? "규칙 기반 폴백" : "AI 공급자"} · 품질 ${escapeHtml(data.data_quality?.status || "unknown")}</span>
+        <span>${data.is_fallback ? "규칙 기반 폴백" : "타임아웃 없는 구조화 생성"} · 품질 ${escapeHtml(data.data_quality?.status || "unknown")}</span>
       </div>
       ${(data.warnings || []).length ? `<div class="macro-warning">${escapeHtml(data.warnings.join(" "))}</div>` : ""}
       <pre class="macro-brief-text">${escapeHtml(data.content || "")}</pre>
+      ${renderMacroBriefPortfolioPlaybook(hint, data)}
     `;
   } catch (err) {
     els.macroBriefSurface.innerHTML = decisionEmpty(`매크로 브리프 생성 실패: ${err.message || err}`);
@@ -4067,7 +5043,10 @@ function backtestRequestFromControls() {
 
 function syncPortfolioFromBacktest() {
   const request = state.lastBacktestRequest || backtestRequestFromControls();
-  if (els.portfolioTickers) els.portfolioTickers.value = (request.tickers || []).join(",");
+  if (els.portfolioTickers) {
+    els.portfolioTickers.value = (request.tickers || []).join(",");
+    renderSymbolTargetChips("portfolio");
+  }
   if (els.portfolioStartDate) els.portfolioStartDate.value = request.start_date || "";
   if (els.portfolioEndDate) els.portfolioEndDate.value = request.end_date || "";
   if (els.portfolioLookbackDays) els.portfolioLookbackDays.value = String(request.lookback_days || 756);
@@ -4154,12 +5133,14 @@ async function loadAssetDetail() {
     els.assetDetailSurface.innerHTML = decisionEmpty("티커를 입력해야 합니다.");
     return;
   }
-  els.assetDetailSurface.innerHTML = decisionEmpty(`${ticker} 선택 기간의 가격, 수익률 곡선, 리스크 지표를 계산하는 중입니다.`);
+  els.assetDetailSurface.innerHTML = decisionEmpty(`${ticker} 최신 종가를 확인한 뒤 선택 기간의 가격, 수익률 곡선, 리스크 지표를 계산하는 중입니다.`);
   try {
-    const res = await fetch(API.dataPrices(ticker, 5000));
+    const priceQuery = assetDetailPriceQueryOptions(options);
+    const res = await fetch(API.dataPrices(ticker, 5000, priceQuery));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const latest = data.latest || {};
+    const refreshWarning = assetDetailRefreshWarning(data, ticker);
     if (!data.count) {
       els.assetDetailSurface.innerHTML = decisionEmpty(`${ticker} 저장 가격이 없습니다. daily_update를 먼저 실행해야 합니다.`);
       return;
@@ -4176,9 +5157,11 @@ async function loadAssetDetail() {
     let benchmarkWarning = "";
     if (options.compareBenchmark && options.benchmark && options.benchmark !== ticker) {
       try {
-        const benchmarkRes = await fetch(API.dataPrices(options.benchmark, 5000));
+        const benchmarkRes = await fetch(API.dataPrices(options.benchmark, 5000, priceQuery));
         if (!benchmarkRes.ok) throw new Error(`HTTP ${benchmarkRes.status}`);
         const benchmarkData = await benchmarkRes.json();
+        const benchmarkRefreshWarning = assetDetailRefreshWarning(benchmarkData, options.benchmark);
+        if (benchmarkRefreshWarning) benchmarkWarning = benchmarkRefreshWarning;
         benchmarkRows = filterPriceRowsByAssetOptions(Array.isArray(benchmarkData.items) ? benchmarkData.items : [], options);
         if (benchmarkRows.length < 2) benchmarkWarning = `${options.benchmark} 벤치마크 가격 행이 부족해 비교 곡선을 숨겼습니다.`;
       } catch (err) {
@@ -4195,8 +5178,10 @@ async function loadAssetDetail() {
         <span>범위 ${escapeHtml(options.range)}</span>
         <span>시작 ${escapeHtml(options.startDate || "자동")}</span>
         <span>종료 ${escapeHtml(options.endDate || "최신")}</span>
+        <span>최신 종가 보강 ${escapeHtml(priceQuery.startDate || "최근")} -> ${escapeHtml(priceQuery.endDate || "제공자 최신")}</span>
         ${options.compareBenchmark ? `<span>벤치마크 ${escapeHtml(options.benchmark)}</span>` : ""}
       </div>
+      ${refreshWarning ? `<div class="decision-warning">${escapeHtml(refreshWarning)}</div>` : ""}
       ${benchmarkWarning ? `<div class="decision-warning">${escapeHtml(benchmarkWarning)}</div>` : ""}
       ${renderAssetDetailSections({ ticker, rows, allRows, latest: scopedLatest, metrics, options, benchmarkRows })}
     `;
@@ -5511,7 +6496,10 @@ function applyStrategyToControls(strategy) {
   if (!strategy || typeof strategy !== "object") return;
   const universe = Array.isArray(strategy.universe) ? strategy.universe : [];
   if (universe.length && els.backtestTicker) setBacktestUniverse(universe);
-  if (universe.length && els.portfolioTickers) els.portfolioTickers.value = universe.join(",");
+  if (universe.length && els.portfolioTickers) {
+    els.portfolioTickers.value = universe.join(",");
+    renderSymbolTargetChips("portfolio");
+  }
   if (strategy.benchmark && els.portfolioBenchmark) els.portfolioBenchmark.value = strategy.benchmark;
   if (strategy.benchmark && els.backtestBenchmark) els.backtestBenchmark.value = strategy.benchmark;
   const portfolio = strategy.portfolio || {};
@@ -6883,6 +7871,9 @@ async function loadAiPortfolioOps(force = false) {
         ${decisionMetric("재무 스냅샷", _fmtNumber(counts.fundamentals_snapshots || 0), counts.fundamentals_snapshots ? "ok" : "warn")}
         ${decisionMetric("밸류에이션", _fmtNumber(counts.valuation_metrics || 0), counts.valuation_metrics ? "ok" : "warn")}
         ${decisionMetric("재무제표형 지표", _fmtNumber(counts.financial_statements || 0), counts.financial_statements ? "ok" : "warn")}
+        ${decisionMetric("SEC 기업", _fmtNumber(counts.sec_company_registry || 0), counts.sec_company_registry ? "ok" : "warn")}
+        ${decisionMetric("SEC 팩트", _fmtNumber(counts.sec_financial_facts || 0), counts.sec_financial_facts ? "ok" : "warn")}
+        ${decisionMetric("SEC 공시", _fmtNumber(counts.filings || 0), counts.filings ? "ok" : "warn")}
       </div>
       <div class="decision-summary ${legacyExisting.length ? "warn" : "ok"}">
         현재 쓰기 경로: SQLite · ${escapeHtml(store.write_path || store.db_path || "-")}
@@ -7066,6 +8057,39 @@ async function runAiPortfolioSnapshotJob() {
     loadAiPortfolioHistory();
   } catch (err) {
     if (els.aiPortfolioOperationsSurface) els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty(`성과 스냅샷 실패: ${err.message || err}`);
+  }
+}
+
+async function runAiPortfolioSecRefresh() {
+  if (els.aiPortfolioOperationsSurface) {
+    els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty("SEC 10-K/10-Q/8-K와 companyfacts 재무 데이터를 갱신하는 중입니다.");
+  }
+  const payload = {
+    forms: ["10-K", "10-Q", "8-K"],
+    lookback_days: 1095,
+    max_assets: 250,
+    hydrate_financials: true,
+  };
+  if (aiActivePolicyId()) {
+    payload.policy_id = aiActivePolicyId();
+  } else {
+    payload.universe_id = aiPortfolioUniverseId();
+  }
+  try {
+    const res = await fetch(API.aiPortfolioSecRefresh, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    state.aiPortfolioOperations = [];
+    renderAiPortfolioOperations([data]);
+    state.aiPortfolioOpsLoaded = false;
+    loadAiPortfolioOps(true);
+    loadAiPortfolioOperations(true);
+  } catch (err) {
+    if (els.aiPortfolioOperationsSurface) els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty(`SEC 데이터 갱신 실패: ${err.message || err}`);
   }
 }
 
@@ -7403,10 +8427,909 @@ function loadMarketDashboard(force = false) {
   loadDashboardNews(force);
 }
 
+function forecastDatasetConfigFromControls() {
+  return {
+    ticker: normalizeTickerToken(els.forecastTicker?.value || "MSFT") || "MSFT",
+    benchmark: normalizeTickerToken(els.forecastBenchmark?.value || "QQQ") || "QQQ",
+    start_date: els.forecastStartDate?.value || null,
+    end_date: els.forecastEndDate?.value || null,
+    frequency: "1d",
+    include_macro: !!els.forecastIncludeMacro?.checked,
+    include_cross_asset: !!els.forecastIncludeCrossAsset?.checked,
+    include_technical: true,
+    data_source: "data_mart:prices_daily",
+    adjusted_price: true,
+  };
+}
+
+function forecastRunRequestFromControls() {
+  const horizon = numberInputValue(els.forecastHorizon, 5, { min: 1, max: 252 });
+  const targetType = els.forecastTargetType?.value || "forward_return";
+  const featureGroups = ["returns", "momentum", "volatility", "trend", "mean_reversion", "volume"];
+  if (els.forecastIncludeCrossAsset?.checked) featureGroups.push("cross_asset");
+  if (els.forecastIncludeMacro?.checked) featureGroups.push("macro");
+  return {
+    dataset_config: forecastDatasetConfigFromControls(),
+    feature_config: {
+      feature_groups: featureGroups,
+      selected_features: [],
+      rolling_windows: [5, 20, 60, 200],
+      feature_shift: 1,
+      missing_value_policy: "drop",
+    },
+    target_config: {
+      target_type: targetType,
+      horizon,
+      threshold: 0,
+      benchmark: normalizeTickerToken(els.forecastBenchmark?.value || "QQQ") || "QQQ",
+    },
+    validation_config: {
+      validation_method: els.forecastValidation?.value || "walk_forward",
+      train_window: "3y",
+      validation_window: "6m",
+      test_window: "6m",
+      step_size: "1m",
+      purge_window: "auto",
+      embargo_window: 5,
+      expanding: true,
+      shuffle: false,
+      random_state: 42,
+    },
+    model_config: {
+      model_type: targetType === "direction" ? "classification" : "regression",
+      model_name: els.forecastModel?.value || "ridge_regression",
+      hyperparameters: {},
+      scaling: true,
+      feature_selection: "none",
+      hyperparameter_search: false,
+      seed: 42,
+    },
+    signal_config: {
+      signal_method: "threshold_confidence",
+      bullish_threshold: 0.01,
+      bearish_threshold: -0.01,
+      strong_bullish_threshold: 0.03,
+      strong_bearish_threshold: -0.03,
+      probability_threshold: 0.55,
+      confidence_threshold: 0.55,
+      volatility_filter_enabled: true,
+      max_forecast_volatility: 0.40,
+      trend_filter_enabled: true,
+      regime_filter_enabled: true,
+      smoothing_window: 1,
+      cooldown_period: 0,
+      max_position_size: 1.0,
+      long_only: true,
+      allow_short: false,
+    },
+    backtest_config: {
+      strategy_type: "long_cash",
+      signal_threshold: 0,
+      long_only: true,
+      allow_short: false,
+      max_position_size: 1.0,
+      rebalance_frequency: "daily",
+      commission_bps: 5,
+      slippage_bps: 2,
+      spread_bps: 0,
+      benchmark: normalizeTickerToken(els.forecastBenchmark?.value || "QQQ") || "QQQ",
+      initial_capital: 1.0,
+      execution_delay_bars: 1,
+    },
+    visualization_config: {
+      show_forecast_cone: true,
+      show_signal_overlay: true,
+      show_actual_vs_predicted: true,
+      show_residuals: true,
+      show_feature_importance: true,
+      show_equity_curve: true,
+      show_drawdown: true,
+      show_rolling_sharpe: true,
+      show_signal_history: true,
+      show_position_exposure: true,
+      show_model_comparison: true,
+    },
+  };
+}
+
+async function forecastFetchJson(url, options = {}) {
+  const res = await fetch(url, options);
+  const data = await res.json();
+  if (!res.ok) {
+    const detail = data.detail || data.error || `HTTP ${res.status}`;
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+  return data;
+}
+
+async function loadForecastLab(force = false) {
+  if (!force && state.forecastLoaded) return;
+  state.forecastLoaded = true;
+  await Promise.allSettled([
+    loadForecastModels(force),
+    loadForecastAiProviderStatus(force),
+    loadForecastDrift(force),
+    loadForecastModelComparison(force),
+    loadForecastHistory(force),
+    loadForecastRegistry(force),
+  ]);
+}
+
+async function loadForecastModels(force = false) {
+  if (!els.forecastModel || (!force && state.forecastModelsLoaded)) return;
+  try {
+    const data = await forecastFetchJson(API.forecastModels);
+    state.forecastModels = data.models || [];
+    state.forecastModelsLoaded = true;
+    const preferred = els.forecastModel.value || "ridge_regression";
+    els.forecastModel.innerHTML = state.forecastModels.map((item) => {
+      const disabled = item.available ? "" : " disabled";
+      const suffix = item.available ? "" : " (unavailable)";
+      return `<option value="${escapeHtml(item.model_name)}"${disabled}>${escapeHtml(item.model_name + suffix)}</option>`;
+    }).join("");
+    if ([...els.forecastModel.options].some((option) => option.value === preferred && !option.disabled)) {
+      els.forecastModel.value = preferred;
+    }
+  } catch (err) {
+    if (els.forecastRegistrySurface) els.forecastRegistrySurface.innerHTML = decisionEmpty(`모델 목록 로드 실패: ${err.message || err}`);
+  }
+}
+
+async function runForecastDatasetPreview() {
+  if (!els.forecastDatasetSurface) return;
+  setButtonBusy(els.forecastPreviewDataset, true, "로딩 중");
+  els.forecastDatasetSurface.innerHTML = decisionEmpty("데이터셋을 확인하는 중입니다.");
+  try {
+    const data = await forecastFetchJson(API.forecastDatasetPreview, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataset_config: forecastDatasetConfigFromControls() }),
+    });
+    renderForecastDataset(data);
+  } catch (err) {
+    els.forecastDatasetSurface.innerHTML = decisionEmpty(`데이터셋 미리보기 실패: ${err.message || err}`);
+  } finally {
+    setButtonBusy(els.forecastPreviewDataset, false);
+  }
+}
+
+async function runForecastDatasetHydrate() {
+  if (!els.forecastDatasetSurface) return;
+  setButtonBusy(els.forecastHydrateDataset, true, "저장 중");
+  els.forecastDatasetSurface.innerHTML = decisionEmpty("가격/매크로 데이터를 찾아 data mart에 저장하는 중입니다.");
+  try {
+    const data = await forecastFetchJson(API.forecastDatasetHydrate, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dataset_config: forecastDatasetConfigFromControls(),
+        include_benchmark: true,
+        include_macro: !!els.forecastIncludeMacro?.checked,
+      }),
+    });
+    renderForecastDatasetHydration(data);
+    if (data.dataset_preview) renderForecastDataset(data.dataset_preview);
+    await loadDataHealth(true);
+  } catch (err) {
+    els.forecastDatasetSurface.innerHTML = decisionEmpty(`데이터 저장 실패: ${err.message || err}`);
+  } finally {
+    setButtonBusy(els.forecastHydrateDataset, false);
+  }
+}
+
+async function runForecastFeatureAndLeakagePreview() {
+  setButtonBusy(els.forecastBuildFeatures, true, "점검 중");
+  if (els.forecastFeatureSurface) els.forecastFeatureSurface.innerHTML = decisionEmpty("feature와 leakage check를 계산하는 중입니다.");
+  try {
+    const request = forecastRunRequestFromControls();
+    const [featureData, leakageData] = await Promise.all([
+      forecastFetchJson(API.forecastFeaturesBuild, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataset_config: request.dataset_config, feature_config: request.feature_config }),
+      }),
+      forecastFetchJson(API.forecastLeakageCheck, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      }),
+    ]);
+    renderForecastFeatures(featureData);
+    renderForecastLeakage(leakageData.leakage_check || leakageData);
+  } catch (err) {
+    if (els.forecastFeatureSurface) els.forecastFeatureSurface.innerHTML = decisionEmpty(`feature/leakage 점검 실패: ${err.message || err}`);
+  } finally {
+    setButtonBusy(els.forecastBuildFeatures, false);
+  }
+}
+
+async function runForecastExperiment() {
+  const startedAt = Date.now();
+  setButtonBusy(els.forecastRunTrain, true, "실험 중");
+  forecastSetAllSurfacesLoading("ML Forecast 실험을 실행하는 중입니다. Walk-forward OOS 예측, 신호, 비용 반영 백테스트를 같은 요청에서 계산합니다.");
+  try {
+    const payload = await forecastFetchJson(API.forecastTrain, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(forecastRunRequestFromControls()),
+    });
+    state.lastForecastPayload = payload;
+    renderForecastPayload(payload, startedAt);
+    await Promise.allSettled([loadForecastHistory(true), loadForecastRegistry(true)]);
+  } catch (err) {
+    if (els.forecastResultSurface) els.forecastResultSurface.innerHTML = decisionEmpty(`ML Forecast 실행 실패: ${err.message || err}`);
+  } finally {
+    setButtonBusy(els.forecastRunTrain, false);
+  }
+}
+
+function forecastSetAllSurfacesLoading(message) {
+  [
+    els.forecastLeakageSurface,
+    els.forecastResultSurface,
+    els.forecastSignalSurface,
+    els.forecastSignalQualitySurface,
+    els.forecastVizSurface,
+    els.forecastBacktestSurface,
+    els.forecastEvaluationSurface,
+    els.forecastExplainSurface,
+    els.forecastAiSurface,
+  ].forEach((surface) => {
+    if (surface) surface.innerHTML = decisionEmpty(message);
+  });
+}
+
+function renderForecastPayload(payload, startedAt = Date.now()) {
+  renderForecastDataset({ ...(payload.dataset_preview || {}), data_snapshot: payload.data_snapshot || payload.dataset_preview?.data_snapshot || {} });
+  renderForecastFeatures(payload.feature_payload || {});
+  renderForecastLeakage(payload.leakage_check || {});
+  renderForecastResult(payload.forecast_result || {}, startedAt);
+  renderForecastSignal(payload.signal_result || {});
+  renderForecastSignalQuality(payload.signal_quality || {});
+  renderForecastVisualization(payload.visualization || {});
+  renderForecastBacktest(payload.backtest_result || {});
+  renderForecastEvaluation(payload.model_evaluation || {});
+  renderForecastExplainability(payload.explainability || {});
+  renderForecastAi(payload.ai_interpretation || {});
+}
+
+function renderForecastDataset(data) {
+  if (!els.forecastDatasetSurface) return;
+  const quality = data.data_quality || {};
+  const snapshot = data.data_snapshot || {};
+  const priceCoverage = snapshot.price_coverage || {};
+  const benchmarkCoverage = snapshot.benchmark_coverage || {};
+  const macroCoverage = snapshot.macro_coverage || {};
+  els.forecastDatasetSurface.innerHTML = `
+    <div class="decision-practical-grid forecast-metric-grid">
+      ${decisionMetric("상태", quality.status || data.status || "unknown", decisionStatusClass(quality.status || data.status))}
+      ${decisionMetric("가격 행", _fmtNumber(data.rows || quality.rows || 0), (data.rows || quality.rows) ? "ok" : "warn")}
+      ${decisionMetric("기간", `${quality.start_date || "-"} ~ ${quality.end_date || "-"}`, "ok")}
+      ${decisionMetric("결측률", fmtPercent(quality.missing_ratio || 0), (quality.missing_ratio || 0) > 0.1 ? "warn" : "ok")}
+      ${decisionMetric("수정가격", quality.adjusted_price_status || "unknown", decisionStatusClass(quality.adjusted_price_status))}
+      ${decisionMetric("벤치마크", quality.benchmark_availability || "unknown", decisionStatusClass(quality.benchmark_availability))}
+    </div>
+    ${snapshot.data_snapshot_id ? `
+      <div class="decision-surface compact-surface">
+        <div class="decision-mini-row">
+          <span>Data Snapshot: ${escapeHtml(snapshot.data_snapshot_id)}</span>
+          <span>Coverage hash: ${escapeHtml((snapshot.source_coverage_hash || "").slice(0, 16))}</span>
+        </div>
+        <div class="decision-mini-row">
+          <span>Price ${escapeHtml(String(priceCoverage.rows || 0))} rows · ${escapeHtml(priceCoverage.coverage_hash || "")}</span>
+          <span>Benchmark ${escapeHtml(String(benchmarkCoverage.rows || 0))} rows · Macro ${escapeHtml(macroCoverage.status || "not_requested")}</span>
+        </div>
+      </div>
+    ` : ""}
+    ${(quality.warnings || data.warnings || []).length ? `<div class="decision-warning">${escapeHtml((quality.warnings || data.warnings).join(", "))}</div>` : ""}
+  `;
+}
+
+function renderForecastDatasetHydration(data) {
+  if (!els.forecastDatasetSurface) return;
+  const price = data.price_update || {};
+  const macro = data.macro_update || {};
+  const preview = data.dataset_preview || {};
+  els.forecastDatasetSurface.innerHTML = `
+    <div class="decision-practical-grid forecast-metric-grid">
+      ${decisionMetric("Hydration", data.status || "unknown", data.status === "success" ? "ok" : "warn")}
+      ${decisionMetric("Tickers", (data.tickers || []).join(", "), "ok")}
+      ${decisionMetric("Price rows", _fmtNumber((price.rows_inserted || 0) + (price.rows_updated || 0)), "ok")}
+      ${decisionMetric("Macro rows", macro ? _fmtNumber((macro.rows_inserted || 0) + (macro.rows_updated || 0)) : "N/A", macro ? "ok" : "warn")}
+      ${decisionMetric("Available rows", _fmtNumber(preview.rows || 0), (preview.rows || 0) >= 120 ? "ok" : "warn")}
+    </div>
+  `;
+}
+
+function renderForecastFeatures(data) {
+  if (!els.forecastFeatureSurface) return;
+  const summary = data.summary || {};
+  const missing = summary.missing_by_feature || {};
+  const topMissing = Object.entries(missing).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 8);
+  els.forecastFeatureSurface.innerHTML = `
+    <div class="decision-practical-grid forecast-metric-grid">
+      ${decisionMetric("Feature 수", _fmtNumber(summary.feature_count || 0), summary.feature_count ? "ok" : "warn")}
+      ${decisionMetric("행 수", _fmtNumber(summary.row_count || 0), summary.row_count ? "ok" : "warn")}
+      ${decisionMetric("Feature shift", `${summary.feature_shift ?? 1}봉`, Number(summary.feature_shift ?? 1) >= 1 ? "ok" : "fail")}
+      ${decisionMetric("평균 결측률", fmtPercent(summary.missing_ratio || 0), (summary.missing_ratio || 0) > 0.5 ? "warn" : "ok")}
+    </div>
+    <div class="decision-chip-row">${(summary.feature_groups || []).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>
+    ${topMissing.length ? `<div class="decision-table-wrap"><table class="decision-table"><thead><tr><th>Feature</th><th>Missing</th></tr></thead><tbody>${topMissing.map(([name, value]) => `<tr><td>${escapeHtml(name)}</td><td>${escapeHtml(fmtPercent(value))}</td></tr>`).join("")}</tbody></table></div>` : ""}
+  `;
+}
+
+function renderForecastLeakage(check) {
+  if (!els.forecastLeakageSurface) return;
+  const status = check.status || "warning";
+  els.forecastLeakageSurface.innerHTML = `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">Leakage ${escapeHtml(status)}</span>
+      <span>${escapeHtml(check.checked_at || "not checked")}</span>
+    </div>
+    ${(check.issues || []).length ? `<div class="decision-warning">${escapeHtml(check.issues.join(", "))}</div>` : `<div class="decision-summary ok">random split, shuffle, target contamination, purge/embargo, 1-bar delay 조건이 통과했습니다.</div>`}
+    ${(check.recommendations || []).length ? `<ul class="forecast-note-list">${check.recommendations.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
+  `;
+}
+
+function renderForecastResult(result, startedAt) {
+  if (!els.forecastResultSurface) return;
+  const confidence = result.model_confidence || {};
+  const predictionType = result.prediction_type || "forward_return";
+  const labelTarget = ["direction", "triple_barrier_label", "quantile_return"].includes(predictionType);
+  const intervalAvailable = result.p10 !== null && result.p10 !== undefined && result.p50 !== null && result.p50 !== undefined && result.p90 !== null && result.p90 !== undefined;
+  const expectedLabel = labelTarget ? "Expected return (OOS calibrated)" : predictionType === "volatility" ? "Expected return" : "Expected return";
+  els.forecastResultSurface.innerHTML = `
+    ${renderActionCompletion("ML Forecast 결과", startedAt, result.experiment_id || "")}
+    <div class="decision-practical-grid forecast-metric-grid">
+      ${decisionMetric("Target", predictionType, "ok")}
+      ${decisionMetric(expectedLabel, fmtPercent(result.expected_return), result.expected_return === null || result.expected_return === undefined ? "warn" : "ok")}
+      ${decisionMetric("Probability up", fmtPercent(result.probability_up), result.probability_up >= 0.55 ? "ok" : "warn")}
+      ${decisionMetric("P10/P50/P90", intervalAvailable ? `${fmtPercent(result.p10)} / ${fmtPercent(result.p50)} / ${fmtPercent(result.p90)}` : "unavailable", intervalAvailable ? "ok" : "warn")}
+      ${decisionMetric("Forecast vol", fmtPercent(result.forecast_volatility), result.forecast_volatility > 0.4 ? "warn" : "ok")}
+      ${decisionMetric("Confidence", `${fmtDecimal(confidence.score, 3)} ${confidence.level || ""}`, confidence.score >= 0.6 ? "ok" : "warn")}
+      ${decisionMetric("Model", result.model_id || "unavailable", result.model_id ? "ok" : "warn")}
+    </div>
+    ${labelTarget ? `<div class="decision-summary ok">라벨/분류 타깃의 expected return은 라벨 값을 수익률로 표시하지 않고, OOS 예측 확률과 과거 forward return 조건부 평균으로 보정한 값입니다.</div>` : ""}
+    ${(result.warnings || []).length ? `<div class="decision-warning">${escapeHtml(result.warnings.join(", "))}</div>` : ""}
+  `;
+}
+
+function renderForecastSignal(signal) {
+  if (!els.forecastSignalSurface) return;
+  els.forecastSignalSurface.innerHTML = `
+    <div class="decision-practical-grid forecast-metric-grid">
+      ${decisionMetric("Signal", signal.signal || "unavailable", signal.signal === "unavailable" ? "warn" : "ok")}
+      ${decisionMetric("Score", fmtDecimal(signal.signal_score, 3), "ok")}
+      ${decisionMetric("Position", fmtPercent(signal.position_target), signal.position_target ? "ok" : "warn")}
+      ${decisionMetric("Advisory", signal.advisory_only ? "only" : "unknown", signal.advisory_only ? "ok" : "fail")}
+    </div>
+    <div class="decision-chip-row">${(signal.reason_codes || []).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>
+    ${(signal.warnings || []).length ? `<div class="decision-warning">${escapeHtml(signal.warnings.join(", "))}</div>` : ""}
+  `;
+}
+
+function renderForecastSignalQuality(quality) {
+  if (!els.forecastSignalQualitySurface) return;
+  els.forecastSignalQualitySurface.innerHTML = `
+    <div class="decision-practical-grid forecast-metric-grid">
+      ${decisionMetric("신호 수", _fmtNumber(quality.signal_count || 0), quality.signal_count ? "ok" : "warn")}
+      ${decisionMetric("Hit rate", fmtPercent(quality.hit_rate), quality.hit_rate >= 0.5 ? "ok" : "warn")}
+      ${decisionMetric("Bullish 후 평균", fmtPercent(quality.average_forward_return_after_bullish), "ok")}
+      ${decisionMetric("Bearish 후 평균", fmtPercent(quality.average_forward_return_after_bearish), "ok")}
+      ${decisionMetric("False positive", fmtPercent(quality.false_positive_rate), quality.false_positive_rate > 0.5 ? "warn" : "ok")}
+      ${decisionMetric("Turnover", fmtDecimal(quality.turnover, 3), quality.turnover > 5 ? "warn" : "ok")}
+    </div>
+  `;
+}
+
+function renderForecastVisualization(viz) {
+  if (!els.forecastVizSurface) return;
+  els.forecastVizSurface.innerHTML = `
+    <div class="forecast-chart-grid">
+      ${renderForecastLineChart("Price & Signal", viz.price_series || [], "price")}
+      ${renderForecastIntervalChart(viz.prediction_intervals || [])}
+      ${renderForecastActualPredicted(viz.actual_vs_predicted || [])}
+      ${renderForecastResidualChart(viz.residuals || [])}
+      ${renderForecastDistribution(viz.prediction_distribution || [])}
+      ${renderForecastLineChart("Equity Curve", viz.equity_curve || [], "equity", viz.benchmark_curve || [])}
+      ${renderForecastLineChart("Drawdown", viz.drawdown_series || [], "drawdown")}
+      ${renderForecastLineChart("Rolling Sharpe", viz.rolling_sharpe || [], "rolling_sharpe")}
+      ${renderForecastLineChart("Position Exposure", viz.position_exposure || [], "position")}
+      ${renderForecastLineChart("Turnover", viz.turnover || [], "turnover")}
+      ${renderForecastMonthlyHeatmap(viz.monthly_return_heatmap || [])}
+      ${renderForecastConfusionMatrix(viz.confusion_matrix || {})}
+      ${renderForecastRegimePerformance(viz.regime_performance || [])}
+      ${renderForecastFeatureImportance(viz.feature_importance || [])}
+      ${renderForecastFeatureImportance(viz.permutation_importance || [], "Permutation Importance", "normalized_importance")}
+      ${renderForecastFeatureImportance(viz.shap_importance || [], "SHAP Importance", "importance")}
+      ${renderForecastFoldChart(viz.fold_metrics || [])}
+      ${renderForecastModelComparison(viz.model_comparison || [])}
+      ${renderForecastDataQuality(viz.data_quality_summary || {})}
+      ${renderForecastSignalTimeline(viz.signal_history || [])}
+    </div>
+  `;
+}
+
+function renderForecastBacktest(backtest) {
+  if (!els.forecastBacktestSurface) return;
+  const metrics = backtest.metrics || {};
+  const assumptions = backtest.assumptions || {};
+  els.forecastBacktestSurface.innerHTML = `
+    <div class="decision-practical-grid forecast-metric-grid">
+      ${decisionMetric("Total return", fmtPercent(metrics.total_return), "ok")}
+      ${decisionMetric("Benchmark", fmtPercent(metrics.benchmark_return), "ok")}
+      ${decisionMetric("Excess", fmtPercent(metrics.excess_return), metrics.excess_return >= 0 ? "ok" : "warn")}
+      ${decisionMetric("Sharpe", fmtDecimal(metrics.sharpe, 3), metrics.sharpe > 0 ? "ok" : "warn")}
+      ${decisionMetric("Max DD", fmtPercent(metrics.max_drawdown), metrics.max_drawdown < -0.2 ? "warn" : "ok")}
+      ${decisionMetric("Cost impact", fmtPercent(metrics.transaction_cost_impact), "ok")}
+      ${decisionMetric("1-bar delay", `${assumptions.execution_delay_bars || 0}봉`, Number(assumptions.execution_delay_bars || 0) >= 1 ? "ok" : "fail")}
+    </div>
+  `;
+}
+
+function renderForecastEvaluation(evaluation) {
+  if (!els.forecastEvaluationSurface) return;
+  const reg = evaluation.regression_metrics || {};
+  const stability = evaluation.stability_metrics || {};
+  const overfit = evaluation.overfitting_check || {};
+  els.forecastEvaluationSurface.innerHTML = `
+    <div class="decision-practical-grid forecast-metric-grid">
+      ${decisionMetric("Directional accuracy", fmtPercent(reg.directional_accuracy || reg.accuracy), "ok")}
+      ${decisionMetric("IC", fmtDecimal(reg.ic, 3), Math.abs(reg.ic || 0) > 0.02 ? "ok" : "warn")}
+      ${decisionMetric("RMSE", fmtDecimal(reg.rmse, 4), "ok")}
+      ${decisionMetric("Fold count", _fmtNumber(stability.fold_count || 0), stability.fold_count ? "ok" : "warn")}
+      ${decisionMetric("Purged CV folds", _fmtNumber(stability.purged_cv_fold_count || 0), stability.purged_cv_fold_count ? "ok" : "warn")}
+      ${decisionMetric("Purged CV acc", fmtPercent(stability.purged_cv_directional_accuracy), stability.purged_cv_directional_accuracy ? "ok" : "warn")}
+      ${decisionMetric("Dispersion", fmtDecimal(stability.directional_accuracy_dispersion, 3), stability.directional_accuracy_dispersion > 0.2 ? "warn" : "ok")}
+      ${decisionMetric("Overfit gap", fmtDecimal(overfit.gap, 3), (overfit.gap || 0) > 0.15 ? "warn" : "ok")}
+    </div>
+  `;
+}
+
+function renderForecastExplainability(explain) {
+  if (!els.forecastExplainSurface) return;
+  els.forecastExplainSurface.innerHTML = `
+    ${renderForecastFeatureImportance(explain.feature_importance || [])}
+    ${renderForecastFeatureImportance(explain.permutation_importance || [], "Permutation Importance", "normalized_importance")}
+    ${renderForecastFeatureImportance(explain.shap_importance || [], "SHAP Importance", "importance")}
+    <ul class="forecast-note-list">${(explain.reason_codes || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+    ${(explain.warnings || []).length ? `<div class="decision-warning">${escapeHtml(explain.warnings.join(", "))}</div>` : ""}
+  `;
+}
+
+function renderForecastAi(ai) {
+  if (!els.forecastAiSurface) return;
+  els.forecastAiSurface.innerHTML = `
+    <div class="decision-status-row"><span class="decision-badge warn">${escapeHtml(ai.provider || "deterministic_fallback")}</span><span>구조화 ML output만 사용</span></div>
+    <pre class="forecast-ai-text">${escapeHtml(ai.content || "AI interpretation unavailable.")}</pre>
+  `;
+}
+
+function renderForecastAiFromLastPayload() {
+  if (!state.lastForecastPayload) {
+    if (els.forecastAiSurface) els.forecastAiSurface.innerHTML = decisionEmpty("먼저 ML Forecast 실험을 실행하세요.");
+    return;
+  }
+  renderForecastAi(state.lastForecastPayload.ai_interpretation || {});
+}
+
+async function renderForecastProviderAiFromLastPayload() {
+  if (!state.lastForecastPayload) {
+    if (els.forecastAiSurface) els.forecastAiSurface.innerHTML = decisionEmpty("먼저 ML Forecast 실험을 실행하세요.");
+    return;
+  }
+  setButtonBusy(els.forecastGenerateProviderAi, true, "LLM 확인 중");
+  if (els.forecastAiSurface) els.forecastAiSurface.innerHTML = decisionEmpty("Provider AI 해석을 생성하고 numeric grounding guard를 적용하는 중입니다.");
+  try {
+    const data = await forecastFetchJson(API.forecastAiInterpretation, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...state.lastForecastPayload, use_llm: true, timeout_s: 20 }),
+    });
+    renderForecastAi(data);
+  } catch (err) {
+    if (els.forecastAiSurface) els.forecastAiSurface.innerHTML = decisionEmpty(`Provider AI 해석 실패: ${err.message || err}`);
+  } finally {
+    setButtonBusy(els.forecastGenerateProviderAi, false);
+  }
+}
+
+async function loadForecastAiProviderStatus(force = false) {
+  if (!els.forecastAiProviderSurface) return;
+  if (!force && els.forecastAiProviderSurface.dataset.loaded === "true") return;
+  try {
+    const data = await forecastFetchJson(API.forecastAiProviderHealth);
+    els.forecastAiProviderSurface.dataset.loaded = "true";
+    els.forecastAiProviderSurface.innerHTML = `
+      <div class="decision-practical-grid forecast-metric-grid">
+        ${decisionMetric("Provider", data.provider || "unknown", data.status === "ok" ? "ok" : "warn")}
+        ${decisionMetric("Model", data.model || "unknown", data.model_available ? "ok" : "warn")}
+        ${decisionMetric("Guard", data.guard_policy || "unknown", "ok")}
+      </div>
+      ${(data.available_models || []).length ? `<div class="forecast-chip-row">${data.available_models.slice(0, 6).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : decisionEmpty("사용 가능한 provider model 목록이 없습니다.")}
+      ${data.error ? `<div class="decision-warning">${escapeHtml(data.error)}</div>` : ""}
+    `;
+  } catch (err) {
+    els.forecastAiProviderSurface.innerHTML = decisionEmpty(`AI provider 상태 확인 실패: ${err.message || err}`);
+  }
+}
+
+async function loadForecastHistory(force = false) {
+  if (!els.forecastHistorySurface) return;
+  if (!force && els.forecastHistorySurface.dataset.loaded === "true") return;
+  try {
+    const data = await forecastFetchJson(`${API.forecastExperiments}?limit=10`);
+    const items = data.items || [];
+    els.forecastHistorySurface.dataset.loaded = "true";
+    els.forecastHistorySurface.innerHTML = items.length ? `
+      <div class="decision-table-wrap"><table class="decision-table"><thead><tr><th>Experiment</th><th>Ticker</th><th>Status</th><th>Model</th><th>Data Snapshot</th></tr></thead><tbody>
+        ${items.map((item) => `<tr><td>${escapeHtml(item.experiment_id || "")}</td><td>${escapeHtml(item.ticker || "")}</td><td>${escapeHtml(item.status || "")}</td><td>${escapeHtml(item.model_id || "")}</td><td>${escapeHtml(item.data_snapshot_id || "")}</td></tr>`).join("")}
+      </tbody></table></div>
+    ` : decisionEmpty("저장된 ML Forecast 실험이 없습니다.");
+  } catch (err) {
+    els.forecastHistorySurface.innerHTML = decisionEmpty(`실험 이력 로드 실패: ${err.message || err}`);
+  }
+}
+
+async function loadForecastDrift(force = false) {
+  if (!els.forecastDriftSurface) return;
+  if (!force && els.forecastDriftSurface.dataset.loaded === "true") return;
+  const body = state.lastForecastPayload?.experiment?.experiment_id
+    ? { experiment_id: state.lastForecastPayload.experiment.experiment_id, recent_window: 30 }
+    : { ticker: normalizeTickerToken(els.forecastTicker?.value || "MSFT") || "MSFT", recent_window: 30 };
+  try {
+    const data = await forecastFetchJson(API.forecastDriftCheck, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    els.forecastDriftSurface.dataset.loaded = "true";
+    renderForecastDrift(data);
+  } catch (err) {
+    els.forecastDriftSurface.innerHTML = decisionEmpty(`Drift 확인 실패: ${err.message || err}`);
+  }
+}
+
+function renderForecastDrift(data) {
+  if (!els.forecastDriftSurface) return;
+  const metrics = data.metrics || {};
+  const drift = data.drift_status || data.status || "unknown";
+  els.forecastDriftSurface.innerHTML = `
+    <div class="decision-practical-grid forecast-metric-grid">
+      ${decisionMetric("Drift", drift, drift === "pass" ? "ok" : (drift === "fail" ? "fail" : "warn"))}
+      ${decisionMetric("OOS rows", _fmtNumber(data.oos_count || 0), data.oos_count ? "ok" : "warn")}
+      ${decisionMetric("Recent acc", fmtPercent(metrics.recent_directional_accuracy), "ok")}
+      ${decisionMetric("Hist acc", fmtPercent(metrics.historical_directional_accuracy), "ok")}
+      ${decisionMetric("Acc drop", fmtPercent(metrics.accuracy_drop), metrics.accuracy_drop > 0.12 ? "warn" : "ok")}
+      ${decisionMetric("MAE increase", fmtDecimal(metrics.mae_increase, 4), metrics.mae_increase > 0 ? "warn" : "ok")}
+    </div>
+    ${(data.warnings || []).map((item) => `<div class="decision-warning">${escapeHtml(item)}</div>`).join("")}
+  `;
+}
+
+async function loadForecastModelComparison(force = false) {
+  if (!els.forecastModelComparisonSurface) return;
+  if (!force && els.forecastModelComparisonSurface.dataset.loaded === "true") return;
+  try {
+    const ticker = normalizeTickerToken(els.forecastTicker?.value || "");
+    const url = ticker ? `${API.forecastModelComparison}?limit=20&ticker=${encodeURIComponent(ticker)}` : `${API.forecastModelComparison}?limit=20`;
+    const data = await forecastFetchJson(url);
+    els.forecastModelComparisonSurface.dataset.loaded = "true";
+    renderForecastModelComparisonTable(data.items || []);
+  } catch (err) {
+    els.forecastModelComparisonSurface.innerHTML = decisionEmpty(`모델 비교 로드 실패: ${err.message || err}`);
+  }
+}
+
+function renderForecastModelComparisonTable(items) {
+  if (!els.forecastModelComparisonSurface) return;
+  els.forecastModelComparisonSurface.innerHTML = items.length ? `
+    <div class="decision-table-wrap"><table class="decision-table"><thead><tr><th>Experiment</th><th>Model</th><th>Confidence</th><th>Signal</th><th>Sharpe</th><th>MDD</th></tr></thead><tbody>
+      ${items.map((item) => `<tr><td>${escapeHtml(item.experiment_id || "")}</td><td>${escapeHtml(item.model_id || "")}</td><td>${escapeHtml(fmtDecimal(item.confidence, 3))} ${escapeHtml(item.confidence_level || "")}</td><td>${escapeHtml(fmtPercent(item.signal_quality?.hit_rate))}</td><td>${escapeHtml(fmtDecimal(item.backtest?.sharpe, 3))}</td><td>${escapeHtml(fmtPercent(item.backtest?.max_drawdown))}</td></tr>`).join("")}
+    </tbody></table></div>
+  ` : decisionEmpty("비교할 ML Forecast 실험이 없습니다.");
+}
+
+async function loadForecastRegistry(force = false) {
+  if (!els.forecastRegistrySurface) return;
+  if (!force && els.forecastRegistrySurface.dataset.loaded === "true") return;
+  try {
+    const [data, audit] = await Promise.all([
+      forecastFetchJson(API.forecastRegistry),
+      forecastFetchJson(`${API.forecastRegistryAudit}?limit=20`).catch((err) => ({ status: "failed", items: [], error: err.message || String(err) })),
+    ]);
+    const items = data.items || [];
+    const auditItems = audit.items || [];
+    els.forecastRegistrySurface.dataset.loaded = "true";
+    els.forecastRegistrySurface.innerHTML = items.length ? `
+      <div class="decision-mini-row">
+        <span>Storage: ${escapeHtml(data.storage || "unknown")}</span>
+        <span>Items: ${escapeHtml(String(data.count || items.length))}</span>
+      </div>
+      <div id="forecastRegistryIntegrityResult" class="decision-surface compact-surface">${decisionEmpty("모델 행의 verify를 누르면 signed artifact 무결성을 확인합니다.")}</div>
+      <div class="decision-table-wrap"><table class="decision-table"><thead><tr><th>Model</th><th>Ticker</th><th>Target</th><th>Status</th><th>Metric</th><th>Artifact</th><th>Action</th></tr></thead><tbody>
+        ${items.map((item) => `<tr><td>${escapeHtml(item.model_id || "")}</td><td>${escapeHtml(item.ticker || "")}</td><td>${escapeHtml(item.target || "")} ${escapeHtml(String(item.horizon || ""))}d</td><td>${escapeHtml(item.status || "")}</td><td>${escapeHtml(fmtPercent(item.metrics?.directional_accuracy || item.metrics?.accuracy))}</td><td>${escapeHtml(compactArtifactPath(item.artifact_path || ""))}</td><td><button type="button" class="linkish" data-action="forecast-verify-artifact" data-model-id="${escapeHtml(item.model_id || "")}">verify</button> <button type="button" class="linkish" data-action="forecast-promote" data-model-id="${escapeHtml(item.model_id || "")}">promote</button> <button type="button" class="linkish" data-action="forecast-deprecate" data-model-id="${escapeHtml(item.model_id || "")}">deprecate</button></td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="decision-surface compact-surface">
+        <strong>Registry Audit</strong>
+        ${auditItems.length ? `
+          <div class="decision-table-wrap"><table class="decision-table"><thead><tr><th>Time</th><th>Model</th><th>Action</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+            ${auditItems.map((item) => `<tr><td>${escapeHtml(item.created_at || "")}</td><td>${escapeHtml(item.model_id || "")}</td><td>${escapeHtml(item.action || "")}</td><td>${escapeHtml(item.previous_status || "")} -> ${escapeHtml(item.new_status || "")}</td><td>${escapeHtml(item.notes || "")}</td></tr>`).join("")}
+          </tbody></table></div>
+        ` : decisionEmpty(audit.error ? `Audit 로드 실패: ${audit.error}` : "아직 registry audit 이력이 없습니다.")}
+      </div>
+    ` : decisionEmpty("등록된 ML Forecast 모델이 없습니다.");
+  } catch (err) {
+    els.forecastRegistrySurface.innerHTML = decisionEmpty(`모델 레지스트리 로드 실패: ${err.message || err}`);
+  }
+}
+
+async function updateForecastModelStatus(action, modelId) {
+  const endpoint = action === "forecast-promote" ? API.forecastPromoteModel : API.forecastDeprecateModel;
+  if (!modelId || !endpoint) return;
+  try {
+    await forecastFetchJson(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model_id: modelId, notes: "ui_registry_action" }),
+    });
+    els.forecastRegistrySurface.dataset.loaded = "false";
+    await loadForecastRegistry(true);
+  } catch (err) {
+    if (els.forecastRegistrySurface) els.forecastRegistrySurface.insertAdjacentHTML("afterbegin", `<div class="decision-warning">모델 상태 변경 실패: ${escapeHtml(err.message || err)}</div>`);
+  }
+}
+
+async function verifyForecastModelArtifact(modelId) {
+  if (!modelId || !API.forecastVerifyArtifact) return;
+  const target = document.getElementById("forecastRegistryIntegrityResult") || els.forecastRegistrySurface;
+  if (target) target.innerHTML = `<div class="home-news-empty">모델 아티팩트 무결성 확인 중...</div>`;
+  try {
+    const data = await forecastFetchJson(API.forecastVerifyArtifact, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model_id: modelId, notes: "ui_artifact_verify" }),
+    });
+    const checks = data.checks || {};
+    const status = data.status === "success" ? "ok" : "fail";
+    if (target) {
+      target.innerHTML = `
+        <div class="decision-practical-grid forecast-metric-grid">
+          ${decisionMetric("Integrity", data.status || "unknown", status)}
+          ${decisionMetric("SHA-256", checks.sha256_matches ? "match" : "fail", checks.sha256_matches ? "ok" : "fail")}
+          ${decisionMetric("Bytes", checks.bytes_match ? "match" : "fail", checks.bytes_match ? "ok" : "fail")}
+          ${decisionMetric("Signature", checks.signature_matches ? "match" : "fail", checks.signature_matches ? "ok" : "fail")}
+        </div>
+        <div class="decision-mini-row">
+          <span>Model ${escapeHtml(data.model_id || modelId)}</span>
+          <span>${escapeHtml(compactArtifactPath(data.integrity_path || ""))}</span>
+        </div>
+        ${(data.errors || []).map((item) => `<div class="decision-warning">${escapeHtml(item)}</div>`).join("")}
+      `;
+    }
+  } catch (err) {
+    if (target) target.innerHTML = decisionEmpty(`아티팩트 검증 실패: ${err.message || err}`);
+  }
+}
+
+function fmtPercent(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "N/A";
+  return `${(num * 100).toFixed(2)}%`;
+}
+
+function renderForecastLineChart(title, rows, valueKey, comparisonRows = []) {
+  if (!rows.length) return `<div class="forecast-chart-card"><strong>${escapeHtml(title)}</strong>${decisionEmpty("표시할 OOS 데이터가 없습니다.")}</div>`;
+  const values = rows.map((row) => Number(row[valueKey])).filter(Number.isFinite);
+  if (!values.length) return `<div class="forecast-chart-card"><strong>${escapeHtml(title)}</strong>${decisionEmpty("차트 값이 없습니다.")}</div>`;
+  const width = 360;
+  const height = 150;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const points = rows.map((row, idx) => {
+    const value = Number(row[valueKey]);
+    const x = rows.length === 1 ? 0 : (idx / (rows.length - 1)) * width;
+    const y = height - ((value - min) / span) * height;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  const comparisonValues = comparisonRows.map((row) => Number(row[valueKey])).filter(Number.isFinite);
+  const comparisonPoints = comparisonValues.length ? comparisonRows.map((row, idx) => {
+    const value = Number(row[valueKey]);
+    const x = comparisonRows.length === 1 ? 0 : (idx / (comparisonRows.length - 1)) * width;
+    const y = height - ((value - min) / span) * height;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ") : "";
+  return `
+    <div class="forecast-chart-card">
+      <strong>${escapeHtml(title)}</strong>
+      <svg class="forecast-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}">
+        <polyline points="${points}" fill="none" stroke="currentColor" stroke-width="2" />
+        ${comparisonPoints ? `<polyline points="${comparisonPoints}" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 3" />` : ""}
+      </svg>
+      <span>${escapeHtml(rows[0]?.date || "")} ~ ${escapeHtml(rows[rows.length - 1]?.date || "")}</span>
+    </div>
+  `;
+}
+
+function renderForecastActualPredicted(rows) {
+  if (!rows.length) return `<div class="forecast-chart-card"><strong>Actual vs Predicted</strong>${decisionEmpty("OOS 예측이 없습니다.")}</div>`;
+  const points = rows.slice(-160);
+  return `
+    <div class="forecast-chart-card">
+      <strong>Actual vs Predicted</strong>
+      <div class="forecast-scatter">
+        ${points.map((row) => {
+          const pred = Math.max(-0.2, Math.min(0.2, Number(row.predicted_return || 0)));
+          const actual = Math.max(-0.2, Math.min(0.2, Number(row.actual_forward_return || 0)));
+          const left = ((pred + 0.2) / 0.4) * 100;
+          const top = 100 - ((actual + 0.2) / 0.4) * 100;
+          return `<span style="left:${left}%;top:${top}%"></span>`;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderForecastResidualChart(rows) {
+  if (!rows.length) return `<div class="forecast-chart-card"><strong>Residuals</strong>${decisionEmpty("잔차 데이터가 없습니다.")}</div>`;
+  return renderForecastLineChart("Residuals", rows, "residual");
+}
+
+function renderForecastIntervalChart(items) {
+  if (!items.length) return `<div class="forecast-chart-card"><strong>Forecast Interval</strong>${decisionEmpty("prediction interval이 없습니다.")}</div>`;
+  const item = items[0] || {};
+  return `
+    <div class="forecast-chart-card">
+      <strong>Forecast Interval</strong>
+      <div class="decision-practical-grid forecast-metric-grid">
+        ${decisionMetric("P10", fmtPercent(item.p10), "ok")}
+        ${decisionMetric("P50", fmtPercent(item.p50), "ok")}
+        ${decisionMetric("P90", fmtPercent(item.p90), "ok")}
+      </div>
+      <span>${escapeHtml(item.note || "Return interval; not a guaranteed price path.")}</span>
+    </div>
+  `;
+}
+
+function renderForecastDistribution(values) {
+  const nums = (values || []).map(Number).filter(Number.isFinite);
+  if (!nums.length) return `<div class="forecast-chart-card"><strong>Prediction Distribution</strong>${decisionEmpty("예측 분포 데이터가 없습니다.")}</div>`;
+  const bins = Array.from({ length: 8 }, () => 0);
+  const min = Math.min(...nums);
+  const max = Math.max(...nums);
+  const span = max - min || 1;
+  nums.forEach((value) => {
+    const idx = Math.min(bins.length - 1, Math.max(0, Math.floor(((value - min) / span) * bins.length)));
+    bins[idx] += 1;
+  });
+  const peak = Math.max(...bins, 1);
+  return `
+    <div class="forecast-chart-card">
+      <strong>Prediction Distribution</strong>
+      <div class="forecast-bars">${bins.map((count, idx) => `<div><span>Bin ${idx + 1}</span><b style="width:${Math.max(2, (count / peak) * 100)}%"></b></div>`).join("")}</div>
+      <span>${escapeHtml(fmtPercent(min))} ~ ${escapeHtml(fmtPercent(max))}</span>
+    </div>
+  `;
+}
+
+function renderForecastFeatureImportance(items, title = "Feature Importance", valueKey = "importance") {
+  if (!items.length) return `<div class="forecast-chart-card"><strong>${escapeHtml(title)}</strong>${decisionEmpty(`${title}가 없습니다.`)}</div>`;
+  const max = Math.max(...items.map((item) => Number(item[valueKey] || item.importance || 0)), 1e-9);
+  return `
+    <div class="forecast-chart-card">
+      <strong>${escapeHtml(title)}</strong>
+      <div class="forecast-bars">${items.slice(0, 10).map((item) => {
+        const value = Number(item[valueKey] || item.importance || 0);
+        return `<div><span>${escapeHtml(item.feature || "")}</span><b style="width:${Math.max(2, (value / max) * 100)}%"></b></div>`;
+      }).join("")}</div>
+    </div>
+  `;
+}
+
+function renderForecastFoldChart(folds) {
+  if (!folds.length) return `<div class="forecast-chart-card"><strong>Walk-forward Folds</strong>${decisionEmpty("fold 성능이 없습니다.")}</div>`;
+  return `
+    <div class="forecast-chart-card">
+      <strong>Walk-forward Folds</strong>
+      <div class="forecast-bars">${folds.map((fold) => {
+        const value = Number(fold.metrics?.directional_accuracy || fold.metrics?.accuracy || 0);
+        return `<div><span>Fold ${escapeHtml(String(fold.fold_id))}</span><b style="width:${Math.max(2, value * 100)}%"></b></div>`;
+      }).join("")}</div>
+    </div>
+  `;
+}
+
+function renderForecastSignalTimeline(items) {
+  if (!items.length) return `<div class="forecast-chart-card"><strong>Signal History</strong>${decisionEmpty("신호 이력이 없습니다.")}</div>`;
+  return `
+    <div class="forecast-chart-card">
+      <strong>Signal History</strong>
+      <div class="forecast-signal-timeline">${items.slice(-80).map((item) => `<span class="${escapeHtml(String(item.signal || "neutral").replace("_", "-"))}" title="${escapeHtml(item.date || "")} ${escapeHtml(item.signal || "")}"></span>`).join("")}</div>
+    </div>
+  `;
+}
+
+function renderForecastModelComparison(items) {
+  if (!items.length) return `<div class="forecast-chart-card"><strong>Model Comparison</strong>${decisionEmpty("모델 비교 데이터가 없습니다.")}</div>`;
+  const scored = items.map((item) => ({ ...item, score: Number(item.directional_accuracy || item.accuracy || item.ic || 0) }));
+  const max = Math.max(...scored.map((item) => Math.abs(item.score)), 1e-9);
+  return `
+    <div class="forecast-chart-card">
+      <strong>Model Comparison</strong>
+      <div class="forecast-bars">${scored.map((item) => `<div><span>${escapeHtml(item.model || "model")}</span><b style="width:${Math.max(2, (Math.abs(item.score) / max) * 100)}%"></b></div>`).join("")}</div>
+    </div>
+  `;
+}
+
+function renderForecastDataQuality(summary) {
+  const missing = summary.missing_by_feature || {};
+  const items = Object.entries(missing).slice(0, 10);
+  if (!items.length) return `<div class="forecast-chart-card"><strong>Data Quality</strong>${decisionEmpty("missing value summary가 없습니다.")}</div>`;
+  const max = Math.max(...items.map(([, value]) => Number(value || 0)), 1e-9);
+  return `
+    <div class="forecast-chart-card">
+      <strong>Data Quality</strong>
+      <div class="forecast-bars">${items.map(([name, value]) => `<div><span>${escapeHtml(name)}</span><b style="width:${Math.max(2, (Number(value || 0) / max) * 100)}%"></b></div>`).join("")}</div>
+      <span>Missing ratio ${escapeHtml(fmtPercent(summary.missing_ratio))}</span>
+    </div>
+  `;
+}
+
+function renderForecastMonthlyHeatmap(items) {
+  if (!items.length) return `<div class="forecast-chart-card"><strong>Monthly Return Heatmap</strong>${decisionEmpty("월별 수익률 데이터가 없습니다.")}</div>`;
+  const maxAbs = Math.max(...items.map((item) => Math.abs(Number(item.return || 0))), 1e-9);
+  return `
+    <div class="forecast-chart-card">
+      <strong>Monthly Return Heatmap</strong>
+      <div class="forecast-heatmap">${items.map((item) => {
+        const value = Number(item.return || 0);
+        const alpha = Math.max(0.12, Math.min(0.9, Math.abs(value) / maxAbs));
+        const color = value >= 0 ? `rgba(22, 163, 74, ${alpha})` : `rgba(220, 38, 38, ${alpha})`;
+        return `<span style="background:${color}" title="${escapeHtml(item.month || "")} ${escapeHtml(fmtPercent(value))}">${escapeHtml(item.month || "")}<b>${escapeHtml(fmtPercent(value))}</b></span>`;
+      }).join("")}</div>
+    </div>
+  `;
+}
+
+function renderForecastConfusionMatrix(matrix) {
+  const total = Object.values(matrix || {}).map(Number).filter(Number.isFinite).reduce((sum, value) => sum + value, 0);
+  if (!total) return `<div class="forecast-chart-card"><strong>Confusion Matrix</strong>${decisionEmpty("방향성 혼동행렬 데이터가 없습니다.")}</div>`;
+  return `
+    <div class="forecast-chart-card">
+      <strong>Confusion Matrix</strong>
+      <div class="forecast-confusion">
+        <span>TP<b>${escapeHtml(String(matrix.true_positive || 0))}</b></span>
+        <span>FP<b>${escapeHtml(String(matrix.false_positive || 0))}</b></span>
+        <span>FN<b>${escapeHtml(String(matrix.false_negative || 0))}</b></span>
+        <span>TN<b>${escapeHtml(String(matrix.true_negative || 0))}</b></span>
+      </div>
+    </div>
+  `;
+}
+
+function renderForecastRegimePerformance(items) {
+  if (!items.length) return `<div class="forecast-chart-card"><strong>Regime Performance</strong>${decisionEmpty("레짐별 성능 데이터가 없습니다.")}</div>`;
+  return `
+    <div class="forecast-chart-card">
+      <strong>Regime Performance</strong>
+      <div class="forecast-bars">${items.map((item) => {
+        const value = Number(item.directional_score || 0);
+        return `<div><span>${escapeHtml(item.regime || "")} (${escapeHtml(String(item.observations || 0))})</span><b style="width:${Math.max(2, value * 100)}%"></b></div>`;
+      }).join("")}</div>
+      <span>source: realized_forward_return_proxy</span>
+    </div>
+  `;
+}
+
 function loadActiveDashboardResources(force = false) {
   if (state.activeDashboardTab === "quant") {
     loadQuantRunHistory(force);
     loadQuantStrategies(force);
+    return;
+  }
+  if (state.activeDashboardTab === "forecast") {
+    loadForecastLab(force);
     return;
   }
   if (state.activeDashboardTab === "macro") {
@@ -10179,7 +12102,36 @@ async function loadLatest() {
 }
 
 // ---------- Bindings ----------
+function openDateInputPicker(input) {
+  if (!input || input.disabled || input.readOnly) return;
+  input.focus({ preventScroll: true });
+  if (typeof input.showPicker !== "function") return;
+  try {
+    input.showPicker();
+  } catch (_err) {
+    // Browser may reject showPicker outside direct user activation; focus is still useful fallback.
+  }
+}
+
+function bindDateInputs() {
+  document.querySelectorAll('input[type="date"]').forEach((input) => {
+    input.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || input.disabled || input.readOnly) return;
+      if (typeof input.showPicker === "function") {
+        event.preventDefault();
+        openDateInputPicker(input);
+      }
+    });
+    input.addEventListener("keydown", (event) => {
+      if (!["Enter", " ", "ArrowDown"].includes(event.key)) return;
+      event.preventDefault();
+      openDateInputPicker(input);
+    });
+  });
+}
+
 function bindInputs() {
+  bindDateInputs();
   els.tickerChips.querySelectorAll("button").forEach((btn) => {
     btn.addEventListener("click", () => {
       const chipTicker = btn.dataset.ticker;
@@ -10197,6 +12149,7 @@ function bindInputs() {
       persistForm();
     });
   });
+  if (els.tickerSearchOpen) els.tickerSearchOpen.addEventListener("click", () => openSymbolPicker("research"));
   if (els.compareMode) {
     els.compareMode.addEventListener("change", () => {
       updateCompareModeUI();
@@ -10244,6 +12197,9 @@ function bindInputs() {
   if (els.quantLabTab) {
     els.quantLabTab.addEventListener("click", () => setDashboardTab("quant", { updateUrl: true }));
   }
+  if (els.mlForecastTab) {
+    els.mlForecastTab.addEventListener("click", () => setDashboardTab("forecast", { updateUrl: true }));
+  }
   if (els.aiPortfolioTab) {
     els.aiPortfolioTab.addEventListener("click", () => setDashboardTab("ai-portfolio", { updateUrl: true }));
   }
@@ -10274,10 +12230,31 @@ function bindInputs() {
   });
   if (els.homeHeatmapRefresh) els.homeHeatmapRefresh.addEventListener("click", () => loadDashboardEquityHeatmap(true));
   if (els.dataHealthRefresh) els.dataHealthRefresh.addEventListener("click", () => loadDataHealth(true));
-  if (els.macroRefresh) els.macroRefresh.addEventListener("click", () => loadMacro(true));
+  if (els.macroRefresh) els.macroRefresh.addEventListener("click", () => refreshMacroData());
   if (els.macroBriefGenerate) els.macroBriefGenerate.addEventListener("click", () => generateMacroBrief());
   if (els.macroReportExport) els.macroReportExport.addEventListener("click", () => exportMacroReport());
+  if (els.macroSeriesSearchRun) els.macroSeriesSearchRun.addEventListener("click", () => searchMacroSeries());
+  if (els.macroSeriesSearchInput) {
+    els.macroSeriesSearchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        searchMacroSeries();
+      }
+    });
+  }
+  [els.macroSeriesSearchResults, els.macroSeriesDetailSurface].forEach((surface) => {
+    if (!surface) return;
+    surface.addEventListener("click", (event) => {
+      const rawTarget = event.target;
+      const target = rawTarget?.closest ? rawTarget.closest("[data-macro-series-id]") : null;
+      if (!target?.dataset?.macroSeriesId) return;
+      event.preventDefault();
+      loadMacroSeriesDetail(target.dataset.macroSeriesId);
+    });
+  });
   if (els.assetDetailLoad) els.assetDetailLoad.addEventListener("click", loadAssetDetail);
+  if (els.assetDetailTickerOpen) els.assetDetailTickerOpen.addEventListener("click", () => openSymbolPicker("assetDetailTicker"));
+  if (els.assetDetailBenchmarkOpen) els.assetDetailBenchmarkOpen.addEventListener("click", () => openSymbolPicker("assetDetailBenchmark"));
   if (els.assetDetailTicker) {
     els.assetDetailTicker.addEventListener("keydown", (event) => {
       if (event.key === "Enter") loadAssetDetail();
@@ -10320,11 +12297,37 @@ function bindInputs() {
     });
   }
   if (els.backtestRun) els.backtestRun.addEventListener("click", runHomeBacktest);
+  if (els.forecastTickerOpen) els.forecastTickerOpen.addEventListener("click", () => openSymbolPicker("forecastTicker"));
+  if (els.forecastBenchmarkOpen) els.forecastBenchmarkOpen.addEventListener("click", () => openSymbolPicker("forecastBenchmark"));
+  if (els.forecastPreviewDataset) els.forecastPreviewDataset.addEventListener("click", runForecastDatasetPreview);
+  if (els.forecastHydrateDataset) els.forecastHydrateDataset.addEventListener("click", runForecastDatasetHydrate);
+  if (els.forecastBuildFeatures) els.forecastBuildFeatures.addEventListener("click", runForecastFeatureAndLeakagePreview);
+  if (els.forecastRunTrain) els.forecastRunTrain.addEventListener("click", runForecastExperiment);
+  if (els.forecastGenerateAi) els.forecastGenerateAi.addEventListener("click", renderForecastAiFromLastPayload);
+  if (els.forecastGenerateProviderAi) els.forecastGenerateProviderAi.addEventListener("click", renderForecastProviderAiFromLastPayload);
+  if (els.forecastAiProviderCheck) els.forecastAiProviderCheck.addEventListener("click", () => loadForecastAiProviderStatus(true));
+  if (els.forecastDriftRefresh) els.forecastDriftRefresh.addEventListener("click", () => loadForecastDrift(true));
+  if (els.forecastModelComparisonRefresh) els.forecastModelComparisonRefresh.addEventListener("click", () => loadForecastModelComparison(true));
+  if (els.forecastHistoryRefresh) els.forecastHistoryRefresh.addEventListener("click", () => loadForecastHistory(true));
+  if (els.forecastRegistryRefresh) els.forecastRegistryRefresh.addEventListener("click", () => loadForecastRegistry(true));
+  if (els.forecastRegistrySurface) {
+    els.forecastRegistrySurface.addEventListener("click", (event) => {
+      const rawTarget = event.target;
+      const target = rawTarget?.closest ? rawTarget.closest("[data-action]") : rawTarget;
+      if (!target || !target.dataset || !target.dataset.modelId) return;
+      if (target.dataset.action === "forecast-promote" || target.dataset.action === "forecast-deprecate") {
+        updateForecastModelStatus(target.dataset.action, target.dataset.modelId);
+      } else if (target.dataset.action === "forecast-verify-artifact") {
+        verifyForecastModelArtifact(target.dataset.modelId);
+      }
+    });
+  }
   if (els.backtestTicker) els.backtestTicker.addEventListener("input", () => {
     state.lastUniverseResolution = null;
     renderBacktestUniverseChips();
   });
-  if (els.backtestUniverseOpen) els.backtestUniverseOpen.addEventListener("click", openSymbolPicker);
+  if (els.backtestUniverseOpen) els.backtestUniverseOpen.addEventListener("click", () => openSymbolPicker("backtest"));
+  if (els.backtestBenchmarkOpen) els.backtestBenchmarkOpen.addEventListener("click", () => openSymbolPicker("backtestBenchmark"));
   if (els.backtestStrategy) {
     els.backtestStrategy.addEventListener("change", () => {
       state.activeStrategyId = "";
@@ -10345,7 +12348,7 @@ function bindInputs() {
   if (els.symbolPickerApply) els.symbolPickerApply.addEventListener("click", closeSymbolPicker);
   if (els.symbolPickerClear) {
     els.symbolPickerClear.addEventListener("click", () => {
-      setBacktestUniverse([]);
+      setSymbolTargetSymbols(state.symbolPickerTarget || symbolPickerTarget("backtest"), []);
       renderSymbolPicker();
     });
   }
@@ -10368,7 +12371,7 @@ function bindInputs() {
       const clearSelected = rawTarget?.closest ? rawTarget.closest("[data-symbol-clear-selected]") : null;
       if (selectAll) addFilteredSymbolsToBacktestUniverse();
       if (clearSelected) {
-        setBacktestUniverse([]);
+        setSymbolTargetSymbols(state.symbolPickerTarget || symbolPickerTarget("backtest"), []);
         renderSymbolPicker();
       }
     });
@@ -10427,6 +12430,11 @@ function bindInputs() {
   if (els.portfolioSyncBacktest) {
     els.portfolioSyncBacktest.addEventListener("click", syncPortfolioFromBacktest);
   }
+  if (els.portfolioTickers) {
+    els.portfolioTickers.addEventListener("input", () => renderSymbolTargetChips("portfolio"));
+  }
+  if (els.portfolioUniverseOpen) els.portfolioUniverseOpen.addEventListener("click", () => openSymbolPicker("portfolio"));
+  if (els.portfolioBenchmarkOpen) els.portfolioBenchmarkOpen.addEventListener("click", () => openSymbolPicker("portfolioBenchmark"));
   if (els.portfolioOptimize) els.portfolioOptimize.addEventListener("click", runPortfolioOptimize);
   if (els.aiPortfolioInvestmentTypes) {
     els.aiPortfolioInvestmentTypes.addEventListener("click", (event) => {
@@ -10451,8 +12459,22 @@ function bindInputs() {
   if (els.aiPortfolioHydrateData) els.aiPortfolioHydrateData.addEventListener("click", () => runAiPortfolioHydrateData({ missingOnly: false }));
   if (els.aiPortfolioRetryMissing) els.aiPortfolioRetryMissing.addEventListener("click", () => runAiPortfolioHydrateData({ missingOnly: true }));
   if (els.aiPortfolioSnapshotJob) els.aiPortfolioSnapshotJob.addEventListener("click", runAiPortfolioSnapshotJob);
+  if (els.aiPortfolioSecRefresh) els.aiPortfolioSecRefresh.addEventListener("click", runAiPortfolioSecRefresh);
   if (els.aiPortfolioUniverse) els.aiPortfolioUniverse.addEventListener("change", syncAiPortfolioUniverseMode);
-  if (els.aiPortfolioCustomUniverse) els.aiPortfolioCustomUniverse.addEventListener("input", syncAiPortfolioUniverseMode);
+  if (els.aiPortfolioCustomUniverse) {
+    els.aiPortfolioCustomUniverse.addEventListener("input", () => {
+      renderSymbolTargetChips("aiPortfolioCustomUniverse");
+      syncAiPortfolioUniverseMode();
+    });
+  }
+  if (els.aiPortfolioCustomUniverseOpen) {
+    els.aiPortfolioCustomUniverseOpen.addEventListener("click", () => {
+      if (els.aiPortfolioUniverse) els.aiPortfolioUniverse.value = "custom";
+      syncAiPortfolioUniverseMode();
+      openSymbolPicker("aiPortfolioCustomUniverse");
+    });
+  }
+  if (els.aiPortfolioBenchmarkOpen) els.aiPortfolioBenchmarkOpen.addEventListener("click", () => openSymbolPicker("aiPortfolioBenchmark"));
   if (els.aiPortfolioGenerateQuick) {
     els.aiPortfolioGenerateQuick.addEventListener("click", () => {
       setDashboardTab("ai-portfolio", { updateUrl: true });
@@ -10549,10 +12571,13 @@ function bindInputs() {
   bindTabs();
   bindDownloads();
   bindInputs();
+  bindCommandPanelToggle();
   initChartTooltips();
   restoreForm();
   syncAiPortfolioUniverseMode();
   renderBacktestUniverseChips();
+  renderSymbolTargetChips("portfolio");
+  renderSymbolTargetChips("aiPortfolioCustomUniverse");
   populateBacktestStrategyRegistry();
   renderHistory();
   renderWatchlist();

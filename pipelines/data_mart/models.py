@@ -55,6 +55,14 @@ class Filing:
     url: str = ""
     source: str = "sec"
     filing_id: str | None = None
+    cik: str = ""
+    accession_number: str = ""
+    report_date: str = ""
+    fiscal_year: int | None = None
+    fiscal_period: str = ""
+    primary_document: str = ""
+    description: str = ""
+    raw: dict[str, Any] = field(default_factory=dict)
     collected_at: str = field(default_factory=utc_now_iso)
 
 

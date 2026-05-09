@@ -131,6 +131,20 @@ class Settings(BaseSettings):
     # SEC EDGAR fair-access identity. Operators should replace the default
     # with an organization/contact string before sustained automated use.
     sec_user_agent: str = Field(default="FinGPTLocalResearch/1.0 contact@example.com")
+    sec_request_delay_s: float = Field(default=0.12)
+
+    # Local structured data auto refresh. This is an in-process workstation
+    # scheduler, not a distributed job runner. It polls SEC/company data on a
+    # conservative interval and never blocks API startup.
+    data_mart_auto_refresh_enabled: bool = Field(default=True)
+    data_mart_auto_refresh_sec_enabled: bool = Field(default=True)
+    data_mart_auto_refresh_macro_enabled: bool = Field(default=True)
+    data_mart_auto_refresh_interval_hours: float = Field(default=24.0)
+    data_mart_auto_refresh_initial_delay_s: float = Field(default=120.0)
+    data_mart_auto_refresh_universe_id: str = Field(default="all_supported")
+    data_mart_auto_refresh_max_assets: int = Field(default=250)
+    data_mart_auto_refresh_sec_lookback_days: int = Field(default=365 * 3)
+    data_mart_auto_refresh_macro_lookback_days: int = Field(default=365 * 5)
 
     # FRED (Federal Reserve Economic Data) powers the macro bundle for bonds
     # and rate-sensitive assets. Free to register at https://fred.stlouisfed.org.

@@ -81,7 +81,7 @@ def test_fingpt_annotations_schema_columns_primary_key_and_indexes(tmp_path) -> 
 
 
 def test_fingpt_annotations_schema_version_is_incremented() -> None:
-    assert SCHEMA_VERSION == 3
+    assert SCHEMA_VERSION == 4
 
 
 def test_init_db_migrates_nullable_model_id_annotation_table(tmp_path) -> None:

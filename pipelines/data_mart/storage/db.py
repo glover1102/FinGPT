@@ -10,6 +10,25 @@ from pipelines.data_mart.storage.schema import DDL_STATEMENTS, SCHEMA_VERSION
 
 FINGPT_ANNOTATIONS_TABLE = "fingpt_article_annotations"
 FINGPT_ANNOTATIONS_OLD_TABLE = "fingpt_article_annotations_old"
+ADDITIVE_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
+    "filings": (
+        ("cik", "TEXT"),
+        ("accession_number", "TEXT"),
+        ("report_date", "TEXT"),
+        ("fiscal_year", "INTEGER"),
+        ("fiscal_period", "TEXT"),
+        ("primary_document", "TEXT"),
+        ("description", "TEXT"),
+        ("raw_json", "TEXT NOT NULL DEFAULT '{}'"),
+    ),
+    "financial_statements": (
+        ("total_liabilities", "REAL"),
+        ("stockholders_equity", "REAL"),
+        ("gross_profit", "REAL"),
+        ("operating_income", "REAL"),
+        ("net_income", "REAL"),
+    ),
+}
 
 
 class ManagedConnection(sqlite3.Connection):
@@ -60,6 +79,17 @@ def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
         (table_name,),
     ).fetchone()
     return row is not None
+
+
+def _ensure_additive_columns(conn: sqlite3.Connection) -> None:
+    for table_name, columns in ADDITIVE_COLUMNS.items():
+        if not _table_exists(conn, table_name):
+            continue
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})")}
+        for column_name, column_ddl in columns:
+            if column_name in existing:
+                continue
+            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_ddl}")
 
 
 def _fingpt_annotations_needs_model_id_rebuild(conn: sqlite3.Connection) -> bool:
@@ -129,6 +159,8 @@ def init_db(db_path: str | Path | None = None) -> Path:
     with connect(path) as conn:
         for statement in DDL_STATEMENTS:
             conn.execute(statement)
+        conn.commit()
+        _ensure_additive_columns(conn)
         conn.commit()
         _migrate_fingpt_annotations_model_id(conn)
         conn.execute(

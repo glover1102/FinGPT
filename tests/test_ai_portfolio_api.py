@@ -9,7 +9,7 @@ from core.schemas.fundamentals import FundamentalsCard
 from app.api.server import app
 from core.schemas.ai_portfolio import PortfolioPolicy, PortfolioWeight
 from pipelines.ai_portfolio.rules import check_constraints
-from pipelines.data_mart.models import PriceBar
+from pipelines.data_mart.models import PriceBar, ProviderFetchResult, UpdateRunResult
 from pipelines.data_mart.storage import repository
 from pipelines.data_mart.storage.db import init_db
 
@@ -381,6 +381,43 @@ def test_data_activation_persists_metadata_and_operations(tmp_path, monkeypatch)
     assert operations.json()["count"] >= 1
     store = client.get("/api/v1/ai-portfolio/store/status").json()
     assert store["collections"]["operations"]["count"] >= 1
+
+
+def test_sec_data_refresh_operation_records_result_without_network(tmp_path, monkeypatch) -> None:
+    client = _client(tmp_path, monkeypatch)
+
+    def fake_update_sec_company_data(tickers, **kwargs):
+        tickers = list(tickers)
+        return UpdateRunResult(
+            run_id="sec-test-run",
+            status="success",
+            market="us",
+            provider="sec_edgar",
+            rows_inserted=3,
+            rows_updated=0,
+            providers=[
+                ProviderFetchResult(provider="sec_edgar", status="ok", rows=3, detail={"ticker": tickers[0]}),
+                ProviderFetchResult(provider="sec_edgar", status="skipped", rows=0, detail={"ticker": "005930.KS"}),
+            ],
+        )
+
+    monkeypatch.setattr("pipelines.ai_portfolio.service.update_sec_company_data", fake_update_sec_company_data)
+    response = client.post(
+        "/api/v1/ai-portfolio/operations/sec-refresh",
+        json={
+            "universe_id": "custom:AAPL,005930.KS",
+            "forms": ["10-K", "10-Q", "8-K"],
+            "max_assets": 10,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["operation_type"] == "sec_data_refresh"
+    assert body["status"] == "success"
+    assert body["sec_result"]["run_id"] == "sec-test-run"
+    assert body["sec_result"]["provider_status_counts"]["ok"] == 1
+    assert body["sec_result"]["provider_status_counts"]["skipped"] == 1
 
 
 def test_snapshot_job_and_recommendation_diff(tmp_path, monkeypatch) -> None:

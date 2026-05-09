@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from app.api.routers import data as data_router
 from app.api.server import app
-from pipelines.data_mart.models import PriceBar
+from pipelines.data_mart.models import Filing, PriceBar, UpdateRunResult
 from pipelines.data_mart.storage import repository
 from pipelines.data_mart.storage.db import init_db
 
@@ -33,6 +34,51 @@ def test_data_health_and_prices_endpoint_use_structured_store(tmp_path, monkeypa
     assert prices.status_code == 200
     assert prices.json()["status"] == "ok"
     assert prices.json()["latest"]["date"] == "2026-01-03"
+
+
+def test_data_prices_refreshes_before_returning_rows(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "research_mart.db"
+    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
+    init_db(db_path)
+    repository.ensure_assets(["SPY"], market="us", db_path=db_path)
+    repository.upsert_prices(
+        [
+            PriceBar(ticker="SPY", date="2026-05-07", close=731.58, adjusted_close=731.58, source="test"),
+        ],
+        db_path=db_path,
+    )
+
+    def fake_update_prices_daily(tickers, **kwargs):
+        assert tickers == ["SPY"]
+        assert kwargs["market"] == "mixed"
+        assert kwargs["start_date"] == "2025-05-09"
+        assert kwargs["end_date"] is None
+        repository.upsert_prices(
+            [
+                PriceBar(ticker="SPY", date="2026-05-08", close=737.62, adjusted_close=737.62, source="test"),
+            ],
+            db_path=db_path,
+        )
+        return UpdateRunResult(
+            run_id="refresh-test",
+            status="success",
+            market="mixed",
+            provider="test",
+            rows_inserted=1,
+            rows_updated=0,
+        )
+
+    monkeypatch.setattr(data_router, "update_prices_daily", fake_update_prices_daily)
+    client = TestClient(app)
+
+    response = client.get("/api/v1/data/prices/SPY?limit=10&refresh=true&start_date=2025-05-09")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["latest"]["date"] == "2026-05-08"
+    assert body["refresh"]["attempted"] is True
+    assert body["refresh"]["status"] == "success"
+    assert body["refresh"]["rows_inserted"] == 1
 
 
 def test_data_health_marks_optional_empty_provider_rows_as_covered(tmp_path, monkeypatch) -> None:
@@ -70,6 +116,56 @@ def test_data_health_marks_optional_empty_provider_rows_as_covered(tmp_path, mon
     assert spy_row["coverage_status"] == "covered_empty"
     assert body["summary"]["covered_empty_provider_rows"] == 1
     assert body["summary"]["decision_status"] == "ok"
+
+
+def test_data_sec_endpoint_returns_local_filings_and_facts(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "research_mart.db"
+    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
+    init_db(db_path)
+    repository.upsert_filings(
+        [
+            Filing(
+                ticker="MSFT",
+                cik="0000789019",
+                accession_number="0000789019-26-000001",
+                form_type="10-Q",
+                filed_at="2026-04-25",
+                url="https://sec.example/msft-10q",
+                filing_id="MSFT:0000789019-26-000001",
+            )
+        ],
+        db_path=db_path,
+    )
+    repository.upsert_sec_financial_facts(
+        [
+            {
+                "ticker": "MSFT",
+                "cik": "0000789019",
+                "taxonomy": "us-gaap",
+                "concept": "Assets",
+                "unit": "USD",
+                "form_type": "10-Q",
+                "fiscal_year": 2026,
+                "fiscal_period": "Q3",
+                "end_date": "2026-03-31",
+                "filed_at": "2026-04-25",
+                "accession_number": "0000789019-26-000001",
+                "value": 1000,
+            }
+        ],
+        db_path=db_path,
+    )
+
+    client = TestClient(app)
+    response = client.get("/api/v1/data/sec/MSFT")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["filing_count"] == 1
+    assert body["fact_count"] == 1
+    assert body["filings"][0]["form_type"] == "10-Q"
+    assert body["facts"][0]["concept"] == "Assets"
 
 
 def test_backtest_endpoint_accepts_request_price_rows() -> None:

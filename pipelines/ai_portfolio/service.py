@@ -17,6 +17,7 @@ from core.schemas.ai_portfolio import (
     RebalanceActionRequest,
     RebalanceSignal,
     ReportGenerateRequest,
+    SecDataRefreshRequest,
     SnapshotJobRequest,
 )
 from core.utils.symbol_registry import symbol_identities
@@ -28,6 +29,7 @@ from pipelines.ai_portfolio.store import append_item, filter_items, get_item, li
 from pipelines.ai_portfolio.templates import investment_type_or_none, template_to_policy_defaults
 from pipelines.collect.fundamentals_card import collect_fundamentals_card
 from pipelines.data_mart.jobs.ensure_price_history import ensure_price_history
+from pipelines.data_mart.jobs.update_sec_company_data import update_sec_company_data
 from pipelines.data_mart.storage import repository as data_repository
 
 
@@ -648,6 +650,85 @@ def run_data_activation(request: DataActivationRequest) -> dict[str, Any]:
             "data_activation_run",
             after=operation,
             summary=f"데이터 활성화 작업: {operation['status']}",
+            audit={
+                "request_id": operation_request_id,
+                "universe_hash": source_meta.get("universe_hash"),
+                "operation_id": operation["operation_id"],
+            },
+        )
+    return operation
+
+
+def run_sec_data_refresh(request: SecDataRefreshRequest) -> dict[str, Any]:
+    activation_request = DataActivationRequest(
+        policy_id=request.policy_id,
+        universe_id=request.universe_id,
+        tickers=request.tickers,
+        hydrate_prices=False,
+        hydrate_fundamentals=False,
+        dry_run=True,
+        max_assets=request.max_assets,
+    )
+    assets, source_meta = _assets_for_activation(activation_request)
+    target_assets = assets[: request.max_assets]
+    tickers = _clean_tickers([getattr(asset, "ticker", "") for asset in target_assets if getattr(asset, "ticker", "") != "CASH"])
+    operation_request_id = request_id("sec")
+    before = data_repository.sec_data_availability(tickers)
+    available_before = [ticker for ticker, item in before.items() if item.get("available")]
+
+    if request.dry_run:
+        sec_result: dict[str, Any] = {
+            "status": "dry_run",
+            "candidate_count": len(tickers),
+            "available_before_count": len(available_before),
+            "missing_before": [ticker for ticker, item in before.items() if not item.get("available")][:100],
+        }
+        after = before
+    else:
+        result = update_sec_company_data(
+            tickers,
+            forms=request.forms,
+            lookback_days=request.lookback_days,
+            max_assets=request.max_assets,
+            hydrate_financials=request.hydrate_financials,
+        )
+        after = data_repository.sec_data_availability(tickers)
+        provider_status_counts: dict[str, int] = {}
+        for provider in result.providers:
+            provider_status_counts[provider.status] = provider_status_counts.get(provider.status, 0) + 1
+        sec_result = {
+            "status": result.status,
+            "run_id": result.run_id,
+            "rows_inserted": result.rows_inserted,
+            "rows_updated": result.rows_updated,
+            "error_message": result.error_message,
+            "provider_status_counts": provider_status_counts,
+            "available_after_count": len([ticker for ticker, item in after.items() if item.get("available")]),
+            "missing_after": [ticker for ticker, item in after.items() if not item.get("available")][:100],
+        }
+
+    operation = _save_operation(
+        "sec_data_refresh",
+        {
+            "status": "dry_run" if request.dry_run else sec_result.get("status", "unknown"),
+            "request_id": operation_request_id,
+            "request": request.model_dump(mode="json"),
+            "source": source_meta,
+            "asset_count": len(assets),
+            "processed_asset_count": len(target_assets),
+            "ticker_count": len(tickers),
+            "sec_result": sec_result,
+            "sec_availability_before": before,
+            "sec_availability_after": after,
+            "data_health": data_repository.data_health(),
+        },
+    )
+    if request.policy_id:
+        _event(
+            request.policy_id,
+            "sec_data_refresh_run",
+            after=operation,
+            summary=f"SEC data refresh: {operation['status']}",
             audit={
                 "request_id": operation_request_id,
                 "universe_hash": source_meta.get("universe_hash"),

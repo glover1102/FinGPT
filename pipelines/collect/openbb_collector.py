@@ -21,6 +21,7 @@ from pipelines.collect.alpha_vantage_news import collect_news_from_alpha_vantage
 from pipelines.collect.etf_profile_collector import collect_etf_profile
 from pipelines.collect.fmp_news import collect_stock_news_from_fmp, filter_fresh_documents
 from pipelines.collect.google_news_rss import collect_news_from_google_rss
+from pipelines.collect.fundamentals_card import collect_fundamentals_card, fundamentals_card_to_retrieval_item
 from pipelines.collect.macro_collector import collect_macro_bundle
 from pipelines.collect.sec_filings import collect_sec_filings_as_news
 from pipelines.collect.fmp_transcripts import collect_transcripts_from_fmp
@@ -466,6 +467,72 @@ def _collect_technical_snapshot_source(ticker: str, lookback_days: int) -> tuple
     return SourceCollectionResult("macro", "ok", 1, elapsed_s, "yfinance technical indicators collected."), [document]
 
 
+def _collect_fundamentals_source(ticker: str, settings: Any | None = None) -> tuple[SourceCollectionResult, list[dict[str, Any]]]:
+    settings = settings or load_settings()
+    started_at = datetime.now()
+    try:
+        card = collect_fundamentals_card(
+            ticker,
+            timeout_s=float(getattr(settings, "fundamentals_card_timeout_s", 5.0) or 5.0),
+        )
+    except concurrent.futures.TimeoutError:
+        elapsed_s = round((datetime.now() - started_at).total_seconds(), 2)
+        return SourceCollectionResult("fundamentals", "timeout", 0, elapsed_s, "fundamentals snapshot timed out."), []
+    except Exception as exc:  # noqa: BLE001
+        elapsed_s = round((datetime.now() - started_at).total_seconds(), 2)
+        return SourceCollectionResult("fundamentals", "failed", 0, elapsed_s, f"fundamentals snapshot failed: {exc}"), []
+
+    item = fundamentals_card_to_retrieval_item(card)
+    if item is None:
+        elapsed_s = round((datetime.now() - started_at).total_seconds(), 2)
+        return SourceCollectionResult("fundamentals", "empty", 0, elapsed_s, "No fundamentals snapshot was available."), []
+
+    metadata = dict(item.metadata or {})
+    doc_id = str(metadata.get("doc_id") or build_doc_id(ticker.upper(), "fundamentals", str(item.date or "")))
+    document = {
+        "doc_id": doc_id,
+        "ticker": ticker.upper(),
+        "symbol": ticker.upper(),
+        "doc_type": "fundamentals_snapshot",
+        "source": "yfinance:fundamentals",
+        "published_at": item.date or datetime.now().date().isoformat(),
+        "title": item.title or f"{ticker.upper()} fundamentals snapshot",
+        "text": item.chunk,
+        "url": "",
+        "asset_class": "fundamentals",
+        "bucket": "market_structure",
+        "collected_at": datetime.now().isoformat(),
+        "retrieval_mode": metadata.get("retrieval_mode", "deterministic_provider_snapshot"),
+    }
+    elapsed_s = round((datetime.now() - started_at).total_seconds(), 2)
+    return SourceCollectionResult("fundamentals", "ok", 1, elapsed_s, "yfinance fundamentals snapshot collected."), [document]
+
+
+def _collect_filings_source(ticker: str, lookback_days: int, settings: Any | None = None) -> tuple[SourceCollectionResult, list[dict[str, Any]], SourceCollectionResult]:
+    settings = settings or load_settings()
+    result, documents = collect_sec_filings_as_news(
+        ticker,
+        lookback_days,
+        getattr(settings, "sec_user_agent", None),
+        limit=10,
+    )
+    filing_result = SourceCollectionResult(
+        source="filings",
+        status=result.status,
+        doc_count=len(documents),
+        elapsed_s=result.elapsed_s,
+        detail=result.detail,
+    )
+    provider_result = SourceCollectionResult(
+        source="filings:sec_filings",
+        status=result.status,
+        doc_count=len(documents),
+        elapsed_s=result.elapsed_s,
+        detail=result.detail,
+    )
+    return filing_result, documents, provider_result
+
+
 def _build_summary_detail(source_results: list[SourceCollectionResult]) -> str:
     failing = [result for result in source_results if result.status not in _NON_DEGRADED_STATUSES]
     if not failing:
@@ -599,6 +666,40 @@ def collect_data(ticker: str, sources: list[str] | None, lookback_days: int) -> 
                         detail=result.detail,
                     )
                 )
+        elif source == "fundamentals":
+            if not profile.supports_equity_sources:
+                result = SourceCollectionResult(
+                    source="fundamentals",
+                    status="skipped",
+                    doc_count=0,
+                    elapsed_s=0.0,
+                    detail=f"fundamentals source not applicable to asset_class={profile.asset_class}.",
+                )
+                source_documents = []
+            else:
+                result, source_documents = _collect_fundamentals_source(ticker, settings=settings)
+                provider_results.append(
+                    SourceCollectionResult(
+                        source="fundamentals:yfinance",
+                        status=result.status,
+                        doc_count=len(source_documents),
+                        elapsed_s=result.elapsed_s,
+                        detail=result.detail,
+                    )
+                )
+        elif source == "filings":
+            if not profile.supports_equity_sources:
+                result = SourceCollectionResult(
+                    source="filings",
+                    status="skipped",
+                    doc_count=0,
+                    elapsed_s=0.0,
+                    detail=f"filings source not applicable to asset_class={profile.asset_class}.",
+                )
+                source_documents = []
+            else:
+                result, source_documents, provider_result = _collect_filings_source(ticker, lookback_days, settings=settings)
+                provider_results.append(provider_result)
         elif source == "macro":
             if not profile.supports_macro:
                 if profile.supports_equity_sources:

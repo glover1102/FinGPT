@@ -155,6 +155,13 @@ data/watchlist.json
 data/ai_portfolio/
 data/ai_portfolio_smoke/
 data/ai_portfolio_browser_smoke/
+data/forecast_lab/experiments/
+data/forecast_lab/data_snapshots/
+data/forecast_lab/macro_regime/
+data/forecast_lab/model_artifacts/
+data/forecast_lab/model_registry.json
+data/forecast_lab/model_registry.sqlite3*
+data/forecast_lab/.artifact_signing_key.json
 reports/
 test-results/
 .playwright-cli/

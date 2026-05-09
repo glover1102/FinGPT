@@ -1,5 +1,7 @@
 ﻿from __future__ import annotations
 
+# ruff: noqa: E402
+
 import argparse
 import importlib.metadata
 import importlib.util
@@ -36,7 +38,6 @@ from core.utils.openbb_agent_compat import check_openbb_agent_contract, validate
 from core.utils.openbb_compat import build_openbb_compat_report
 from core.utils.provider_versions import build_provider_version_report
 from core.utils.validation_metrics import (
-    as_payload_dict,
     claim_evidence_date_coverage,
     citation_count,
     decision_richness,
@@ -402,6 +403,28 @@ def run_provider_compat_gate() -> dict[str, Any]:
         ]
         raise ValidationError("; ".join(failures))
     return {"status": "passed", "provider_versions": version_report, "openbb_compat": report}
+
+
+def run_forecast_ai_provider_policy_gate() -> dict[str, Any]:
+    from pipelines.forecast.ai_interpretation import ai_provider_health, provider_latency_policy
+
+    policy = provider_latency_policy()
+    if not policy.get("fail_closed"):
+        raise ValidationError("forecast AI provider latency policy must fail closed")
+    max_latency = float(policy.get("max_latency_s") or 0.0)
+    if max_latency <= 0:
+        raise ValidationError("forecast AI provider latency policy has invalid max_latency_s")
+    health = ai_provider_health(timeout_s=1.0)
+    return {
+        "status": "passed",
+        "provider_status": health.get("status"),
+        "provider": health.get("provider"),
+        "model": health.get("model"),
+        "model_available": health.get("model_available"),
+        "guard_policy": health.get("guard_policy"),
+        "latency_policy": policy,
+        "fallback_required_when_unavailable": health.get("status") == "unavailable",
+    }
 
 
 def run_ui_contract_gate() -> dict[str, Any]:
@@ -1438,6 +1461,8 @@ def main() -> int:
         phases["model_baseline_gate"] = run_model_baseline_gate()
         current_phase = "provider_compat_gate"
         phases["provider_compat_gate"] = run_provider_compat_gate()
+        current_phase = "forecast_ai_provider_policy_gate"
+        phases["forecast_ai_provider_policy_gate"] = run_forecast_ai_provider_policy_gate()
         current_phase = "openbb_agent_contract_gate"
         phases["openbb_agent_contract_gate"] = run_openbb_agent_contract_gate()
         current_phase = "ui_contract_gate"

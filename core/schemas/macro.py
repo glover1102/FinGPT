@@ -60,6 +60,45 @@ class MacroSeriesResponse(BaseModel):
     data_quality: MacroDataQuality
 
 
+class MacroSeriesSearchItem(BaseModel):
+    series_id: str
+    display_name: str
+    category: str
+    subcategory: str = ""
+    provider: str
+    country: str = "US"
+    frequency: str
+    unit: str
+    importance: str = "medium"
+    description: str = ""
+    interpretation_hint: str = ""
+    aliases: list[str] = Field(default_factory=list)
+    matched_terms: list[str] = Field(default_factory=list)
+    score: float = 0.0
+    latest: MacroObservation | None = None
+    changes: dict[str, float | str | None] = Field(default_factory=dict)
+    data_quality: MacroDataQuality
+
+
+class MacroSeriesSearchResponse(BaseModel):
+    status: str
+    query: str
+    count: int
+    items: list[MacroSeriesSearchItem] = Field(default_factory=list)
+    data_quality: MacroDataQuality
+
+
+class MacroSeriesDetailResponse(BaseModel):
+    status: str
+    definition: MacroSeriesDefinition
+    series: MacroSeriesResponse
+    statistics: dict[str, Any] = Field(default_factory=dict)
+    interpretation: dict[str, Any] = Field(default_factory=dict)
+    component_series: list[MacroSeriesSearchItem] = Field(default_factory=list)
+    related_series: list[MacroSeriesSearchItem] = Field(default_factory=list)
+    data_quality: MacroDataQuality
+
+
 class MacroSignal(BaseModel):
     name: str
     value: str
@@ -90,6 +129,14 @@ class AssetImpact(BaseModel):
     related_indicators: list[str] = Field(default_factory=list)
 
 
+class PortfolioEtfCandidate(BaseModel):
+    sleeve: str
+    bias: str
+    tickers: list[str] = Field(default_factory=list)
+    role: str
+    rationale: str
+
+
 class PortfolioPolicyHint(BaseModel):
     regime: str
     equity_bias: str
@@ -101,6 +148,7 @@ class PortfolioPolicyHint(BaseModel):
     risk_level: str
     rebalance_attention: bool
     explanation: str
+    etf_candidates: list[PortfolioEtfCandidate] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     data_quality: MacroDataQuality
     advisory_only: bool = True
@@ -132,6 +180,16 @@ class MacroBriefRequest(BaseModel):
     use_llm: bool = False
     model: str | None = None
     timeout_s: float = Field(default=45.0, ge=1.0, le=180.0)
+
+
+class MacroRefreshRequest(BaseModel):
+    series_ids: list[str] = Field(default_factory=list)
+    providers: list[str] = Field(default_factory=list)
+    include_disabled: bool = False
+    start_date: str | None = None
+    end_date: str | None = None
+    lookback_days: int = Field(default=365 * 5, ge=1, le=365 * 30)
+    dry_run: bool = False
 
 
 class MacroBriefResponse(BaseModel):

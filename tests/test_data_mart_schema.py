@@ -24,6 +24,8 @@ def test_init_db_creates_data_mart_tables(tmp_path) -> None:
             "macro_observations",
             "news_articles",
             "filings",
+            "sec_company_registry",
+            "sec_financial_facts",
             "data_update_runs",
             "provider_status",
             "data_quality_checks",

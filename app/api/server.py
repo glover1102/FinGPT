@@ -11,6 +11,7 @@ from app.api.routers.backtest import router as backtest_router
 from app.api.routers.ai_portfolio import router as ai_portfolio_router
 from app.api.routers.dashboard import router as dashboard_router
 from app.api.routers.data import router as data_router
+from app.api.routers.forecast import router as forecast_router
 from app.api.routers.macro import router as macro_router
 from app.api.routers.portfolio import router as portfolio_router
 from app.api.routers.quant_lab import router as quant_lab_router
@@ -19,6 +20,7 @@ from app.api.routers.system import router as system_router
 from app.api.routers.watchlist import router as watchlist_router
 from core.config.settings import load_settings
 from core.utils.logger import get_logger
+from pipelines.data_mart.scheduler import get_scheduler as get_data_mart_scheduler
 from pipelines.watchlist.scheduler import get_scheduler as get_watchlist_scheduler
 
 
@@ -38,6 +40,15 @@ async def _start_watchlist_scheduler() -> None:
         logger.error(f"Failed to start watchlist scheduler: {exc}")
 
 
+async def _start_data_mart_scheduler() -> None:
+    """Start structured data refresh jobs without blocking API startup."""
+
+    try:
+        await get_data_mart_scheduler().start()
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"Failed to start data mart scheduler: {exc}")
+
+
 async def _stop_watchlist_scheduler() -> None:
     try:
         await get_watchlist_scheduler().stop()
@@ -45,12 +56,21 @@ async def _stop_watchlist_scheduler() -> None:
         pass
 
 
+async def _stop_data_mart_scheduler() -> None:
+    try:
+        await get_data_mart_scheduler().stop()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await _start_watchlist_scheduler()
+    await _start_data_mart_scheduler()
     try:
         yield
     finally:
+        await _stop_data_mart_scheduler()
         await _stop_watchlist_scheduler()
 
 
@@ -94,6 +114,8 @@ app.include_router(watchlist_router)
 app.include_router(macro_router, prefix="/api/v1/macro")
 app.include_router(macro_router, prefix="/api/macro")
 app.include_router(quant_lab_router)
+app.include_router(forecast_router, prefix="/api/v1/forecast")
+app.include_router(forecast_router, prefix="/api/forecast")
 
 if WEB_DIR.exists():
     app.mount("/ui", StaticFiles(directory=str(WEB_DIR), html=True), name="web")

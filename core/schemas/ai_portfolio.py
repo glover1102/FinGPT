@@ -309,6 +309,35 @@ class DataActivationRequest(BaseModel):
     min_price_rows: int = Field(default=42, ge=2, le=5000)
 
 
+class SecDataRefreshRequest(BaseModel):
+    policy_id: str | None = None
+    universe_id: str | None = None
+    tickers: list[str] = Field(default_factory=list)
+    forms: list[str] = Field(default_factory=lambda: ["10-K", "10-Q", "8-K"])
+    lookback_days: int = Field(default=365 * 3, ge=1, le=365 * 15)
+    max_assets: int = Field(default=250, ge=1, le=1000)
+    hydrate_financials: bool = True
+    dry_run: bool = False
+
+    @field_validator("forms", mode="before")
+    @classmethod
+    def _normalize_forms(cls, value: Any) -> list[str]:
+        if value is None:
+            return ["10-K", "10-Q", "8-K"]
+        raw_values = value if isinstance(value, list) else str(value).split(",")
+        forms = []
+        for raw in raw_values:
+            form = str(raw or "").upper().strip()
+            if not form:
+                continue
+            canonical = form.split("/", 1)[0]
+            if canonical not in {"10-K", "10-Q", "8-K"}:
+                raise ValueError(f"unsupported SEC form: {form}")
+            if canonical not in forms:
+                forms.append(canonical)
+        return forms or ["10-K", "10-Q", "8-K"]
+
+
 class SnapshotJobRequest(BaseModel):
     policy_id: str | None = None
     active_only: bool = True

@@ -26,13 +26,14 @@ This document is the source of truth for the Macro implementation. Items are mar
 - selected backend module structure: Added `core/schemas/macro.py`, `pipelines/macro/*`, and `app/api/routers/macro.py`.
 - selected frontend module structure: Extended the existing static dashboard tab model in `app/web/index.html`, `app/web/app.js`, and `app/web/styles.css` rather than adding a new React-style page tree.
 - data provider abstraction: Added provider base classes plus `DataMartMacroProvider`, `FredProvider`, and `UnavailableProvider`.
-- config-driven series registry: Added registry in `pipelines/macro/series_registry.py` with required FRED-style series and disabled future placeholders.
+- config-driven series registry: Added registry in `pipelines/macro/series_registry.py` with required FRED-style series, expanded enabled coverage, and disabled future placeholders.
 - regime engine design: Rule-based, score-driven, transparent, with unknown/low-confidence fallback when insufficient inputs are available.
 - AI prompt/service connection: Stored prompt templates in `pipelines/macro/prompts.py`; MVP returns a rule-based fallback brief from structured Macro payload only.
 - data quality handling: Per-series and aggregate status with `ok`, `partial`, `stale`, `unavailable`; preserves missing/stale/provider/transformation errors.
 - cache use: Uses existing local data mart rows as the first cache; fetches from FRED only when a usable API key is available; otherwise returns unavailable without fabricated values. Service-level TTL cache avoids repeated live fetches within a short window.
 - live provider fallback policy: If no data-mart rows and no live provider/key, returns empty observations and explicit unavailable quality.
 - future extension points: Provider adapters for ECOS/OECD/WorldBank/Yahoo, country/provider filters, additional registry entries, ML/factor regime classifiers, report automation, and direct research prompt injection.
+- 2026-05-09 coverage expansion: Enabled registry coverage now spans 74 series across rates, inflation, growth, labor, housing/consumer, liquidity/credit, financial conditions, FX/dollar, commodities, and market proxies.
 
 ## 3. Implementation Phases
 
@@ -43,7 +44,7 @@ This document is the source of truth for the Macro implementation. Items are mar
 - Phase 5: macro regime engine, scoring logic, regime classification. Status: DONE.
 - Phase 6: asset impact mapping, portfolio policy hints. Status: DONE.
 - Phase 7: AI Macro Brief, research context provider. Status: DONE for guarded optional Ollama invocation, fallback brief, research context API, and single-ticker/ETF research-pipeline injection. Current live Ollama output was rejected by the grounding guard and correctly fell back.
-- Phase 8: extensibility hooks for countries/providers/indicators. Status: DONE for ECOS/OECD/WorldBank/Yahoo adapter classes, provider routing, provider health metadata, and Yahoo FX/commodity category surfaces. Current ECOS live data is BLOCKED without `ECOS_API_KEY`.
+- Phase 8: extensibility hooks for countries/providers/indicators. Status: DONE for ECOS/OECD/WorldBank/Yahoo adapter classes, provider routing, provider health metadata, expanded FRED coverage, Yahoo FX/commodity category surfaces, and UI data-coverage visibility. Current ECOS live data is BLOCKED without `ECOS_API_KEY`.
 - Phase 9: tests, validation, smoke checks, documentation. Status: DONE because compile, targeted tests, UI contract, JS syntax, broader Macro/research/topic ruff, full pytest, live API smoke, and browser navigation passed. `npm run build` remains N/A because this static UI has no `package.json` build script.
 
 ## 4. Detailed Task Format
@@ -237,10 +238,12 @@ This document is the source of truth for the Macro implementation. Items are mar
   - `pipelines/macro/providers/base.py`
   - `app/api/routers/macro.py`
 - Expected Behavior:
-  - `/providers`, `/countries`, `/health`, and future placeholder metadata exist without fake data.
+  - `/providers`, `/countries`, `/health`, expanded category APIs, and future placeholder metadata exist without fake data.
 - Implementation Notes:
   - Added ECOS, OECD, World Bank, and Yahoo provider adapters behind the common provider contract.
   - Yahoo FX/commodity/market proxy entries are enabled and route through yfinance.
+  - Expanded default FRED-backed coverage to 69 enabled FRED series plus 5 Yahoo market proxies.
+  - Added visible Macro data coverage UI and new `housing-consumer` and `financial-conditions` category surfaces.
   - ECOS/OECD/World Bank entries are registry-visible but disabled in default dashboards to avoid surprise key/network dependencies; direct series fetches can use their adapters.
 - Extension Notes:
   - ECOS requires `ECOS_API_KEY`; OECD/World Bank registry entries can be enabled once operator latency and country coverage policy are chosen.
@@ -253,6 +256,7 @@ This document is the source of truth for the Macro implementation. Items are mar
   - `Invoke-WebRequest http://127.0.0.1:8015/api/v1/macro/commodities`
 - Result Notes:
   - DONE. Mocked provider tests cover World Bank, OECD SDMX, Yahoo/yfinance, and ECOS missing-key behavior. Live smoke on port 8015 returned `fx-dollar count=1 quality=ok providers=yahoo`, `commodities count=2 quality=ok providers=yahoo`, and provider metadata listed `data_mart,fred,ecos,oecd,worldbank,yahoo,unavailable`.
+  - DONE. 2026-05-09 expansion added 74 enabled registry entries and category surfaces for housing/consumer and financial conditions.
 
 ### [P9-VERIFY-DOCS] Tests, Validation, Final Reconciliation
 - Status: DONE
@@ -391,6 +395,11 @@ Executed commands and results:
 | `python -m ruff check core\schemas\macro.py core\config\settings.py pipelines\macro app\api\routers\macro.py pipelines\orchestration\topic_pipeline.py tests\test_macro_platform.py tests\test_topic_pipeline.py` | PASS |
 | `python -m ruff check core\schemas\macro.py core\config\settings.py pipelines\macro app\api\routers\macro.py pipelines\orchestration\research_pipeline.py pipelines\orchestration\topic_pipeline.py tests\test_macro_platform.py tests\test_topic_pipeline.py` | PASS |
 | `python scripts\check_ui_contract.py --output reports\macro_ui_contract.json` | PASS, missing markers `[]` |
+| `python -m pytest tests\test_macro_platform.py tests\test_ui_routing_contract.py -q` after 2026-05-09 coverage expansion | PASS, 48 tests |
+| `node --check app\web\app.js` after 2026-05-09 coverage expansion | PASS |
+| `python scripts\check_ui_contract.py` after 2026-05-09 coverage expansion | PASS, missing markers `[]` |
+| Live API smoke on `http://127.0.0.1:8002/api/v1/macro/health` after 2026-05-09 coverage expansion | PASS: `registry_series=74`, 10 enabled categories |
+| Live Macro refresh for replacement series `BUSINV,DCOILBRENTEU` on `http://127.0.0.1:8002/api/v1/macro/refresh` | PASS: `status=success`, `fred:ok`, 1,318 rows inserted, no provider errors |
 | FRED-disabled API smoke with `FRED_API_KEY=0` | PASS: series/overview/regime/data-quality/brief return unavailable/unknown/fallback without fake observations |
 | Live API smoke on `http://127.0.0.1:8013` | PASS: health/UI/macro health/series/overview/regime/data-quality/brief returned HTTP 200 |
 | Live API smoke on `http://127.0.0.1:8014` | PASS: health/report/guarded brief returned HTTP 200; guarded live LLM rejected ungrounded `4.5%` and returned fallback |
@@ -399,6 +408,7 @@ Executed commands and results:
 | Browser smoke on `http://host.docker.internal:8013/ui/#macro` | PASS: Macro tab rendered, active tab state correct, table/chart/regime/impact/advisory/fallback visible, console warnings/errors 0 |
 | Browser smoke on `http://host.docker.internal:8014/ui/#macro` | PASS: Macro tab rendered, Export Report button visible, active tab state correct, table/chart/regime/impact/advisory visible, console warnings/errors 0 |
 | Browser smoke on `http://host.docker.internal:8015/ui/#macro` | PASS: Browser MCP navigation reached the Macro route and reported page title `FinGPT Local Research Assistant` |
+| Browser smoke on `http://127.0.0.1:8002/ui/?fresh=macroExpandedCoverage#macro` | PASS: coverage card showed 74 active series, housing/consumer showed 8 indicators, financial conditions showed 4 indicators, console warnings/errors 0 |
 
 Failed or limited verification:
 
@@ -496,3 +506,25 @@ Changed files for Macro implementation:
 Out-of-scope worktree note:
 
 - `pipelines/strategies/generator.py`, `tests/test_quant_lab_api.py`, and untracked `tests/test_strategy_generator.py` are present in the working tree but are not part of this Macro implementation scope.
+
+## 12. Macro Data Auto Refresh Extension
+
+Status values below follow the same `DONE` / `PARTIAL` / `BLOCKED` / `NOT_DONE` convention.
+
+| ID | Task | Target Files | Status | Evidence |
+|---|---|---|---|---|
+| M10-1 | Refresh every active Macro-tab series from the Macro registry, not only the legacy 6-series FRED list. | `pipelines/data_mart/jobs/update_macro_daily.py` | DONE | `update_macro_platform_data()` stores all selected active FRED and Yahoo proxy series under UI-facing series ids. |
+| M10-2 | Preserve explicit unavailable states for providers that require keys or are disabled. | `pipelines/data_mart/jobs/update_macro_daily.py`, `pipelines/macro/providers/*` | DONE | ECOS remains unavailable without `ECOS_API_KEY`; disabled providers are not silently fabricated. |
+| M10-3 | Add a manual Macro refresh API. | `app/api/routers/macro.py`, `core/schemas/macro.py` | DONE | `POST /api/v1/macro/refresh` returns run id, provider statuses, stored rows, and refreshed data quality. |
+| M10-4 | Add Macro auto refresh to the existing in-process data mart scheduler. | `core/config/settings.py`, `pipelines/data_mart/scheduler.py` | DONE | Scheduler status now lists `macro_platform_data` and runs SEC plus Macro jobs without blocking startup. |
+| M10-5 | Make the Macro tab refresh button update provider data instead of only reloading cached UI data. | `app/web/app.js`, `scripts/check_ui_contract.py`, `tests/test_ui_routing_contract.py` | DONE | `refreshMacroData()` calls the refresh API, clears stale UI state, reloads Macro panels, and shows auto-refresh status. |
+| M10-6 | Repair Korean Macro brief/report output so the tab does not surface mojibake. | `pipelines/macro/prompts.py`, `pipelines/macro/ai_brief.py`, `pipelines/macro/macro_service.py`, `tests/test_macro_platform.py` | DONE | Fallback brief, prompts, warnings, and exported report now use Korean text with language-guard tests. |
+| M10-7 | Keep CLI daily update behavior aligned with the Macro tab. | `scripts/daily_update.py` | DONE | `--skip-macro` still works; the default Macro job now calls `update_macro_platform_data()`. |
+
+Operational notes:
+
+- `DATA_MART_AUTO_REFRESH_ENABLED=false` disables the in-process scheduler.
+- `DATA_MART_AUTO_REFRESH_MACRO_ENABLED=false` disables only the Macro data job.
+- `DATA_MART_AUTO_REFRESH_MACRO_LOOKBACK_DAYS` controls the historical window used when the scheduler refreshes Macro data.
+- FRED uses the configured API key when available. The Macro refresh job also supports a conservative public FRED CSV fallback when no key is configured, while the interactive Macro provider path still reports missing FRED credentials instead of fabricating observations.
+- The scheduler is process-local. It refreshes while the FastAPI app is running; external OS/CI scheduling can still call `scripts/daily_update.py` if a detached job is required.

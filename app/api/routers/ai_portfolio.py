@@ -13,6 +13,7 @@ from core.schemas.ai_portfolio import (
     RebalanceActionRequest,
     RebalanceCheckRequest,
     ReportGenerateRequest,
+    SecDataRefreshRequest,
     SnapshotJobRequest,
 )
 from pipelines.ai_portfolio import service
@@ -75,6 +76,16 @@ async def run_data_activation(request: DataActivationRequest) -> dict[str, Any]:
 async def run_snapshot_job(request: SnapshotJobRequest) -> dict[str, Any]:
     try:
         return service.run_snapshot_job(request)
+    except KeyError as exc:
+        raise _not_found("policy", str(exc).strip("'"))
+    except (ValueError, ValidationError) as exc:
+        raise _unprocessable(exc)
+
+
+@router.post("/operations/sec-refresh")
+async def run_sec_data_refresh(request: SecDataRefreshRequest) -> dict[str, Any]:
+    try:
+        return service.run_sec_data_refresh(request)
     except KeyError as exc:
         raise _not_found("policy", str(exc).strip("'"))
     except (ValueError, ValidationError) as exc:

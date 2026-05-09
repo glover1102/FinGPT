@@ -42,6 +42,13 @@ class SourceValidationTests(unittest.TestCase):
         self.assertIn("unsupported", error.lower())
         self.assertIn("rss", error)
 
+    def test_financial_and_filing_sources_are_supported(self):
+        request = AnalysisRequest(ticker="MSFT", question="Test", sources=["fundamentals", "filings"])
+
+        error = precheck.run_execution_precheck(request)
+
+        self.assertIsNone(error)
+
 
 class CollectionCoordinatorTests(unittest.TestCase):
     def setUp(self):
@@ -73,6 +80,57 @@ class CollectionCoordinatorTests(unittest.TestCase):
         self.assertEqual(statuses["news"], "ok")
         self.assertEqual(statuses["report"], "disabled")
         self.assertFalse(outcome.degraded)
+        self.assertEqual(len(outcome.documents), 1)
+
+    def test_collect_data_supports_explicit_fundamentals_source(self):
+        result = collector.SourceCollectionResult(
+            source="fundamentals",
+            status="ok",
+            doc_count=1,
+            elapsed_s=0.2,
+            detail="fundamentals ok",
+        )
+        doc = {
+            **_news_doc("fundamentals-doc"),
+            "doc_type": "fundamentals_snapshot",
+            "source": "yfinance:fundamentals",
+        }
+
+        with patch.object(collector, "load_settings", return_value=self.settings), \
+             patch.object(collector, "_collect_fundamentals_source", return_value=(result, [doc])), \
+             patch.object(collector, "write_documents"):
+            outcome = collector.collect_data("MSFT", ["fundamentals"], 30)
+
+        self.assertEqual(outcome.source_results[0].source, "fundamentals")
+        self.assertEqual(outcome.source_results[0].status, "ok")
+        self.assertEqual(outcome.provider_results[0].source, "fundamentals:yfinance")
+        self.assertEqual(len(outcome.documents), 1)
+
+    def test_collect_data_supports_explicit_filings_source(self):
+        result = collector.SourceCollectionResult(
+            source="filings",
+            status="ok",
+            doc_count=1,
+            elapsed_s=0.3,
+            detail="SEC filings collected.",
+        )
+        provider = collector.SourceCollectionResult(
+            source="filings:sec_filings",
+            status="ok",
+            doc_count=1,
+            elapsed_s=0.3,
+            detail="SEC filings collected.",
+        )
+        doc = {**_news_doc("filing-doc"), "source": "sec_filings"}
+
+        with patch.object(collector, "load_settings", return_value=self.settings), \
+             patch.object(collector, "_collect_filings_source", return_value=(result, [doc], provider)), \
+             patch.object(collector, "write_documents"):
+            outcome = collector.collect_data("MSFT", ["filings"], 30)
+
+        self.assertEqual(outcome.source_results[0].source, "filings")
+        self.assertEqual(outcome.source_results[0].status, "ok")
+        self.assertEqual(outcome.provider_results[0].source, "filings:sec_filings")
         self.assertEqual(len(outcome.documents), 1)
 
     def test_collect_data_prefers_sec_when_yahoo_returns_too_few_docs(self):
@@ -621,6 +679,7 @@ class NoContextPipelineTests(unittest.IsolatedAsyncioTestCase):
              patch.object(research_pipeline, "ingest_documents"), \
              patch.object(research_pipeline, "retrieve_context", return_value=retrieved), \
              patch.object(research_pipeline, "retrieve_context_multi", return_value=retrieved), \
+             patch.object(research_pipeline, "_should_attach_macro_platform_context", return_value=False), \
              patch.object(research_pipeline, "run_inference", return_value=raw_output) as inference_mock, \
              patch.object(research_pipeline, "build_report", return_value=("md", "html")), \
              patch.object(research_pipeline, "save_outputs"):
@@ -676,6 +735,7 @@ class NoContextPipelineTests(unittest.IsolatedAsyncioTestCase):
              patch.object(research_pipeline, "ingest_documents", side_effect=RuntimeError("legacy sparse mismatch")), \
              patch.object(research_pipeline, "retrieve_context", return_value=retrieved), \
              patch.object(research_pipeline, "retrieve_context_multi", return_value=retrieved), \
+             patch.object(research_pipeline, "_should_attach_macro_platform_context", return_value=False), \
              patch.object(research_pipeline, "run_inference", return_value=raw_output) as inference_mock, \
              patch.object(research_pipeline, "build_report", return_value=("md", "html")), \
              patch.object(research_pipeline, "save_outputs"):

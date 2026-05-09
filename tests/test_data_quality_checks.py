@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from pipelines.data_mart.jobs.quality_checks import run_data_quality_checks
 from pipelines.data_mart.models import MacroObservation, PriceBar
 from pipelines.data_mart.storage import repository
@@ -45,10 +47,11 @@ def test_quality_checks_warn_for_stale_macro(tmp_path) -> None:
 
 def test_quality_checks_use_series_specific_macro_freshness_thresholds(tmp_path) -> None:
     db_path = tmp_path / "research_mart.db"
+    today = datetime.now(timezone.utc).date()
     repository.upsert_macro_observations(
         [
-            MacroObservation(series_id="CPIAUCSL", date="2026-03-01", value=320.0),
-            MacroObservation(series_id="DTWEXBGS", date="2026-04-24", value=125.0),
+            MacroObservation(series_id="CPIAUCSL", date=(today - timedelta(days=60)).isoformat(), value=320.0),
+            MacroObservation(series_id="DTWEXBGS", date=(today - timedelta(days=7)).isoformat(), value=125.0),
         ],
         db_path=db_path,
     )
