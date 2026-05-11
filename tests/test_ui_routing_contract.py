@@ -338,11 +338,18 @@ class UiRoutingContractTests(unittest.TestCase):
             'id="macroPortfolioHintsSurface"',
             'id="macroBriefSurface"',
             'id="macroDataQualitySurface"',
-            '<section class="home-card macro-card macro-hints-card macro-surface">',
-            '<section class="home-card macro-card macro-brief-card macro-surface">',
+            '<section class="home-card macro-card macro-hints-card macro-surface" data-panel-tier="operations">',
+            '<section class="home-card macro-card macro-brief-card macro-surface" data-panel-tier="operations">',
+            'id="dashboardViewControls"',
+            'data-panel-view="overview"',
+            'data-panel-view="details"',
+            'data-panel-view="operations"',
+            'data-panel-view="all"',
             '<button type="button" id="macroBriefGenerate"',
         ]:
             self.assertIn(marker, html)
+        self.assertIn('.dashboard-surface-grid[data-panel-view="overview"]', css)
+        self.assertIn('.dashboard-view-controls', css)
         self.assertLess(
             html.index('class="home-card macro-card macro-hints-card macro-surface"'),
             html.index('class="home-card macro-card macro-brief-card macro-surface"'),

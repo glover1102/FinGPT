@@ -4,7 +4,8 @@ import argparse
 import json
 import os
 import socket
-import subprocess
+# Smoke harness starts a trusted local uvicorn process.
+import subprocess  # nosec B404
 import sys
 import time
 from pathlib import Path
@@ -136,8 +137,8 @@ def _run_playwright_flow(
             failure_path = screenshot_dir / f"macro_ui_smoke_failure_{width}x{height}_{int(time.time())}.png"
             try:
                 page.screenshot(path=str(failure_path), full_page=True)
-            except Exception:
-                pass
+            except Exception as screenshot_exc:  # noqa: BLE001
+                print(f"[macro_ui_smoke] failure screenshot capture failed: {screenshot_exc}", file=sys.stderr)
             return {
                 "status": "failed",
                 "error": str(exc),
@@ -174,7 +175,7 @@ def _start_server(port: int) -> subprocess.Popen[str]:
     env["FINGPT_WEB_PORT"] = str(port)
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
-    return subprocess.Popen(
+    return subprocess.Popen(  # nosec B603
         [
             sys.executable,
             "-m",

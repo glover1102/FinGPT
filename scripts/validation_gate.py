@@ -9,7 +9,8 @@ import json
 import os
 import platform
 import socket
-import subprocess
+# Validation runs trusted local commands without a shell.
+import subprocess  # nosec B404
 import sys
 import time
 import urllib.error
@@ -23,8 +24,8 @@ for _stream_name in ("stdout", "stderr"):
     if hasattr(_stream, "reconfigure"):
         try:
             _stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            print(f"[validation_gate] stream reconfigure failed for {_stream_name}: {exc}", file=sys.stderr)
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -127,7 +128,7 @@ def run_command(
     if extra_env:
         env.update(extra_env)
     try:
-        completed = subprocess.run(
+        completed = subprocess.run(  # nosec B603
             command,
             cwd=str(cwd),
             capture_output=True,
@@ -497,7 +498,7 @@ def _start_validation_server(*, timeout_s: int) -> tuple[subprocess.Popen[str], 
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONPATH"] = str(PROJECT_ROOT) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     env.setdefault("FINGPT_VALIDATION_FAST_INFERENCE", "1")
-    proc: subprocess.Popen[str] = subprocess.Popen(
+    proc: subprocess.Popen[str] = subprocess.Popen(  # nosec B603
         [
             sys.executable,
             "-m",
@@ -706,8 +707,8 @@ def _run_browser_ui_checks(base_url: str, *, timeout_s: int, screenshot_dir: Pat
             try:
                 details["dom_excerpt"] = _clip(page.content(), 2000)
                 details["current_url"] = page.url
-            except Exception:
-                pass
+            except Exception as dom_exc:  # noqa: BLE001
+                details["dom_excerpt_error"] = str(dom_exc)
             raise BrowserUiGateFailure(str(exc), details) from exc
         finally:
             context.close()

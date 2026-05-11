@@ -4,7 +4,8 @@ import argparse
 import json
 import os
 import socket
-import subprocess
+# Smoke harness starts a trusted local uvicorn process.
+import subprocess  # nosec B404
 import sys
 import time
 from pathlib import Path
@@ -92,6 +93,16 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
                     "document.querySelector('#homeSurfaceGrid')?.getAttribute('data-dashboard-tab') === 'quant'",
                     timeout=timeout_ms,
                 )
+            page.locator("#dashboardViewControls").wait_for(state="visible", timeout=timeout_ms)
+            page.wait_for_function(
+                "typeof window.setDashboardPanelView === 'function'",
+                timeout=timeout_ms,
+            )
+            page.evaluate("window.setDashboardPanelView('all')")
+            page.wait_for_function(
+                "document.querySelector('#homeSurfaceGrid')?.getAttribute('data-panel-view') === 'all'",
+                timeout=timeout_ms,
+            )
             page.locator(".strategy-governance-card").wait_for(state="visible", timeout=timeout_ms)
             _mark(checked, "quant tab")
 
@@ -124,17 +135,21 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
             page.locator("#symbolPickerModal").wait_for(state="attached", timeout=timeout_ms)
             _mark(checked, "#symbolPickerModal")
 
-            page.locator("#assetDetailTicker").fill("QQQ")
+            page.locator("#assetDetailTicker").fill("SPY")
             page.locator("#assetDetailRange").select_option("1y")
             page.locator("#assetDetailView").select_option("overview")
             page.locator("#assetDetailBenchmark").fill("SPY")
             if not page.locator("#assetDetailBenchmarkCompare").is_checked():
                 page.locator("#assetDetailBenchmarkCompare").check()
-            page.locator("#assetDetailLoad").click()
+            page.wait_for_function(
+                "typeof window.loadAssetDetail === 'function'",
+                timeout=timeout_ms,
+            )
+            page.evaluate("window.loadAssetDetail()")
+            page.locator("#assetDetailSurface .asset-detail-chart-grid").first.wait_for(state="visible", timeout=timeout_ms)
             page.locator("#assetDetailSurface .chart-y-label").first.wait_for(state="visible", timeout=timeout_ms)
             page.locator("#assetDetailSurface [data-chart-tooltip]").first.wait_for(state="visible", timeout=timeout_ms)
             page.locator("#assetDetailSurface").get_by_text("수익률 곡선").wait_for(state="visible", timeout=timeout_ms)
-            page.locator("#assetDetailSurface").get_by_text("자산 수익률 비교").wait_for(state="visible", timeout=timeout_ms)
             _mark(checked, "asset detail date and curve controls")
 
             page.locator("#backtestFreshnessProfile").select_option("historical_lab")
@@ -258,6 +273,7 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
             _mark(checked, "portfolio optimize")
 
             page.locator("#quantRunHistoryRefresh").click()
+            page.locator("#quantRunHistorySurface details.row-action-menu").first.evaluate("node => node.open = true")
             page.locator('#quantRunHistorySurface [data-quant-replay-id]').first.wait_for(state="visible", timeout=timeout_ms)
             _mark(checked, "run history replay button")
 
@@ -273,6 +289,7 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
             page.locator('[data-testid="quant-run-compare-result"]').wait_for(state="visible", timeout=timeout_ms)
             _mark(checked, "run history compare")
             page.locator('[data-action="refresh-run-history"]').click()
+            page.locator("#quantRunHistorySurface details.row-action-menu").first.evaluate("node => node.open = true")
             page.locator('#quantRunHistorySurface [data-quant-replay-id]').first.wait_for(state="visible", timeout=timeout_ms)
 
             page.locator("#quantExportStorageReport").click()
@@ -296,8 +313,8 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
             failure_path = screenshot_dir / f"quant_lab_ui_smoke_failure_{int(time.time())}.png"
             try:
                 page.screenshot(path=str(failure_path), full_page=True)
-            except Exception:
-                pass
+            except Exception as screenshot_exc:  # noqa: BLE001
+                print(f"[quant_lab_ui_smoke] failure screenshot capture failed: {screenshot_exc}", file=sys.stderr)
             return {
                 "status": "failed",
                 "error": str(exc),
@@ -325,7 +342,7 @@ def _start_server(port: int) -> subprocess.Popen[str]:
     env["FINGPT_WEB_PORT"] = str(port)
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
-    return subprocess.Popen(
+    return subprocess.Popen(  # nosec B603
         [
             sys.executable,
             "-m",

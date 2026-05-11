@@ -263,6 +263,7 @@ const els = {
   homeNewsRefresh: document.getElementById("homeNewsRefresh"),
   homeDashboardTabs: document.getElementById("homeDashboardTabs"),
   dashboardContextStrip: document.getElementById("dashboardContextStrip"),
+  dashboardViewControls: document.getElementById("dashboardViewControls"),
   homeSurfaceGrid: document.getElementById("homeSurfaceGrid"),
   marketDashboardTab: document.getElementById("marketDashboardTab"),
   macroDashboardTab: document.getElementById("macroDashboardTab"),
@@ -538,6 +539,13 @@ const state = {
   dashboardNewsCategory: "all",
   marketOverview: null,
   activeDashboardTab: "market",
+  dashboardPanelViewByTab: {
+    market: "all",
+    macro: "overview",
+    quant: "overview",
+    forecast: "overview",
+    "ai-portfolio": "overview",
+  },
   macroLoaded: false,
   macroLoading: false,
   macroOverview: null,
@@ -2831,6 +2839,38 @@ function setDashboardContextStrip(tab = "market") {
     .join("");
 }
 
+const DASHBOARD_PANEL_VIEWS = new Set(["overview", "details", "operations", "all"]);
+
+function panelViewForTab(tab = "market") {
+  return state.dashboardPanelViewByTab?.[tab] || (tab === "market" ? "all" : "overview");
+}
+
+function updateDashboardViewControls() {
+  if (!els.dashboardViewControls) return;
+  const activeTab = state.activeDashboardTab || "market";
+  const activeView = panelViewForTab(activeTab);
+  const isMarket = activeTab === "market";
+  els.dashboardViewControls.hidden = isMarket;
+  els.dashboardViewControls.querySelectorAll("[data-panel-view]").forEach((button) => {
+    const pressed = !isMarket && button.dataset.panelView === activeView;
+    button.classList.toggle("active", pressed);
+    button.setAttribute("aria-pressed", pressed ? "true" : "false");
+  });
+}
+
+function setDashboardPanelView(view = "overview", options = {}) {
+  const activeTab = options.tab || state.activeDashboardTab || "market";
+  const fallback = activeTab === "market" ? "all" : "overview";
+  const normalized = DASHBOARD_PANEL_VIEWS.has(view) ? view : fallback;
+  if (state.dashboardPanelViewByTab) {
+    state.dashboardPanelViewByTab[activeTab] = normalized;
+  }
+  if (els.homeSurfaceGrid) {
+    els.homeSurfaceGrid.dataset.panelView = activeTab === "market" ? "all" : normalized;
+  }
+  updateDashboardViewControls();
+}
+
 function setCommandPanelCollapsed(collapsed) {
   if (!els.controlPanel || !els.commandPanelToggle) return;
   els.controlPanel.classList.toggle("is-collapsed", collapsed);
@@ -2878,6 +2918,7 @@ function setDashboardTab(tab = "market", options = {}) {
     els.homeSurfaceGrid.dataset.dashboardTab = active;
   }
   setDashboardContextStrip(active);
+  setDashboardPanelView(panelViewForTab(active), { tab: active });
   const buttons = [
     { el: els.marketDashboardTab, tab: "market" },
     { el: els.macroDashboardTab, tab: "macro" },
@@ -7938,7 +7979,7 @@ async function loadQuantRunHistory(force = false) {
       </div>
       <div class="decision-table-wrap">
         <table class="decision-table">
-          <thead><tr><th>Compare</th><th>Run</th><th>Template</th><th>Universe</th><th>Sharpe</th><th>MDD</th><th>Context</th><th>Lookahead</th><th>Reports</th><th>Open</th><th>Replay</th><th>Export</th></tr></thead>
+          <thead><tr><th>Compare</th><th>Run</th><th>Template</th><th>Universe</th><th>Sharpe</th><th>MDD</th><th>Context</th><th>Lookahead</th><th>Actions</th></tr></thead>
           <tbody>
             ${items.map((item) => {
               const metrics = item.metrics || {};
@@ -7955,12 +7996,17 @@ async function loadQuantRunHistory(force = false) {
                   <td>${escapeHtml(fmtMetricRatio(metrics.max_drawdown))}</td>
                   <td>${escapeHtml(policy.profile || "-")}${configHash ? ` · ${escapeHtml(configHash)}` : ""}</td>
                   <td><span class="table-status ${diagnostics.lookahead_safe ? "ok" : "fail"}">${diagnostics.lookahead_safe ? "safe" : "check"}</span></td>
-                  <td><button type="button" class="linkish" data-testid="quant-replay-reports" aria-label="Replay reports ${escapeHtml(item.run_id || "")}" data-quant-replay-reports-id="${escapeHtml(item.run_id || "")}">${escapeHtml(_fmtNumber(item.replay_reports?.count || 0))}</button></td>
-                  <td><button type="button" class="linkish" data-testid="quant-run-open" aria-label="Open quant run ${escapeHtml(item.run_id || "")}" data-quant-run-id="${escapeHtml(item.run_id || "")}">open</button></td>
-                  <td><button type="button" class="linkish" data-testid="quant-replay-compare" aria-label="Replay compare ${escapeHtml(item.run_id || "")}" data-quant-replay-id="${escapeHtml(item.run_id || "")}">compare</button></td>
                   <td>
-                    <button type="button" class="linkish" data-testid="quant-run-export-jsonl" aria-label="JSONL export ${escapeHtml(item.run_id || "")}" data-quant-export-id="${escapeHtml(item.run_id || "")}" data-format="jsonl">jsonl</button>
-                    <button type="button" class="linkish" data-testid="quant-run-export-parquet" aria-label="Parquet export ${escapeHtml(item.run_id || "")}" title="Parquet 내보내기는 pandas와 pyarrow 또는 fastparquet가 필요합니다." data-quant-export-id="${escapeHtml(item.run_id || "")}" data-format="parquet">parquet</button>
+                    <details class="row-action-menu">
+                      <summary>Actions</summary>
+                      <div class="row-action-list">
+                        <button type="button" class="linkish" data-testid="quant-replay-reports" aria-label="Replay reports ${escapeHtml(item.run_id || "")}" data-quant-replay-reports-id="${escapeHtml(item.run_id || "")}">reports ${escapeHtml(_fmtNumber(item.replay_reports?.count || 0))}</button>
+                        <button type="button" class="linkish" data-testid="quant-run-open" aria-label="Open quant run ${escapeHtml(item.run_id || "")}" data-quant-run-id="${escapeHtml(item.run_id || "")}">open</button>
+                        <button type="button" class="linkish" data-testid="quant-replay-compare" aria-label="Replay compare ${escapeHtml(item.run_id || "")}" data-quant-replay-id="${escapeHtml(item.run_id || "")}">compare</button>
+                        <button type="button" class="linkish" data-testid="quant-run-export-jsonl" aria-label="JSONL export ${escapeHtml(item.run_id || "")}" data-quant-export-id="${escapeHtml(item.run_id || "")}" data-format="jsonl">jsonl</button>
+                        <button type="button" class="linkish" data-testid="quant-run-export-parquet" aria-label="Parquet export ${escapeHtml(item.run_id || "")}" title="Parquet 내보내기는 pandas와 pyarrow 또는 fastparquet가 필요합니다." data-quant-export-id="${escapeHtml(item.run_id || "")}" data-format="parquet">parquet</button>
+                      </div>
+                    </details>
                   </td>
                 </tr>
               `;
@@ -13479,6 +13525,16 @@ function bindInputs() {
       if (!nextTab) return;
       event.preventDefault();
       setDashboardTab(nextTab, { updateUrl: true });
+    });
+  }
+  if (els.dashboardViewControls) {
+    els.dashboardViewControls.addEventListener("click", (event) => {
+      const rawTarget = event.target;
+      const target = rawTarget?.closest ? rawTarget.closest("[data-panel-view]") : rawTarget;
+      const nextView = target?.dataset?.panelView;
+      if (!nextView) return;
+      event.preventDefault();
+      setDashboardPanelView(nextView);
     });
   }
   window.addEventListener("hashchange", () => {
