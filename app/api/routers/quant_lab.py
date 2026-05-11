@@ -19,6 +19,7 @@ from pipelines.orchestration.quant_lab_pipeline import (
     cleanup_backtest_exports,
     cleanup_cross_run_exports,
     compare_backtest_replay,
+    compare_backtest_runs,
     export_storage_report,
     export_backtest_artifacts,
     feature_preview,
@@ -75,6 +76,16 @@ class QuantStrategyGenerateRequest(BaseModel):
     @classmethod
     def _clean_prompt(cls, value: Any) -> str:
         return str(value or "").strip()
+
+
+class QuantRunCompareRequest(BaseModel):
+    run_ids: list[str] = Field(default_factory=list, min_length=2, max_length=2)
+
+    @field_validator("run_ids", mode="before")
+    @classmethod
+    def _clean_run_ids(cls, value: Any) -> list[str]:
+        raw = value.replace(",", " ").split() if isinstance(value, str) else list(value or [])
+        return [str(item or "").strip() for item in raw if str(item or "").strip()]
 
 
 @router.get("/config")
@@ -168,6 +179,16 @@ async def post_quant_universe_resolve(request: QuantUniverseResolveRequest) -> d
 @router.get("/backtests")
 async def get_quant_backtests(limit: int = 20) -> dict[str, Any]:
     return list_backtest_runs(limit=limit)
+
+
+@router.post("/backtests/compare")
+async def post_quant_backtests_compare(request: QuantRunCompareRequest) -> dict[str, Any]:
+    try:
+        return compare_backtest_runs(request.run_ids)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/exports/storage")

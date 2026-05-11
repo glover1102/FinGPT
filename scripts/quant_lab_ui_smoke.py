@@ -9,6 +9,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from urllib.request import urlopen
 
 if __package__ in (None, ""):
@@ -78,10 +79,19 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
         page.set_default_timeout(timeout_ms)
         page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
         try:
-            page.goto(f"{base_url.rstrip('/')}/ui/", wait_until="domcontentloaded", timeout=timeout_ms)
-            page.locator("#quantLabTab").click()
-            if page.locator("#homeSurfaceGrid").get_attribute("data-dashboard-tab") != "quant":
-                raise AssertionError("quant dashboard tab did not activate")
+            page.goto(f"{base_url.rstrip('/')}/ui/#quant-lab", wait_until="commit", timeout=timeout_ms)
+            page.locator("#quantLabTab").wait_for(state="visible", timeout=timeout_ms)
+            try:
+                page.wait_for_function(
+                    "document.querySelector('#homeSurfaceGrid')?.getAttribute('data-dashboard-tab') === 'quant'",
+                    timeout=min(timeout_ms, 10000),
+                )
+            except Exception:
+                page.locator("#quantLabTab").click()
+                page.wait_for_function(
+                    "document.querySelector('#homeSurfaceGrid')?.getAttribute('data-dashboard-tab') === 'quant'",
+                    timeout=timeout_ms,
+                )
             page.locator(".strategy-governance-card").wait_for(state="visible", timeout=timeout_ms)
             _mark(checked, "quant tab")
 
@@ -123,8 +133,8 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
             page.locator("#assetDetailLoad").click()
             page.locator("#assetDetailSurface .chart-y-label").first.wait_for(state="visible", timeout=timeout_ms)
             page.locator("#assetDetailSurface [data-chart-tooltip]").first.wait_for(state="visible", timeout=timeout_ms)
-            page.locator("text=수익률 곡선").wait_for(state="visible", timeout=timeout_ms)
-            page.locator("text=자산 수익률 비교").wait_for(state="visible", timeout=timeout_ms)
+            page.locator("#assetDetailSurface").get_by_text("수익률 곡선").wait_for(state="visible", timeout=timeout_ms)
+            page.locator("#assetDetailSurface").get_by_text("자산 수익률 비교").wait_for(state="visible", timeout=timeout_ms)
             _mark(checked, "asset detail date and curve controls")
 
             page.locator("#backtestFreshnessProfile").select_option("historical_lab")
@@ -251,6 +261,20 @@ def _run_playwright_flow(base_url: str, *, timeout_s: int, screenshot_dir: Path)
             page.locator('#quantRunHistorySurface [data-quant-replay-id]').first.wait_for(state="visible", timeout=timeout_ms)
             _mark(checked, "run history replay button")
 
+            compare_boxes = page.locator('[data-testid="quant-run-compare"]')
+            if compare_boxes.count() < 2:
+                raise AssertionError("run history compare requires at least two saved runs")
+            compare_boxes.nth(0).check()
+            compare_boxes.nth(1).check()
+            compare_button = page.locator('[data-testid="quant-run-compare-selected"]')
+            if compare_button.is_disabled():
+                raise AssertionError("run history compare button stayed disabled after selecting two runs")
+            compare_button.click()
+            page.locator('[data-testid="quant-run-compare-result"]').wait_for(state="visible", timeout=timeout_ms)
+            _mark(checked, "run history compare")
+            page.locator('[data-action="refresh-run-history"]').click()
+            page.locator('#quantRunHistorySurface [data-quant-replay-id]').first.wait_for(state="visible", timeout=timeout_ms)
+
             page.locator("#quantExportStorageReport").click()
             page.locator("text=cross-run export storage report").wait_for(state="visible", timeout=timeout_ms)
             _mark(checked, "cross-run export storage report")
@@ -325,15 +349,25 @@ def _start_server(port: int) -> subprocess.Popen[str]:
 def _wait_for_health(base_url: str, *, timeout_s: int) -> None:
     deadline = time.time() + timeout_s
     last_error = ""
+    health_url = _validated_health_url(base_url)
     while time.time() < deadline:
         try:
-            with urlopen(f"{base_url.rstrip('/')}/api/v1/health", timeout=3) as response:
+            # URL is limited to http(s) health probes before urlopen.
+            with urlopen(health_url, timeout=3) as response:  # nosec
                 if response.status == 200:
                     return
         except Exception as exc:  # noqa: BLE001
             last_error = str(exc)
         time.sleep(0.5)
     raise RuntimeError(f"server did not become healthy at {base_url}: {last_error}")
+
+
+def _validated_health_url(base_url: str) -> str:
+    url = f"{base_url.rstrip('/')}/api/v1/health"
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(f"unsupported health check URL: {url!r}")
+    return url
 
 
 def _stop_server(proc: subprocess.Popen[str]) -> None:

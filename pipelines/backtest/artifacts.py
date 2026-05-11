@@ -10,7 +10,7 @@ from typing import Any
 
 def build_run_id(template: str, config: dict[str, Any]) -> str:
     seed = json.dumps(config, sort_keys=True, ensure_ascii=True, default=str)
-    digest = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:8]
+    digest = hashlib.sha1(seed.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     clean_template = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in str(template or "quant"))
     return f"qlab_{stamp}_{clean_template}_{digest}"
@@ -66,7 +66,8 @@ def write_backtest_artifacts(
 
 def _stable_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha1(
-        json.dumps(payload, sort_keys=True, ensure_ascii=True, default=str).encode("utf-8")
+        json.dumps(payload, sort_keys=True, ensure_ascii=True, default=str).encode("utf-8"),
+        usedforsecurity=False,
     ).hexdigest()
 
 

@@ -25,10 +25,15 @@ const API = {
   evalDashboard: "/api/v1/eval/dashboard",
   dashboardNews: "/api/v1/dashboard/news?limit=20",
   dashboardMarket: "/api/v1/dashboard/market",
+  dashboardMarketOverview: "/api/v1/dashboard/market/overview",
   dashboardEquityHeatmap: "/api/v1/dashboard/equity-heatmap",
   macroSeriesList: "/api/v1/macro/series",
   macroSeriesSearch: (query, limit = 12) => `/api/v1/macro/series/search?q=${encodeURIComponent(query || "")}&limit=${encodeURIComponent(limit)}`,
   macroSeriesDetail: (seriesId, observationLimit = 240) => `/api/v1/macro/series/${encodeURIComponent(seriesId || "")}/detail?observation_limit=${encodeURIComponent(observationLimit)}`,
+  macroDashboard: "/api/v1/macro/dashboard?observation_limit=20",
+  macroProviderHealth: "/api/v1/macro/provider-health",
+  macroScenario: "/api/v1/macro/scenario",
+  macroResearchContext: (ticker) => `/api/v1/macro/research-context?ticker=${encodeURIComponent(ticker || "")}`,
   macroOverview: "/api/v1/macro/overview?compact=true&observation_limit=120",
   macroInterestRates: "/api/v1/macro/interest-rates?compact=true&observation_limit=0",
   macroInflation: "/api/v1/macro/inflation?compact=true&observation_limit=0",
@@ -59,6 +64,7 @@ const API = {
   quantSignals: "/api/v1/quant/signals/generate",
   quantBacktest: "/api/v1/quant/backtest",
   quantBacktests: "/api/v1/quant/backtests",
+  quantBacktestsCompare: "/api/v1/quant/backtests/compare",
   quantBacktestBundle: (runId) => `/api/v1/quant/backtest/${encodeURIComponent(runId)}/bundle`,
   quantBacktestReplay: (runId) => `/api/v1/quant/backtest/${encodeURIComponent(runId)}/replay`,
   quantBacktestReplayReports: (runId) => `/api/v1/quant/backtest/${encodeURIComponent(runId)}/replay-reports`,
@@ -83,10 +89,15 @@ const API = {
   forecastFeaturesBuild: "/api/v1/forecast/features/build",
   forecastLeakageCheck: "/api/v1/forecast/leakage/check",
   forecastTrain: "/api/v1/forecast/train",
+  forecastJobs: "/api/v1/forecast/jobs",
+  forecastJob: (jobId) => `/api/v1/forecast/jobs/${encodeURIComponent(jobId)}`,
+  forecastJobCancel: (jobId) => `/api/v1/forecast/jobs/${encodeURIComponent(jobId)}/cancel`,
+  forecastJobRetry: (jobId) => `/api/v1/forecast/jobs/${encodeURIComponent(jobId)}/retry`,
   forecastAiInterpretation: "/api/v1/forecast/ai-interpretation",
   forecastAiProviderHealth: "/api/v1/forecast/ai-provider/health",
   forecastVisualization: (experimentId) => `/api/v1/forecast/visualization/${encodeURIComponent(experimentId)}`,
   forecastExperiments: "/api/v1/forecast/experiments",
+  forecastExperiment: (experimentId) => `/api/v1/forecast/experiments/${encodeURIComponent(experimentId)}`,
   forecastRegistry: "/api/v1/forecast/model-registry",
   forecastRegistryAudit: "/api/v1/forecast/model-registry/audit",
   forecastVerifyArtifact: "/api/v1/forecast/model-registry/verify-artifact",
@@ -98,6 +109,7 @@ const API = {
   aiPortfolioInvestmentTypes: "/api/v1/ai-portfolio/investment-types",
   aiPortfolioUniverses: "/api/v1/ai-portfolio/universes",
   aiPortfolioStoreStatus: "/api/v1/ai-portfolio/store/status",
+  aiPortfolioDashboard: "/api/v1/ai-portfolio/dashboard",
   aiPortfolioOperations: "/api/v1/ai-portfolio/operations",
   aiPortfolioHydrate: "/api/v1/ai-portfolio/operations/hydrate",
   aiPortfolioSnapshotJob: "/api/v1/ai-portfolio/operations/snapshots",
@@ -260,14 +272,19 @@ const els = {
   homeHeatmap: document.getElementById("homeHeatmap"),
   homeHeatmapMeta: document.getElementById("homeHeatmapMeta"),
   homeHeatmapRefresh: document.getElementById("homeHeatmapRefresh"),
+  marketOverviewMeta: document.getElementById("marketOverviewMeta"),
+  marketTapeSurface: document.getElementById("marketTapeSurface"),
+  marketSignalSurface: document.getElementById("marketSignalSurface"),
   homeMarketList: document.getElementById("homeMarketList"),
   dataHealthRefresh: document.getElementById("dataHealthRefresh"),
   homeDataHealth: document.getElementById("homeDataHealth"),
   macroRefresh: document.getElementById("macroRefresh"),
   macroBriefGenerate: document.getElementById("macroBriefGenerate"),
   macroReportExport: document.getElementById("macroReportExport"),
+  macroLoadStatus: document.getElementById("macroLoadStatus"),
   macroOverviewSurface: document.getElementById("macroOverviewSurface"),
   macroCoverageSurface: document.getElementById("macroCoverageSurface"),
+  macroProviderHealthSurface: document.getElementById("macroProviderHealthSurface"),
   macroIndicatorTable: document.getElementById("macroIndicatorTable"),
   macroChartSurface: document.getElementById("macroChartSurface"),
   macroInterestRatesSurface: document.getElementById("macroInterestRatesSurface"),
@@ -288,6 +305,15 @@ const els = {
   macroSeriesSearchRun: document.getElementById("macroSeriesSearchRun"),
   macroSeriesSearchResults: document.getElementById("macroSeriesSearchResults"),
   macroSeriesDetailSurface: document.getElementById("macroSeriesDetailSurface"),
+  macroProviderFilter: document.getElementById("macroProviderFilter"),
+  macroCategoryFilter: document.getElementById("macroCategoryFilter"),
+  macroCompareSurface: document.getElementById("macroCompareSurface"),
+  macroScenarioSurface: document.getElementById("macroScenarioSurface"),
+  macroScenarioResult: document.getElementById("macroScenarioResult"),
+  macroResearchPreviewSurface: document.getElementById("macroResearchPreviewSurface"),
+  macroResearchTicker: document.getElementById("macroResearchTicker"),
+  macroResearchPreviewRun: document.getElementById("macroResearchPreviewRun"),
+  macroResearchPreviewResult: document.getElementById("macroResearchPreviewResult"),
   assetDetailTicker: document.getElementById("assetDetailTicker"),
   assetDetailTickerOpen: document.getElementById("assetDetailTickerOpen"),
   assetDetailRange: document.getElementById("assetDetailRange"),
@@ -356,6 +382,7 @@ const els = {
   forecastHydrateDataset: document.getElementById("forecastHydrateDataset"),
   forecastBuildFeatures: document.getElementById("forecastBuildFeatures"),
   forecastRunTrain: document.getElementById("forecastRunTrain"),
+  forecastQueueJob: document.getElementById("forecastQueueJob"),
   forecastGenerateAi: document.getElementById("forecastGenerateAi"),
   forecastGenerateProviderAi: document.getElementById("forecastGenerateProviderAi"),
   forecastDatasetSurface: document.getElementById("forecastDatasetSurface"),
@@ -375,10 +402,16 @@ const els = {
   forecastDriftSurface: document.getElementById("forecastDriftSurface"),
   forecastModelComparisonRefresh: document.getElementById("forecastModelComparisonRefresh"),
   forecastModelComparisonSurface: document.getElementById("forecastModelComparisonSurface"),
+  forecastJobsRefresh: document.getElementById("forecastJobsRefresh"),
+  forecastJobsSurface: document.getElementById("forecastJobsSurface"),
   forecastHistoryRefresh: document.getElementById("forecastHistoryRefresh"),
   forecastHistorySurface: document.getElementById("forecastHistorySurface"),
   forecastRegistryRefresh: document.getElementById("forecastRegistryRefresh"),
   forecastRegistrySurface: document.getElementById("forecastRegistrySurface"),
+  forecastDetailModal: document.getElementById("forecastDetailModal"),
+  forecastDetailClose: document.getElementById("forecastDetailClose"),
+  forecastDetailTitle: document.getElementById("forecastDetailTitle"),
+  forecastDetailBody: document.getElementById("forecastDetailBody"),
   portfolioTickers: document.getElementById("portfolioTickers"),
   portfolioUniverseOpen: document.getElementById("portfolioUniverseOpen"),
   portfolioUniverseChips: document.getElementById("portfolioUniverseChips"),
@@ -397,6 +430,8 @@ const els = {
   aiPortfolioOverviewSurface: document.getElementById("aiPortfolioOverviewSurface"),
   aiPortfolioOpsRefresh: document.getElementById("aiPortfolioOpsRefresh"),
   aiPortfolioOpsSurface: document.getElementById("aiPortfolioOpsSurface"),
+  aiPortfolioCoverageSurface: document.getElementById("aiPortfolioCoverageSurface"),
+  aiPortfolioSnapshotTimelineSurface: document.getElementById("aiPortfolioSnapshotTimelineSurface"),
   aiPortfolioRefreshPolicies: document.getElementById("aiPortfolioRefreshPolicies"),
   aiPortfolioHydrateData: document.getElementById("aiPortfolioHydrateData"),
   aiPortfolioRetryMissing: document.getElementById("aiPortfolioRetryMissing"),
@@ -494,16 +529,22 @@ const state = {
   streamHasPartial: false,
   historyExpanded: false,
   dashboardLoaded: false,
+  marketOverviewLoaded: false,
   marketLoaded: false,
   dataHealthLoaded: false,
   dashboardHeatmapLoaded: false,
   tradingViewInitialized: false,
   dashboardNewsItems: [],
   dashboardNewsCategory: "all",
+  marketOverview: null,
   activeDashboardTab: "market",
   macroLoaded: false,
   macroLoading: false,
   macroOverview: null,
+  macroDashboard: null,
+  macroProviderHealth: null,
+  macroScenario: null,
+  macroResearchContext: null,
   macroPortfolioHint: null,
   macroDataQuality: null,
   macroRefreshStatus: null,
@@ -525,14 +566,17 @@ const state = {
   symbolPickerTarget: null,
   symbolPickerFilteredSymbols: [],
   quantRunHistoryLoaded: false,
+  quantRunCompareSelection: [],
   lastCrossRunExportCleanupPreview: null,
   forecastLoaded: false,
   forecastModelsLoaded: false,
   forecastModels: [],
   lastForecastPayload: null,
+  forecastJobPollTimer: null,
   chartTooltipBound: false,
   aiPortfolioLoaded: false,
   aiPortfolioOpsLoaded: false,
+  aiPortfolioDashboard: null,
   aiPortfolioInvestmentTypes: [],
   aiPortfolioUniverses: [],
   aiPortfolioPolicies: [],
@@ -1218,6 +1262,18 @@ const KOREAN_SYMBOL_NAMES = Object.fromEntries(symbolNameList(`
 950220|네오이뮨텍
 `));
 
+const KOREAN_ETF_SYMBOLS = symbolList(`
+114800
+252670
+251340
+`);
+
+const KOREAN_ETF_NAMES = Object.fromEntries(symbolNameList(`
+114800|KODEX 인버스
+252670|KODEX 200선물인버스2X
+251340|KODEX 코스닥150선물인버스
+`));
+
 const CRYPTO_SYMBOLS = ["BTC-USD", "ETH-USD"];
 
 const SYMBOL_NAME_OVERRIDES = {
@@ -1324,6 +1380,20 @@ function buildSymbolCatalog() {
       sector: "kr_kosdaq100",
       exchange: "KRX",
       universe: "kr_kosdaq100",
+      rank: idx + 1,
+    });
+  });
+  KOREAN_ETF_SYMBOLS.forEach((code, idx) => {
+    const symbol = `${code}.KS`;
+    const name = KOREAN_ETF_NAMES[code] || code;
+    pushCatalogItem(rows, seen, {
+      symbol,
+      name: `${name} (${code} · KRX ETF)`,
+      type: "etf",
+      country: "KR",
+      sector: "kr_inverse_etf",
+      exchange: "KRX",
+      universe: "kr_inverse_etf",
       rank: idx + 1,
     });
   });
@@ -1910,12 +1980,98 @@ function matchExplicitTickerPrefix(text) {
   return isSupportedExplicitTickerToken(ticker) ? ticker : "";
 }
 
+const MARKET_TOPIC_RULES = [
+  {
+    id: "kr_inverse_etf",
+    label: "Korea inverse ETF topic",
+    marketTerms: ["코스피", "kospi", "코스닥", "kosdaq", "krx", "한국 증시", "국내 증시", "한국 시장"],
+    intentTerms: ["인버스", "inverse", "곱버스", "선물인버스", "하락 베팅", "short kospi", "short korea"],
+    tickers: ["114800.KS", "252670.KS", "251340.KS", "EWY"],
+  },
+  {
+    id: "credit_risk",
+    label: "Credit risk topic",
+    marketTerms: ["credit", "bond", "bonds", "회사채", "신용", "하이일드", "투자등급"],
+    intentTerms: ["spread", "spreads", "widening", "risk", "default", "스프레드", "위험", "리스크", "부도"],
+    tickers: ["HYG", "LQD", "TLT"],
+  },
+  {
+    id: "rates_bonds",
+    label: "Rates and bonds topic",
+    marketTerms: ["rate", "rates", "yield", "treasury", "bond", "bonds", "금리", "채권", "국채"],
+    intentTerms: ["curve", "duration", "attractive", "path", "level", "커브", "듀레이션", "매력", "경로", "수준"],
+    tickers: ["TLT", "IEF", "SHY"],
+  },
+  {
+    id: "commodities",
+    label: "Commodity topic",
+    marketTerms: ["gold", "oil", "crude", "commodity", "gld", "uso", "금", "유가", "원유", "원자재"],
+    intentTerms: ["price", "attractive", "backwardation", "inventory", "가격", "매력", "백워데이션", "재고"],
+    tickers: ["GLD", "USO"],
+  },
+  {
+    id: "fx_dollar",
+    label: "FX and dollar topic",
+    marketTerms: ["fx", "forex", "dollar", "usd", "eurusd", "환율", "달러", "유로"],
+    intentTerms: ["rate differential", "policy divergence", "strong", "weak", "강세", "약세", "금리차", "정책 차이"],
+    tickers: ["EURUSD=X", "DXY"],
+  },
+  {
+    id: "crypto",
+    label: "Crypto topic",
+    marketTerms: ["bitcoin", "btc", "ethereum", "eth", "crypto", "비트코인", "이더리움", "암호화폐"],
+    intentTerms: ["volatility", "etf flow", "flow", "risk", "변동성", "etf", "자금", "리스크"],
+    tickers: ["BTC-USD", "ETH-USD"],
+  },
+];
+
+function textContainsAny(text, terms) {
+  return terms.some((term) => text.includes(String(term || "").toLowerCase()));
+}
+
+function inferMarketTopicFromQuestion(question) {
+  const text = String(question || "");
+  const lower = text.toLowerCase();
+  for (const rule of MARKET_TOPIC_RULES) {
+    if (textContainsAny(lower, rule.marketTerms) && textContainsAny(lower, rule.intentTerms)) {
+      return rule;
+    }
+  }
+  return null;
+}
+
+function questionMentionsTicker(question, ticker) {
+  const clean = normalizeTickerToken(ticker);
+  if (!clean) return false;
+  const upper = String(question || "").toUpperCase();
+  if (upper.includes(clean)) return true;
+  if (clean.endsWith(".KS") || clean.endsWith(".KQ")) {
+    return upper.includes(clean.split(".", 1)[0]);
+  }
+  return false;
+}
+
+function shouldSuppressTypedTickersForTopic({ mode, compare, question, typedTickers }) {
+  if (compare || mode === "ticker" || !typedTickers.length) return { suppress: false, topic: null };
+  const topic = inferMarketTopicFromQuestion(question);
+  if (!topic) return { suppress: false, topic: null };
+  const explicitlyMentioned = typedTickers.some((ticker) => questionMentionsTicker(question, ticker));
+  return { suppress: !explicitlyMentioned, topic };
+}
+
 function normalizeResearchIntent({ tickerRaw, question, modeHint, compare }) {
   const cleanQuestion = String(question || "").trim();
   const mode = ["auto", "ticker", "topic"].includes(modeHint) ? modeHint : "auto";
   const typedTickers = parseTickerInput(tickerRaw);
-  const inferred = (!typedTickers.length && !compare) ? inferTickerFromQuestion(cleanQuestion) : null;
-  const tickers = typedTickers.length ? typedTickers : (inferred ? [inferred.ticker] : []);
+  const topicGuard = shouldSuppressTypedTickersForTopic({
+    mode,
+    compare,
+    question: cleanQuestion,
+    typedTickers,
+  });
+  const effectiveTypedTickers = topicGuard.suppress ? [] : typedTickers;
+  const inferred = (!effectiveTypedTickers.length && !compare && !topicGuard.topic) ? inferTickerFromQuestion(cleanQuestion) : null;
+  const tickers = effectiveTypedTickers.length ? effectiveTypedTickers : (inferred ? [inferred.ticker] : []);
   const ticker = tickers[0] || "";
   const intentKind = compare
     ? "compare"
@@ -1935,6 +2091,9 @@ function normalizeResearchIntent({ tickerRaw, question, modeHint, compare }) {
     question: cleanQuestion,
     intent_kind: intentKind,
     extracted_ticker: inferred?.ticker || "",
+    topic_hint: topicGuard.topic?.id || "",
+    topic_related_tickers: topicGuard.topic?.tickers || [],
+    stale_ticker_ignored: topicGuard.suppress ? typedTickers.join(",") : "",
     route_hint: compare ? "compare" : "universal",
   };
 }
@@ -2589,6 +2748,32 @@ function setFormNotice(message, level = "info") {
   els.formNotice.textContent = message;
   els.formNotice.classList.remove("hidden", "warning", "error", "info");
   els.formNotice.classList.add(level);
+}
+
+function refreshRoutingNotice() {
+  if (!els.ticker || !els.question) return;
+  const raw = els.ticker.value.trim();
+  const question = els.question.value.trim();
+  if (!raw || !question) {
+    setFormNotice("");
+    return;
+  }
+  const selectedMode = Array.from(els.researchModeInputs())
+    .find((i) => i.checked)?.value || "auto";
+  const intent = normalizeResearchIntent({
+    tickerRaw: raw,
+    question,
+    modeHint: selectedMode,
+    compare: !!(els.compareMode && els.compareMode.checked),
+  });
+  if (!intent.stale_ticker_ignored) {
+    setFormNotice("");
+    return;
+  }
+  const proxies = Array.isArray(intent.topic_related_tickers) && intent.topic_related_tickers.length
+    ? ` 관련 프록시: ${intent.topic_related_tickers.join(", ")}.`
+    : "";
+  setFormNotice(`${intent.stale_ticker_ignored}는 질문에 직접 언급되지 않아 ${intent.topic_hint || "주제"} 분석으로 처리합니다.${proxies}`, "info");
 }
 
 function setText(selector, text) {
@@ -3478,6 +3663,113 @@ async function loadDashboardMarket(force = false) {
   }
 }
 
+function marketTapeSortKey(item) {
+  const order = ["SPY", "QQQ", "TLT", "HYG", "LQD", "GLD", "BTC-USD", "DX-Y.NYB", "^TNX"];
+  const idx = order.indexOf(String(item?.symbol || "").toUpperCase());
+  return idx >= 0 ? idx : order.length;
+}
+
+function marketReturnClass(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "muted";
+  if (n > 0) return "ok";
+  if (n < 0) return "fail";
+  return "muted";
+}
+
+function renderMarketTape(overview) {
+  const tape = Array.isArray(overview?.market_tape) ? overview.market_tape.slice().sort((a, b) => marketTapeSortKey(a) - marketTapeSortKey(b)) : [];
+  const freshness = overview?.freshness_summary || {};
+  const heatmap = overview?.heatmap_summary || {};
+  if (els.marketOverviewMeta) {
+    const asOf = overview?.raw_market_meta?.generated_at ? fmtDate(overview.raw_market_meta.generated_at) : "기준시각 미확인";
+    els.marketOverviewMeta.textContent = `${freshness.decision_usable_count || 0}/${freshness.item_count || 0} usable · ${heatmap.status || "heatmap"} · ${asOf}`;
+  }
+  if (!els.marketTapeSurface) return;
+  if (!tape.length) {
+    els.marketTapeSurface.innerHTML = decisionEmpty("표시할 시장 테이프 데이터가 없습니다.");
+    return;
+  }
+  const metrics = [
+    decisionMetric("Market freshness", `${freshness.decision_usable_count || 0}/${freshness.item_count || 0}`, freshness.status || "unavailable"),
+    decisionMetric("Heatmap universe", heatmap.universe_size ? `${heatmap.decision_usable_count || 0}/${heatmap.universe_size}` : "not loaded", heatmap.status || "unavailable"),
+    decisionMetric("Latest heatmap", heatmap.latest_as_of ? fmtDate(heatmap.latest_as_of) : "미확인", heatmap.status || "unavailable"),
+    decisionMetric("Advisory", overview?.advisory_only ? "자문 전용" : "점검 필요", overview?.advisory_only ? "ok" : "warn"),
+  ].join("");
+  const rows = tape.map((item) => {
+    const cls = item.is_decision_usable ? marketReturnClass(item.return_1d) : "warn";
+    const freshnessLabel = FRESHNESS_LABELS[item.freshness_status] || item.freshness_status || "unknown";
+    return `
+      <article class="market-tape-item ${escapeHtml(cls)} ${item.is_decision_usable ? "" : "stale"}">
+        <div class="market-tape-symbol-row">
+          <strong>${escapeHtml(item.symbol || "")}</strong>
+          <span>${escapeHtml(item.asset_class || "")}</span>
+        </div>
+        <div class="market-tape-label">${escapeHtml(item.label || "")}</div>
+        <div class="market-tape-price">${item.price === null || item.price === undefined ? "-" : escapeHtml(String(item.price))}</div>
+        <div class="market-tape-return ${escapeHtml(cls)}">1D ${escapeHtml(fmtPct(item.return_1d))}</div>
+        <div class="market-tape-meta">
+          <span>${escapeHtml(freshnessLabel)}</span>
+          <span>${escapeHtml(item.source || "unknown")}</span>
+        </div>
+      </article>
+    `;
+  }).join("");
+  const warning = [freshness.warning, heatmap.warning].filter(Boolean).join(" ");
+  els.marketTapeSurface.innerHTML = `
+    <div class="decision-metric-grid dense">${metrics}</div>
+    ${warning ? `<div class="decision-summary warn">${escapeHtml(warning)}</div>` : ""}
+    <div class="market-tape-grid">${rows}</div>
+  `;
+}
+
+function renderMarketSignals(overview) {
+  if (!els.marketSignalSurface) return;
+  const signals = Array.isArray(overview?.signals) ? overview.signals : [];
+  if (!signals.length) {
+    els.marketSignalSurface.innerHTML = decisionEmpty("표시할 시장 신호가 없습니다.");
+    return;
+  }
+  els.marketSignalSurface.innerHTML = signals.map((signal) => {
+    const cls = decisionStatusClass(signal.status);
+    const evidence = Array.isArray(signal.evidence) ? signal.evidence.slice(0, 6) : [];
+    return `
+      <article class="market-signal-item ${escapeHtml(cls)}">
+        <div class="decision-status-row">
+          <span class="decision-badge ${escapeHtml(cls)}">${escapeHtml(decisionStatusLabel(signal.status))}</span>
+          <span>${escapeHtml(signal.signal_id || "")}</span>
+        </div>
+        <h4>${escapeHtml(signal.title || "")}</h4>
+        <p>${escapeHtml(signal.summary || "")}</p>
+        <div class="market-signal-evidence">
+          ${evidence.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
+        </div>
+        <div class="market-signal-note">${escapeHtml(signal.interpretation || "")}</div>
+      </article>
+    `;
+  }).join("");
+}
+
+async function loadDashboardMarketOverview(force = false) {
+  if ((!els.marketTapeSurface && !els.marketSignalSurface) || (state.marketOverviewLoaded && !force)) return;
+  if (els.marketTapeSurface) els.marketTapeSurface.innerHTML = '<div class="home-news-empty">시장 테이프를 불러오는 중입니다.</div>';
+  if (els.marketSignalSurface) els.marketSignalSurface.innerHTML = '<div class="home-news-empty">시장 신호를 불러오는 중입니다.</div>';
+  try {
+    const res = await fetch(API.dashboardMarketOverview);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    state.marketOverview = data;
+    renderMarketTape(data);
+    renderMarketSignals(data);
+    state.marketOverviewLoaded = true;
+  } catch (err) {
+    const message = `시장 overview 로드 실패: ${escapeHtml(err.message || err)}`;
+    if (els.marketTapeSurface) els.marketTapeSurface.innerHTML = `<div class="home-news-empty">${message}</div>`;
+    if (els.marketSignalSurface) els.marketSignalSurface.innerHTML = `<div class="home-news-empty">${message}</div>`;
+    if (els.marketOverviewMeta) els.marketOverviewMeta.textContent = "overview load failed";
+  }
+}
+
 function decisionStatusClass(status) {
   const key = String(status || "").toLowerCase();
   if (["ok", "success"].includes(key)) return "ok";
@@ -4130,11 +4422,39 @@ const MACRO_CATEGORY_LABELS = {
   growth: "성장",
   labor: "고용",
   housing_consumer: "주택·소비",
+  yield_curve: "수익률곡선",
   liquidity_credit: "유동성·신용",
   financial_conditions: "금융여건",
   fx_dollar: "FX·달러",
   commodities: "원자재",
   market: "시장",
+};
+
+const MACRO_SCENARIO_PRESETS = {
+  rates_up: {
+    name: "rates_up",
+    rate_shock_bp: 100,
+    inflation_shock_pct: 0.2,
+    growth_shock_pct: -0.2,
+    credit_spread_shock_bp: 25,
+    oil_shock_pct: 0,
+  },
+  stagflation: {
+    name: "stagflation",
+    rate_shock_bp: 75,
+    inflation_shock_pct: 1.2,
+    growth_shock_pct: -1.0,
+    credit_spread_shock_bp: 80,
+    oil_shock_pct: 15,
+  },
+  credit_stress: {
+    name: "credit_stress",
+    rate_shock_bp: -50,
+    inflation_shock_pct: -0.1,
+    growth_shock_pct: -1.2,
+    credit_spread_shock_bp: 180,
+    oil_shock_pct: -8,
+  },
 };
 
 function macroCountBy(items = [], key) {
@@ -4145,13 +4465,25 @@ function macroCountBy(items = [], key) {
   }, {});
 }
 
+function macroObjectCounts(value) {
+  if (!value || Array.isArray(value) || typeof value !== "object") return {};
+  return Object.fromEntries(Object.entries(value).map(([key, count]) => [key, Number(count) || 0]));
+}
+
 function renderMacroCoverage(data = {}) {
   if (!els.macroCoverageSurface) return;
-  const items = Array.isArray(data.items) ? data.items : [];
+  const items = Array.isArray(data.items) ? data.items : (Array.isArray(data.series) ? data.series : []);
   const enabled = items.filter((item) => item.enabled !== false);
-  const categoryCounts = macroCountBy(enabled, "category");
-  const providerCounts = macroCountBy(enabled, "provider");
-  const countryCounts = macroCountBy(enabled, "country");
+  const categoryCounts = Object.keys(macroObjectCounts(data.by_category || data.category_counts || data.categories)).length
+    ? macroObjectCounts(data.by_category || data.category_counts || data.categories)
+    : macroCountBy(enabled, "category");
+  const providerCounts = Object.keys(macroObjectCounts(data.by_provider || data.provider_counts || data.providers)).length
+    ? macroObjectCounts(data.by_provider || data.provider_counts || data.providers)
+    : macroCountBy(enabled, "provider");
+  const countryCounts = Object.keys(macroObjectCounts(data.by_country || data.country_counts || data.countries)).length
+    ? macroObjectCounts(data.by_country || data.country_counts || data.countries)
+    : macroCountBy(enabled, "country");
+  const totalCount = enabled.length || data.total_series || data.enabled_series || data.count || 0;
   const categoryRows = Object.entries(categoryCounts)
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([name, count]) => `
@@ -4171,7 +4503,7 @@ function renderMacroCoverage(data = {}) {
     .join("");
   els.macroCoverageSurface.innerHTML = `
     <div class="macro-coverage-grid">
-      ${decisionMetric("활성 시계열", _fmtNumber(enabled.length || data.count || 0), enabled.length >= 60 ? "ok" : "warn")}
+      ${decisionMetric("활성 시계열", _fmtNumber(totalCount), totalCount >= 60 ? "ok" : "warn")}
       ${decisionMetric("범주", _fmtNumber(Object.keys(categoryCounts).length), "ok")}
       ${decisionMetric("FRED", _fmtNumber(providerCounts.fred || 0), "ok")}
       ${decisionMetric("시장 프록시", _fmtNumber(providerCounts.yahoo || 0), providerCounts.yahoo ? "ok" : "muted")}
@@ -4185,6 +4517,56 @@ function renderMacroCoverage(data = {}) {
       <div><strong>공급자</strong>${providerRows || "<span>없음</span>"}</div>
       <div><strong>국가</strong>${countryRows || "<span>없음</span>"}</div>
     </div>
+  `;
+}
+
+function macroFilterValues() {
+  return {
+    category: els.macroCategoryFilter?.value || "",
+    provider: els.macroProviderFilter?.value || "",
+  };
+}
+
+function macroFilterSeriesItems(items = []) {
+  const { category, provider } = macroFilterValues();
+  return (Array.isArray(items) ? items : []).filter((item) => {
+    if (category && String(item.category || "") !== category) return false;
+    if (provider && String(item.provider || "") !== provider) return false;
+    return true;
+  });
+}
+
+function macroOptionRows(items = [], key, labels = {}) {
+  const values = Array.from(new Set((Array.isArray(items) ? items : [])
+    .map((item) => String(item?.[key] || ""))
+    .filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b));
+  return values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(labels[value] || value.replace(/_/g, " "))}</option>`).join("");
+}
+
+function renderMacroExplorerFilters(seriesList = {}) {
+  const items = Array.isArray(seriesList.items) ? seriesList.items : [];
+  const current = macroFilterValues();
+  if (els.macroCategoryFilter) {
+    els.macroCategoryFilter.innerHTML = `<option value="">전체 범주</option>${macroOptionRows(items, "category", MACRO_CATEGORY_LABELS)}`;
+    els.macroCategoryFilter.value = current.category;
+  }
+  if (els.macroProviderFilter) {
+    els.macroProviderFilter.innerHTML = `<option value="">전체 공급자</option>${macroOptionRows(items, "provider")}`;
+    els.macroProviderFilter.value = current.provider;
+  }
+}
+
+function renderMacroComparePlaceholder(items = []) {
+  if (!els.macroCompareSurface) return;
+  const filtered = macroFilterSeriesItems(items);
+  const { category, provider } = macroFilterValues();
+  els.macroCompareSurface.innerHTML = `
+    <div class="decision-status-row">
+      <span class="decision-badge muted">compare-ready</span>
+      <span>필터 ${escapeHtml(category || "전체 범주")} · ${escapeHtml(provider || "전체 공급자")} · 후보 ${escapeHtml(_fmtNumber(filtered.length))}개</span>
+    </div>
+    ${decisionEmpty("이번 UI 단계에서는 비교 마커와 빈 상태만 제공합니다. 시계열 선택 기반 다중 비교는 회귀 위험을 줄이기 위해 후속 단계로 남깁니다.")}
   `;
 }
 
@@ -4295,6 +4677,10 @@ function renderMacroCharts(overview) {
   const chosen = ["DGS10", "T10Y2Y", "CPIAUCSL", "UNRATE", "GDPC1", "VIXCLS"]
     .map((id) => items.find((item) => item.series_id === id))
     .filter(Boolean);
+  if (!chosen.length) {
+    els.macroChartSurface.innerHTML = decisionEmpty("표시할 차트 관측치가 없습니다.");
+    return;
+  }
   els.macroChartSurface.innerHTML = `<div class="macro-chart-grid">${chosen.map((item) => renderMacroSeriesChart(item)).join("")}</div>`;
 }
 
@@ -4336,13 +4722,16 @@ function renderMacroCategory(surface, data) {
 function renderMacroSearchStarter(seriesList = {}) {
   if (!els.macroSeriesSearchResults) return;
   const items = Array.isArray(seriesList.items) ? seriesList.items : [];
+  renderMacroExplorerFilters(seriesList);
+  renderMacroComparePlaceholder(items);
   const preferred = ["DGS10", "CPIAUCSL", "CPILFESL", "UNRATE", "T10Y2Y", "BAMLH0A0HYM2", "DCOILWTICO", "DTWEXBGS"];
   const rows = preferred
-    .map((id) => items.find((item) => item.series_id === id))
+    .map((id) => macroFilterSeriesItems(items).find((item) => item.series_id === id))
     .filter(Boolean);
+  const filtered = macroFilterSeriesItems(items);
   els.macroSeriesSearchResults.innerHTML = `
     <div class="macro-series-result-grid">
-      ${(rows.length ? rows : items.slice(0, 8)).map((item) => `
+      ${(rows.length ? rows : filtered.slice(0, 8)).map((item) => `
         <button type="button" class="macro-series-result" data-macro-series-id="${escapeHtml(item.series_id || "")}">
           <strong>${escapeHtml(item.series_id || "")}</strong>
           <span>${escapeHtml(item.display_name || "")}</span>
@@ -4355,15 +4744,17 @@ function renderMacroSearchStarter(seriesList = {}) {
 
 function renderMacroSeriesSearchResults(data = {}) {
   if (!els.macroSeriesSearchResults) return;
-  const items = Array.isArray(data.items) ? data.items : [];
+  const rawItems = Array.isArray(data.items) ? data.items : [];
+  const items = macroFilterSeriesItems(rawItems);
+  renderMacroComparePlaceholder(rawItems);
   if (!items.length) {
-    els.macroSeriesSearchResults.innerHTML = decisionEmpty("검색 결과가 없습니다. DGS10, CPI, unemployment, oil처럼 다른 표현을 시도해보세요.");
+    els.macroSeriesSearchResults.innerHTML = decisionEmpty("검색 결과가 없습니다. 검색어 또는 범주/공급자 필터를 조정해보세요.");
     return;
   }
   els.macroSeriesSearchResults.innerHTML = `
     <div class="decision-status-row">
       <span class="decision-badge ${escapeHtml(decisionStatusClass(data.data_quality?.status))}">${escapeHtml(data.data_quality?.status || "registry")}</span>
-      <span>${escapeHtml(data.query || "popular")} · ${escapeHtml(_fmtNumber(items.length))}개 결과</span>
+      <span>${escapeHtml(data.query || "popular")} · ${escapeHtml(_fmtNumber(items.length))}/${escapeHtml(_fmtNumber(rawItems.length))}개 결과</span>
     </div>
     <div class="macro-series-result-grid">
       ${items.map((item) => {
@@ -4424,6 +4815,30 @@ function renderMacroObservationRows(series = {}) {
   `;
 }
 
+function macroCachedSeriesSearch(query, limit = 12) {
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  const terms = normalizedQuery ? normalizedQuery.split(/\s+/).filter(Boolean) : [];
+  const items = Array.isArray(state.macroSeriesList?.items) ? state.macroSeriesList.items : [];
+  const matched = items.filter((item) => {
+    if (!terms.length) return true;
+    const haystack = [
+      item.series_id,
+      item.display_name,
+      item.category,
+      item.subcategory,
+      item.provider,
+      ...(Array.isArray(item.aliases) ? item.aliases : []),
+    ].filter(Boolean).join(" ").toLowerCase();
+    return terms.every((term) => haystack.includes(term));
+  }).slice(0, limit);
+  return {
+    status: "cache_fallback",
+    query,
+    items: matched,
+    data_quality: state.macroDataQuality?.data_quality || state.macroDataQuality || state.macroDashboard?.data_quality || {},
+  };
+}
+
 function renderMacroSeriesDetail(data = {}) {
   if (!els.macroSeriesDetailSurface) return;
   const series = data.series || {};
@@ -4468,7 +4883,7 @@ async function loadMacroSeriesDetail(seriesId) {
   if (!id || !els.macroSeriesDetailSurface) return;
   els.macroSeriesDetailSurface.innerHTML = decisionEmpty(`${escapeHtml(id)} 상세 데이터를 불러오는 중입니다.`);
   try {
-    const data = await macroFetchJson(API.macroSeriesDetail(id, 240));
+    const data = await macroFetchJsonWithTimeout(API.macroSeriesDetail(id, 240), {}, 10000);
     state.macroSeriesDetail = data;
     renderMacroSeriesDetail(data);
   } catch (err) {
@@ -4488,10 +4903,20 @@ async function searchMacroSeries() {
     els.macroSeriesSearchResults.innerHTML = decisionEmpty("매크로 레지스트리와 저장된 관측치를 검색하는 중입니다.");
   }
   try {
-    const data = await macroFetchJson(API.macroSeriesSearch(query, 12));
+    let data;
+    try {
+      data = await macroFetchJsonWithTimeout(API.macroSeriesSearch(query, 12), {}, 9000);
+    } catch (searchErr) {
+      data = macroCachedSeriesSearch(query, 12);
+      data.data_quality = {
+        ...(data.data_quality || {}),
+        status: data.data_quality?.status || "partial",
+        notes: [...(data.data_quality?.notes || []), `live search fallback: ${searchErr.message || searchErr}`],
+      };
+    }
     state.macroSeriesSearch = data;
     renderMacroSeriesSearchResults(data);
-    const first = data.items?.[0]?.series_id;
+    const first = macroFilterSeriesItems(data.items || [])?.[0]?.series_id;
     if (first) await loadMacroSeriesDetail(first);
   } catch (err) {
     if (els.macroSeriesSearchResults) {
@@ -4791,6 +5216,175 @@ function renderMacroDataQuality(data = {}, refreshStatus = {}) {
   `;
 }
 
+function renderMacroLoadStatus(message, status = "ok", detail = "", startedAt = null, generatedAt = "") {
+  if (!els.macroLoadStatus) return;
+  const parts = [detail, generatedAt ? fmtDate(generatedAt) : "", startedAt ? `소요 ${elapsedText(startedAt)}` : ""].filter(Boolean);
+  els.macroLoadStatus.innerHTML = `
+    <div class="decision-completion ${escapeHtml(decisionStatusClass(status))}" role="status" aria-live="polite">
+      <strong>${escapeHtml(message)}</strong>
+      <span>${escapeHtml(parts.join(" · ") || status)}</span>
+    </div>
+  `;
+}
+
+function setMacroLoadStatus(payload = {}, startedAt = Date.now(), detail = "", status = "ok") {
+  const generatedAt = payload.generated_at || payload.as_of || "";
+  const statusText = payload.status || status || "unknown";
+  renderMacroLoadStatus(`Macro load · ${statusText}`, statusText, detail || "대시보드 집계 완료", startedAt, generatedAt);
+}
+
+function renderMacroPanelFailure(surface, label, error) {
+  if (!surface) return;
+  const message = error?.message || String(error || "unknown");
+  surface.innerHTML = decisionEmpty(`${label} 로드 실패: ${message}`);
+}
+
+function renderMacroActionPaneStarters() {
+  if (els.macroScenarioResult && !state.macroScenario) {
+    els.macroScenarioResult.innerHTML = decisionEmpty("시나리오를 선택하면 자산 영향과 sleeve 힌트를 자문용으로만 표시합니다.");
+  }
+  if (els.macroResearchPreviewResult && !state.macroResearchContext) {
+    els.macroResearchPreviewResult.innerHTML = decisionEmpty("티커별 매크로 리서치 컨텍스트를 미리 확인합니다. 결과는 자문용입니다.");
+  }
+}
+
+function renderMacroProviderHealth(data = {}) {
+  if (!els.macroProviderHealthSurface) return;
+  const providers = Array.isArray(data.providers) ? data.providers : [];
+  const stale = Array.isArray(data.stale_series) ? data.stale_series : [];
+  const staleLabels = stale
+    .map((item) => (typeof item === "string" ? item : (item?.series_id || item?.display_name || item?.status || "")))
+    .filter(Boolean);
+  const scheduler = data.scheduler || {};
+  els.macroProviderHealthSurface.innerHTML = `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(data.status))}">${escapeHtml(data.status || "unknown")}</span>
+      <span>생성 ${escapeHtml(data.generated_at ? fmtDate(data.generated_at) : "미확인")} · 지연 ${escapeHtml(_fmtNumber(staleLabels.length))}개</span>
+    </div>
+    <div class="decision-metric-grid dense">
+      ${decisionMetric("공급자", _fmtNumber(providers.length), providers.length ? "ok" : "warn")}
+      ${decisionMetric("활성", _fmtNumber(providers.filter((item) => item.enabled).length), "ok")}
+      ${decisionMetric("설정됨", _fmtNumber(providers.filter((item) => item.configured).length), "ok")}
+      ${decisionMetric("스케줄러", scheduler.enabled ? "켜짐" : "꺼짐", scheduler.enabled ? "ok" : "warn")}
+    </div>
+    ${(data.warnings || []).length ? `<div class="macro-warning">${escapeHtml(data.warnings.join(" "))}</div>` : ""}
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead><tr><th>공급자</th><th>활성</th><th>설정</th><th>최근 상태</th><th>최근 행</th><th>오류</th></tr></thead>
+        <tbody>
+          ${providers.map((item) => `
+            <tr>
+              <td>${escapeHtml(item.provider || "")}</td>
+              <td>${escapeHtml(item.enabled ? "yes" : "no")}</td>
+              <td>${escapeHtml(item.configured ? "yes" : "no")}</td>
+              <td><span class="table-status ${escapeHtml(decisionStatusClass(item.latest_status))}">${escapeHtml(item.latest_status || "unknown")}</span></td>
+              <td>${escapeHtml(_fmtNumber(item.latest_rows || 0))}</td>
+              <td>${escapeHtml(item.latest_error || "-")}</td>
+            </tr>
+          `).join("") || `<tr><td colspan="6">공급자 상태가 없습니다.</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+    ${staleLabels.length ? `<div class="macro-warning">지연 시계열: ${escapeHtml(staleLabels.slice(0, 12).join(", "))}${staleLabels.length > 12 ? " ..." : ""}</div>` : ""}
+  `;
+}
+
+function renderMacroScenarioResult(data = {}, startedAt = Date.now()) {
+  const target = els.macroScenarioResult || els.macroScenarioSurface;
+  if (!target) return;
+  const impacts = Array.isArray(data.asset_impacts) ? data.asset_impacts : [];
+  const sleeveHints = Array.isArray(data.sleeve_hints)
+    ? data.sleeve_hints
+    : Object.entries(data.sleeve_hints || {}).map(([sleeve, hint]) => ({ sleeve, hint }));
+  target.innerHTML = `
+    ${renderActionCompletion("매크로 시나리오 계산 완료", startedAt, data.scenario?.name || data.scenario?.scenario_name || "scenario", decisionStatusClass(data.risk_level))}
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(data.advisory_only ? "ok" : "fail")}">${data.advisory_only ? "자문 전용" : "점검 필요"}</span>
+      <span>위험 수준 ${escapeHtml(data.risk_level || "unknown")} · 데이터 품질 ${escapeHtml(data.data_quality?.status || data.data_quality || "unknown")}</span>
+    </div>
+    <div class="decision-summary ${escapeHtml(decisionStatusClass(data.risk_level))}">${escapeHtml(data.explanation || "시나리오 설명이 없습니다.")}</div>
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead><tr><th>자산군</th><th>영향</th><th>신뢰도</th><th>근거</th></tr></thead>
+        <tbody>
+          ${impacts.map((item) => `
+            <tr>
+              <td>${escapeHtml(item.asset_class || item.asset || "")}</td>
+              <td><span class="table-status ${escapeHtml(item.impact === "negative" ? "warn" : item.impact === "positive" ? "ok" : "muted")}">${escapeHtml(item.impact || "unknown")}</span></td>
+              <td>${escapeHtml(fmtDecimal(Number(item.confidence || 0), 2))}</td>
+              <td>${escapeHtml(item.reason || item.rationale || "-")}</td>
+            </tr>
+          `).join("") || `<tr><td colspan="4">자산 영향 데이터가 없습니다.</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+    <div class="macro-sleeve-hints">
+      ${sleeveHints.map((item) => `
+        <span><strong>${escapeHtml(item.sleeve || item.name || "")}</strong>${escapeHtml(item.hint || item.action || item.bias || "")}</span>
+      `).join("") || "<span>표시할 sleeve 힌트가 없습니다.</span>"}
+    </div>
+    <div class="macro-warning">이 결과는 포트폴리오 정책 변경, 주문 생성, 자동 리밸런싱을 수행하지 않는 자문용 시나리오입니다.</div>
+  `;
+}
+
+async function runMacroScenario(presetName) {
+  const payload = MACRO_SCENARIO_PRESETS[presetName];
+  if (!payload || !els.macroScenarioSurface) return;
+  const startedAt = Date.now();
+  const target = els.macroScenarioResult || els.macroScenarioSurface;
+  if (target) target.innerHTML = decisionEmpty(`${payload.name} 시나리오를 계산하는 중입니다.`);
+  try {
+    const data = await macroFetchJsonWithTimeout(API.macroScenario, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }, 10000);
+    state.macroScenario = data;
+    renderMacroScenarioResult(data, startedAt);
+  } catch (err) {
+    if (target) target.innerHTML = decisionEmpty(`시나리오 계산 실패: ${err.message || err}`);
+  }
+}
+
+function renderMacroResearchContext(data = {}, startedAt = Date.now()) {
+  if (!els.macroResearchPreviewResult) return;
+  const hints = data.portfolio_hints || {};
+  const warnings = Array.isArray(data.data_quality_warnings) ? data.data_quality_warnings : [];
+  const context = data.macro_context || data.context || data.summary || data.explanation || "";
+  els.macroResearchPreviewResult.innerHTML = `
+    ${renderActionCompletion("리서치 컨텍스트 미리보기 완료", startedAt, data.ticker || "ticker", warnings.length ? "warn" : "ok")}
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(hints.advisory_only === false ? "fail" : "ok")}">${hints.advisory_only === false ? "점검 필요" : "자문 전용"}</span>
+      <span>${escapeHtml(data.ticker || "")} · 품질 경고 ${escapeHtml(_fmtNumber(warnings.length))}개</span>
+    </div>
+    <div class="decision-summary ${warnings.length ? "warn" : "ok"}">${escapeHtml(typeof context === "string" ? context : JSON.stringify(context))}</div>
+    <div class="decision-metric-grid dense">
+      ${decisionMetric("레짐", hints.regime || data.regime || "unknown", "ok")}
+      ${decisionMetric("주식", hints.equity_bias || "unknown", "ok")}
+      ${decisionMetric("채권", hints.bond_bias || "unknown", "ok")}
+      ${decisionMetric("위험", hints.risk_level || "unknown", hints.risk_level === "reduce" ? "warn" : "ok")}
+    </div>
+    ${warnings.length ? `<div class="macro-warning">${escapeHtml(warnings.join(" "))}</div>` : ""}
+  `;
+}
+
+async function runMacroResearchPreview() {
+  const ticker = String(els.macroResearchTicker?.value || "").trim();
+  if (!ticker || !els.macroResearchPreviewResult) return;
+  const startedAt = Date.now();
+  setButtonBusy(els.macroResearchPreviewRun, true, "조회 중");
+  els.macroResearchPreviewResult.innerHTML = decisionEmpty(`${escapeHtml(ticker)} 매크로 리서치 컨텍스트를 불러오는 중입니다.`);
+  try {
+    const data = await macroFetchJsonWithTimeout(API.macroResearchContext(ticker), {}, 10000);
+    state.macroResearchContext = data;
+    renderMacroResearchContext(data, startedAt);
+  } catch (err) {
+    els.macroResearchPreviewResult.innerHTML = decisionEmpty(`리서치 컨텍스트 조회 실패: ${err.message || err}`);
+  } finally {
+    setButtonBusy(els.macroResearchPreviewRun, false);
+  }
+}
+
 async function macroFetchJson(url, options = {}) {
   const res = await fetch(url, options);
   const data = await res.json();
@@ -4798,10 +5392,51 @@ async function macroFetchJson(url, options = {}) {
   return data;
 }
 
+async function macroFetchJsonWithTimeout(url, options = {}, timeoutMs = 9000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await macroFetchJson(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err?.name === "AbortError") throw new Error(`timeout after ${timeoutMs}ms`);
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+let macroCategoryHydrationRun = 0;
+
+async function hydrateMacroCategoryPanels() {
+  const runId = ++macroCategoryHydrationRun;
+  const panels = [
+    [API.macroInterestRates, els.macroInterestRatesSurface, "금리 패널"],
+    [API.macroInflation, els.macroInflationSurface, "인플레이션 패널"],
+    [API.macroGrowthLabor, els.macroGrowthLaborSurface, "성장·고용 패널"],
+    [API.macroHousingConsumer, els.macroHousingConsumerSurface, "주택·소비 패널"],
+    [API.macroYieldCurve, els.macroYieldCurveSurface, "수익률곡선 패널"],
+    [API.macroLiquidityCredit, els.macroLiquidityCreditSurface, "유동성·신용 패널"],
+    [API.macroFinancialConditions, els.macroFinancialConditionsSurface, "금융여건 패널"],
+    [API.macroFxDollar, els.macroFxDollarSurface, "FX·달러 패널"],
+    [API.macroCommodities, els.macroCommoditiesSurface, "원자재 패널"],
+  ];
+  for (const [url, surface, label] of panels) {
+    if (runId !== macroCategoryHydrationRun) return;
+    try {
+      const data = await macroFetchJsonWithTimeout(url, {}, 9000);
+      renderMacroCategory(surface, data);
+    } catch (err) {
+      renderMacroPanelFailure(surface, label, err);
+    }
+  }
+}
+
 function macroDataSurfaces() {
   return [
     els.macroOverviewSurface,
+    els.macroLoadStatus,
     els.macroCoverageSurface,
+    els.macroProviderHealthSurface,
     els.macroIndicatorTable,
     els.macroChartSurface,
     els.macroInterestRatesSurface,
@@ -4815,85 +5450,139 @@ function macroDataSurfaces() {
     els.macroCommoditiesSurface,
     els.macroRegimeSurface,
     els.macroAssetImpactSurface,
+    els.macroCompareSurface,
     els.macroPortfolioHintsSurface,
     els.macroDataQualitySurface,
   ].filter(Boolean);
 }
 
-async function loadMacro(force = false) {
-  if (!els.macroOverviewSurface || (!force && (state.macroLoaded || state.macroLoading))) return;
+async function loadMacroProgressive(force = false) {
+  if (!els.macroOverviewSurface) return false;
+  if (!force && state.macroLoaded) return true;
+  if (!force && state.macroLoading) return false;
   const startedAt = Date.now();
+  const preserveExisting = !!(force && (state.macroLoaded || state.macroDashboard || state.macroOverview));
   state.macroLoading = true;
   setButtonBusy(els.macroRefresh, true, "새로고침 중");
-  macroDataSurfaces().forEach((surface) => { surface.innerHTML = decisionEmpty("매크로 데이터를 불러오는 중입니다."); });
+  if (preserveExisting) {
+    renderMacroLoadStatus("매크로 대시보드 재로딩 중", "warn", "기존 대시보드 화면을 유지합니다.", startedAt);
+  } else {
+    macroDataSurfaces().forEach((surface) => { surface.innerHTML = decisionEmpty("매크로 데이터를 불러오는 중입니다."); });
+    renderMacroLoadStatus("매크로 대시보드 로드 중", "ok", "집계 데이터를 먼저 불러오는 중입니다.", startedAt);
+    renderMacroActionPaneStarters();
+  }
   try {
-    const overview = await macroFetchJson(API.macroOverview);
-    const [
-      seriesList,
-      interestRates,
-      inflation,
-      growthLabor,
-      housingConsumer,
-      yieldCurve,
-      liquidityCredit,
-      financialConditions,
-      fxDollar,
-      commodities,
-      dataQuality,
-      refreshStatus,
-    ] = await Promise.all([
-      macroFetchJson(API.macroSeriesList),
-      macroFetchJson(API.macroInterestRates),
-      macroFetchJson(API.macroInflation),
-      macroFetchJson(API.macroGrowthLabor),
-      macroFetchJson(API.macroHousingConsumer),
-      macroFetchJson(API.macroYieldCurve),
-      macroFetchJson(API.macroLiquidityCredit),
-      macroFetchJson(API.macroFinancialConditions),
-      macroFetchJson(API.macroFxDollar),
-      macroFetchJson(API.macroCommodities),
-      macroFetchJson(API.macroDataQuality),
-      macroFetchJson(API.macroRefreshStatus),
-    ]);
+    macroCategoryHydrationRun += 1;
+    const dashboard = await macroFetchJsonWithTimeout(API.macroDashboard, {}, 9000);
+    const overview = dashboard.overview || {};
+    const dashboardQuality = dashboard.data_quality || overview.data_quality || {};
+    const dashboardRefresh = dashboard.refresh || {};
+    state.macroDashboard = dashboard;
     state.macroOverview = overview;
-    state.macroSeriesList = seriesList;
     renderMacroOverview(overview);
-    renderMacroCoverage(seriesList);
-    renderMacroSearchStarter(seriesList);
+    renderMacroCoverage(dashboard.coverage || {});
     renderMacroIndicatorTable(overview.key_indicators || []);
     renderMacroCharts(overview);
-    renderMacroCategory(els.macroInterestRatesSurface, interestRates);
-    renderMacroCategory(els.macroInflationSurface, inflation);
-    renderMacroCategory(els.macroGrowthLaborSurface, growthLabor);
-    renderMacroCategory(els.macroHousingConsumerSurface, housingConsumer);
-    renderMacroCategory(els.macroYieldCurveSurface, yieldCurve);
-    renderMacroCategory(els.macroLiquidityCreditSurface, liquidityCredit);
-    renderMacroCategory(els.macroFinancialConditionsSurface, financialConditions);
-    renderMacroCategory(els.macroFxDollarSurface, fxDollar);
-    renderMacroCategory(els.macroCommoditiesSurface, commodities);
     renderMacroRegime(overview.regime || {}, overview.signals || []);
-    renderMacroAssetImpact(overview.asset_impact_summary || []);
-    const hint = await macroFetchJson(API.macroPortfolioHints);
-    state.macroPortfolioHint = hint;
-    state.macroDataQuality = dataQuality;
-    state.macroRefreshStatus = refreshStatus;
-    renderMacroPolicyHint(hint);
-    renderMacroDataQuality(dataQuality, refreshStatus);
+    renderMacroAssetImpact(overview.asset_impact_summary || dashboard.asset_impacts || []);
+    renderMacroDataQuality(dashboard.data_quality || dashboardQuality, dashboardRefresh);
+    renderMacroComparePlaceholder([]);
+    renderMacroActionPaneStarters();
+    setMacroLoadStatus(dashboard, startedAt, "대시보드 집계 렌더링 완료", dashboard.status || dashboardQuality.status || "ok");
+
+    const panelTasks = [
+      ["seriesList", API.macroSeriesList],
+      ["dataQuality", API.macroDataQuality],
+      ["refreshStatus", API.macroRefreshStatus],
+      ["providerHealth", API.macroProviderHealth],
+      ["portfolioHints", API.macroPortfolioHints],
+    ];
+    const settled = await Promise.allSettled(
+      panelTasks.map(([name, url]) => macroFetchJsonWithTimeout(url, {}, 9000)
+        .then((data) => ({ name, data }))
+        .catch((error) => Promise.reject({ name, error })))
+    );
+    const results = {};
+    const failures = [];
+    const failureByName = {};
+    settled.forEach((result) => {
+      if (result.status === "fulfilled") {
+        results[result.value.name] = result.value.data;
+      } else {
+        const name = result.reason?.name || "unknown";
+        const error = result.reason?.error || result.reason;
+        failureByName[name] = error;
+        failures.push(`${name}: ${error?.message || String(error || "unknown")}`);
+      }
+    });
+
+    if (results.seriesList) {
+      state.macroSeriesList = results.seriesList;
+      renderMacroCoverage(results.seriesList);
+      renderMacroSearchStarter(results.seriesList);
+    } else {
+      renderMacroSearchStarter({ items: [] });
+    }
+    if (results.providerHealth) {
+      state.macroProviderHealth = results.providerHealth;
+      renderMacroProviderHealth(results.providerHealth);
+    } else {
+      renderMacroPanelFailure(els.macroProviderHealthSurface, "공급자 상태 패널", failureByName.providerHealth);
+    }
+    if (results.portfolioHints) {
+      state.macroPortfolioHint = results.portfolioHints;
+      renderMacroPolicyHint(results.portfolioHints);
+    } else {
+      renderMacroPanelFailure(els.macroPortfolioHintsSurface, "포트폴리오 힌트 패널", failureByName.portfolioHints);
+    }
+    state.macroDataQuality = results.dataQuality || dashboard.data_quality || dashboardQuality;
+    state.macroRefreshStatus = results.refreshStatus || dashboardRefresh;
+    if (failureByName.dataQuality) {
+      renderMacroPanelFailure(els.macroDataQualitySurface, "데이터 품질 패널", failureByName.dataQuality);
+    } else {
+      renderMacroDataQuality(state.macroDataQuality, state.macroRefreshStatus);
+      if (failureByName.refreshStatus && els.macroDataQualitySurface) {
+        els.macroDataQualitySurface.insertAdjacentHTML(
+          "afterbegin",
+          `<div class="macro-warning">갱신 상태 로드 실패: ${escapeHtml(failureByName.refreshStatus.message || String(failureByName.refreshStatus))}</div>`
+        );
+      }
+    }
     state.macroLoaded = true;
+    const failureDetail = failures.length
+      ? `부분 실패 ${failures.length}개 · ${failures.slice(0, 2).join(" / ")}`
+      : `${_fmtNumber(overview.key_indicators?.length || 0)}개 핵심 지표`;
+    setMacroLoadStatus(dashboard, startedAt, failureDetail, failures.length ? "partial" : (dashboard.status || "ok"));
     if (els.macroOverviewSurface) {
       els.macroOverviewSurface.insertAdjacentHTML(
         "afterbegin",
-        renderActionCompletion("매크로 데이터 갱신 완료", startedAt, `${_fmtNumber(overview.key_indicators?.length || 0)}개 핵심 지표`)
+        renderActionCompletion("매크로 데이터 갱신 완료", startedAt, failureDetail, failures.length ? "warn" : "ok")
       );
     }
+    hydrateMacroCategoryPanels();
+    return true;
   } catch (err) {
-    macroDataSurfaces().forEach((surface) => {
-      surface.innerHTML = decisionEmpty(`매크로 데이터 로드 실패: ${err.message || err}`);
-    });
+    const message = err.message || String(err);
+    if (preserveExisting) {
+      state.macroLoaded = true;
+      renderMacroLoadStatus("매크로 대시보드 재로딩 실패", "warn", message, startedAt);
+      renderMacroPanelFailure(els.macroDataQualitySurface, "매크로 대시보드 재로딩", err);
+    } else {
+      macroDataSurfaces().forEach((surface) => {
+        surface.innerHTML = decisionEmpty(`매크로 데이터 로드 실패: ${message}`);
+      });
+      renderMacroActionPaneStarters();
+      setMacroLoadStatus({ status: "failed" }, startedAt, message, "fail");
+    }
+    return false;
   } finally {
     state.macroLoading = false;
     setButtonBusy(els.macroRefresh, false);
   }
+}
+
+async function loadMacro(force = false) {
+  return loadMacroProgressive(force);
 }
 
 async function refreshMacroData() {
@@ -4911,7 +5600,23 @@ async function refreshMacroData() {
     });
     const refresh = result.refresh || {};
     state.macroLoaded = false;
-    await loadMacro(true);
+    const reloaded = await loadMacro(true);
+    if (!reloaded) {
+      state.macroLoaded = !!(state.macroDashboard || state.macroOverview);
+      renderMacroLoadStatus(
+        "매크로 공급자 갱신 후 재로딩 실패",
+        "warn",
+        `${escapeHtml(refresh.status || "unknown")} · 기존 대시보드 화면을 유지합니다.`,
+        startedAt
+      );
+      if (els.macroDataQualitySurface) {
+        els.macroDataQualitySurface.insertAdjacentHTML(
+          "afterbegin",
+          `<div class="macro-warning">공급자 갱신은 응답했지만 대시보드 재로딩에 실패했습니다. 기존 화면을 유지합니다.</div>`
+        );
+      }
+      return;
+    }
     if (els.macroOverviewSurface) {
       els.macroOverviewSurface.insertAdjacentHTML(
         "afterbegin",
@@ -4923,9 +5628,9 @@ async function refreshMacroData() {
       );
     }
   } catch (err) {
-    macroDataSurfaces().forEach((surface) => {
-      surface.innerHTML = decisionEmpty(`매크로 공급자 갱신 실패: ${err.message || err}`);
-    });
+    const message = err.message || String(err);
+    renderMacroLoadStatus("매크로 공급자 갱신 실패", "warn", message, startedAt);
+    renderMacroPanelFailure(els.macroDataQualitySurface, "매크로 공급자 갱신", err);
   } finally {
     setButtonBusy(els.macroRefresh, false);
   }
@@ -5767,6 +6472,42 @@ function renderQuantBacktestTables(data) {
   `;
 }
 
+function renderQuantRunContext(data, request = {}) {
+  const manifest = data.manifest || {};
+  const config = data.config || request || {};
+  const diagnostics = data.diagnostics || {};
+  const snapshot = manifest.data_snapshot || data.data_snapshot || {};
+  const policy = diagnostics.freshness_policy || snapshot.freshness_policy || {};
+  const tickers = data.tickers || config.tickers || request.tickers || [];
+  const priceCounts = snapshot.price_counts || diagnostics.price_counts || {};
+  const latestDates = snapshot.latest_price_dates || diagnostics.latest_price_dates || {};
+  const codeVersion = manifest.code_version || data.code_version || {};
+  const configHash = manifest.config_hash || data.config_hash || "";
+  const commit = codeVersion.git_commit || "";
+  const priceRows = Object.entries(priceCounts).slice(0, 5).map(([ticker, count]) => {
+    const latest = latestDates[ticker] ? ` · ${latestDates[ticker]}` : "";
+    return `${ticker}:${_fmtNumber(count)}${latest}`;
+  });
+  return `
+    <div class="decision-section-title">Run Context</div>
+    <div class="decision-chip-row" data-testid="quant-run-context">
+      <span>strategy ${escapeHtml(config.strategy_id || request.strategy_id || state.activeStrategyId || "adhoc")}</span>
+      <span>template ${escapeHtml(quantTemplateLabel(data.template || config.template || request.template || "unknown"))}</span>
+      <span>universe ${escapeHtml((tickers || []).join(",") || "-")}</span>
+      <span>freshness ${escapeHtml(policy.profile || config.freshness_profile || request.freshness_profile || "research_default")}</span>
+      <span>cost ${escapeHtml(String(config.transaction_cost_bps ?? request.transaction_cost_bps ?? "-"))}/${escapeHtml(String(config.slippage_bps ?? request.slippage_bps ?? "-"))} bps</span>
+      ${configHash ? `<span>config ${escapeHtml(String(configHash).slice(0, 10))}</span>` : ""}
+      ${commit ? `<span>commit ${escapeHtml(String(commit).slice(0, 12))}${codeVersion.git_dirty ? " dirty" : ""}</span>` : ""}
+    </div>
+    ${priceRows.length ? `
+      <div class="decision-list compact">
+        <div class="decision-list-row"><span>Price snapshot</span><strong>${escapeHtml(priceRows.join(" · "))}</strong></div>
+        <div class="decision-list-row"><span>Expected latest</span><strong>${escapeHtml(diagnostics.expected_latest_date || "-")}</strong></div>
+      </div>
+    ` : ""}
+  `;
+}
+
 function renderQuantBacktestResult(data, request = {}) {
   if (!els.backtestSurface) return;
   const metrics = backtestMetricsWithDerivedTotals(data.metrics || {}, data.equity_curve);
@@ -5779,6 +6520,7 @@ function renderQuantBacktestResult(data, request = {}) {
       <span class="decision-badge ${escapeHtml(decisionStatusClass(status))}">${escapeHtml(decisionStatusLabel(status))}</span>
       <span>${escapeHtml(data.run_id || "run pending")} · ${escapeHtml(data.date_range?.start || request.start_date || "-")} -> ${escapeHtml(data.date_range?.end || request.end_date || "-")}</span>
     </div>
+    ${renderQuantRunContext(data, request)}
     ${renderMetricGrid(metrics, status)}
     <div class="decision-chart-grid">
       ${renderDecisionLineChart(data.equity_curve, "equity", "수익 곡선", status)}
@@ -6840,6 +7582,10 @@ function normalizeQuantBundle(bundle) {
     weights: Array.isArray(bundle.weights) ? bundle.weights : [],
     diagnostics: bundle.diagnostics || {},
     artifacts: files,
+    manifest,
+    data_snapshot: manifest.data_snapshot || {},
+    config_hash: manifest.config_hash || "",
+    code_version: manifest.code_version || {},
     replay_reports: bundle.replay_reports || {},
     config,
   };
@@ -7037,6 +7783,134 @@ async function loadQuantExportStorageReport() {
   }
 }
 
+function setQuantRunCompareSelection(runId, selected) {
+  const clean = String(runId || "").trim();
+  if (!clean) return;
+  const current = Array.isArray(state.quantRunCompareSelection) ? state.quantRunCompareSelection.slice() : [];
+  const without = current.filter((item) => item !== clean);
+  if (selected) {
+    without.push(clean);
+    state.quantRunCompareSelection = without.slice(-2);
+  } else {
+    state.quantRunCompareSelection = without;
+  }
+  syncQuantRunCompareSelectionState();
+}
+
+function syncQuantRunCompareSelectionState() {
+  const selected = Array.isArray(state.quantRunCompareSelection) ? state.quantRunCompareSelection : [];
+  if (!els.quantRunHistorySurface) return;
+  els.quantRunHistorySurface.querySelectorAll('[data-action="toggle-run-compare"]').forEach((input) => {
+    const runId = input.dataset.runId || "";
+    input.checked = selected.includes(runId);
+  });
+  const status = els.quantRunHistorySurface.querySelector('[data-testid="quant-run-compare-status"]');
+  if (status) {
+    status.textContent = selected.length
+      ? `비교 선택 ${selected.length}/2 · ${selected.map((item) => item.slice(0, 24)).join(" vs ")}`
+      : "비교할 실행 2개를 선택하세요.";
+  }
+  const button = els.quantRunHistorySurface.querySelector('[data-testid="quant-run-compare-selected"]');
+  if (button) {
+    button.disabled = selected.length !== 2;
+  }
+}
+
+function renderQuantRunComparison(data) {
+  const runs = Array.isArray(data.runs) ? data.runs : [];
+  const primary = runs[0] || {};
+  const comparison = runs[1] || {};
+  const metrics = Array.isArray(data.metrics) ? data.metrics : [];
+  const differences = Array.isArray(data.config_differences) ? data.config_differences : [];
+  const lineage = data.lineage || {};
+  const diagnostics = data.diagnostics || {};
+  return `
+    <div class="decision-status-row">
+      <span class="decision-badge ${escapeHtml(decisionStatusClass(data.status || "success"))}">${escapeHtml(data.status || "success")}</span>
+      <span>${escapeHtml(data.primary_run_id || "")} vs ${escapeHtml(data.comparison_run_id || "")}</span>
+    </div>
+    <div class="decision-chip-row" data-testid="quant-run-compare-result">
+      <span>schema ${escapeHtml(data.schema_version || "-")}</span>
+      <span>config ${lineage.config_hash_match ? "match" : "changed"}</span>
+      <span>code ${lineage.code_commit_match ? "match" : "changed"}</span>
+      <span>snapshot ${lineage.data_snapshot_match ? "match" : "changed"}</span>
+      <span>lookahead ${diagnostics.lookahead_safe_all ? "safe" : "check"}</span>
+    </div>
+    <div class="decision-chip-row">
+      ${runs.map((run) => `<button type="button" class="linkish decision-inline-action" data-action="open-quant-run" data-run-id="${escapeHtml(run.run_id || "")}">open ${escapeHtml(String(run.run_id || "").slice(0, 20))}</button>`).join("")}
+      <button type="button" class="linkish decision-inline-action" data-action="refresh-run-history">실행 이력으로 돌아가기</button>
+    </div>
+    <div class="decision-list compact">
+      <div class="decision-list-row"><span>Primary</span><strong>${escapeHtml(primary.template || "-")} · ${escapeHtml((primary.tickers || []).join(",") || "-")} · ${escapeHtml(fmtDate(primary.generated_at) || "-")}</strong></div>
+      <div class="decision-list-row"><span>Comparison</span><strong>${escapeHtml(comparison.template || "-")} · ${escapeHtml((comparison.tickers || []).join(",") || "-")} · ${escapeHtml(fmtDate(comparison.generated_at) || "-")}</strong></div>
+      <div class="decision-list-row"><span>Data warnings</span><strong>stale ${escapeHtml(_fmtNumber((diagnostics.stale_assets || []).length))} · missing ${escapeHtml(_fmtNumber((diagnostics.missing_assets || []).length))} · warnings ${escapeHtml(_fmtNumber(diagnostics.warning_count || 0))}</strong></div>
+    </div>
+    <div class="decision-section-title">Metric delta</div>
+    <div class="decision-table-wrap">
+      <table class="decision-table">
+        <thead><tr><th>Metric</th><th>Primary</th><th>Comparison</th><th>Delta</th><th>Relative</th></tr></thead>
+        <tbody>
+          ${metrics.map((row) => `
+            <tr>
+              <td>${escapeHtml(row.metric || "")}</td>
+              <td>${escapeHtml(formatQuantValue(row.primary))}</td>
+              <td>${escapeHtml(formatQuantValue(row.comparison))}</td>
+              <td><span class="table-status ${Math.abs(Number(row.delta || 0)) < 1e-10 ? "ok" : "warn"}">${escapeHtml(formatQuantValue(row.delta))}</span></td>
+              <td>${row.relative_delta === null || row.relative_delta === undefined ? "-" : escapeHtml(fmtMetricRatio(row.relative_delta))}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+    <div class="decision-section-title">Config differences</div>
+    ${differences.length ? `
+      <div class="decision-table-wrap">
+        <table class="decision-table">
+          <thead><tr><th>Field</th><th>Primary</th><th>Comparison</th></tr></thead>
+          <tbody>
+            ${differences.map((row) => `
+              <tr>
+                <td>${escapeHtml(row.field || "")}</td>
+                <td>${escapeHtml(formatCompareValue(row.primary))}</td>
+                <td>${escapeHtml(formatCompareValue(row.comparison))}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    ` : decisionEmpty("두 실행의 주요 설정 차이가 없습니다.")}
+  `;
+}
+
+function formatCompareValue(value) {
+  if (Array.isArray(value)) return value.join(",");
+  if (value && typeof value === "object") return JSON.stringify(value);
+  if (value === null || value === undefined || value === "") return "-";
+  return String(value);
+}
+
+async function compareSelectedQuantRuns() {
+  if (!els.quantRunHistorySurface) return;
+  const selected = Array.isArray(state.quantRunCompareSelection) ? state.quantRunCompareSelection.slice(0, 2) : [];
+  if (selected.length !== 2) {
+    syncQuantRunCompareSelectionState();
+    return;
+  }
+  els.quantRunHistorySurface.innerHTML = decisionEmpty(`${selected[0]} vs ${selected[1]} 비교를 불러오는 중입니다.`);
+  try {
+    const res = await fetch(API.quantBacktestsCompare, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ run_ids: selected }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    els.quantRunHistorySurface.innerHTML = renderQuantRunComparison(data);
+  } catch (err) {
+    els.quantRunHistorySurface.innerHTML = decisionEmpty(`실행 비교 실패: ${err.message || err}`);
+  }
+}
+
 async function loadQuantRunHistory(force = false) {
   if (!els.quantRunHistorySurface || (state.quantRunHistoryLoaded && !force)) return;
   const startedAt = Date.now();
@@ -7058,20 +7932,28 @@ async function loadQuantRunHistory(force = false) {
         <span class="decision-badge ok">${escapeHtml(data.status || "success")}</span>
         <span>${escapeHtml(_fmtNumber(data.count))} saved runs</span>
       </div>
+      <div class="decision-chip-row" data-testid="quant-run-compare-controls">
+        <span data-testid="quant-run-compare-status">비교할 실행 2개를 선택하세요.</span>
+        <button type="button" class="linkish decision-inline-action" data-testid="quant-run-compare-selected" data-action="run-compare-selected" disabled>선택 비교</button>
+      </div>
       <div class="decision-table-wrap">
         <table class="decision-table">
-          <thead><tr><th>Run</th><th>Template</th><th>Universe</th><th>Sharpe</th><th>MDD</th><th>Lookahead</th><th>Reports</th><th>Open</th><th>Replay</th><th>Export</th></tr></thead>
+          <thead><tr><th>Compare</th><th>Run</th><th>Template</th><th>Universe</th><th>Sharpe</th><th>MDD</th><th>Context</th><th>Lookahead</th><th>Reports</th><th>Open</th><th>Replay</th><th>Export</th></tr></thead>
           <tbody>
             ${items.map((item) => {
               const metrics = item.metrics || {};
               const diagnostics = item.diagnostics || {};
+              const policy = item.freshness_policy || item.data_snapshot?.freshness_policy || {};
+              const configHash = String(item.config_hash || "").slice(0, 10);
               return `
                 <tr>
+                  <td><input type="checkbox" data-testid="quant-run-compare" aria-label="Compare ${escapeHtml(item.run_id || "")}" data-action="toggle-run-compare" data-run-id="${escapeHtml(item.run_id || "")}" ${state.quantRunCompareSelection.includes(item.run_id) ? "checked" : ""} /></td>
                   <td>${escapeHtml(item.run_id || "")}</td>
                   <td>${escapeHtml(item.template || "")}</td>
                   <td>${escapeHtml((item.tickers || []).join(","))}</td>
                   <td>${escapeHtml(fmtDecimal(metrics.sharpe, 2))}</td>
                   <td>${escapeHtml(fmtMetricRatio(metrics.max_drawdown))}</td>
+                  <td>${escapeHtml(policy.profile || "-")}${configHash ? ` · ${escapeHtml(configHash)}` : ""}</td>
                   <td><span class="table-status ${diagnostics.lookahead_safe ? "ok" : "fail"}">${diagnostics.lookahead_safe ? "safe" : "check"}</span></td>
                   <td><button type="button" class="linkish" data-testid="quant-replay-reports" aria-label="Replay reports ${escapeHtml(item.run_id || "")}" data-quant-replay-reports-id="${escapeHtml(item.run_id || "")}">${escapeHtml(_fmtNumber(item.replay_reports?.count || 0))}</button></td>
                   <td><button type="button" class="linkish" data-testid="quant-run-open" aria-label="Open quant run ${escapeHtml(item.run_id || "")}" data-quant-run-id="${escapeHtml(item.run_id || "")}">open</button></td>
@@ -7102,6 +7984,7 @@ async function loadQuantRunHistory(force = false) {
     els.quantRunHistorySurface.querySelectorAll("[data-quant-export-id]").forEach((button) => {
       button.addEventListener("click", () => exportQuantBacktestArtifact(button.dataset.quantExportId || "", button.dataset.format || "jsonl"));
     });
+    syncQuantRunCompareSelectionState();
   } catch (err) {
     els.quantRunHistorySurface.innerHTML = decisionEmpty(`실행 이력 로드 실패: ${err.message || err}`);
   } finally {
@@ -7835,58 +8718,135 @@ async function loadAiPortfolio(force = false) {
   loadAiPortfolioOperations(force);
 }
 
+function aiPortfolioDashboardUrl() {
+  const params = new URLSearchParams({ limit: "12" });
+  const policyId = aiActivePolicyId();
+  if (policyId) params.set("policy_id", policyId);
+  return `${API.aiPortfolioDashboard}?${params.toString()}`;
+}
+
+function renderAiPortfolioCoverage(rows) {
+  if (!els.aiPortfolioCoverageSurface) return;
+  if (!Array.isArray(rows) || !rows.length) {
+    els.aiPortfolioCoverageSurface.innerHTML = decisionEmpty("표시할 AI Portfolio coverage 정보가 없습니다.");
+    return;
+  }
+  els.aiPortfolioCoverageSurface.innerHTML = `
+    <div class="decision-section-title">Coverage Heatmap</div>
+    <div class="ai-coverage-heatmap">
+      ${rows.map((row) => {
+        const pct = row.pct !== null && row.pct !== undefined ? `${fmtDecimal(row.pct, 1)}%` : "unavailable";
+        const ratio = row.total_count ? `${_fmtNumber(row.available_count || 0)}/${_fmtNumber(row.total_count)}` : "";
+        return `
+          <div class="ai-coverage-cell ${escapeHtml(decisionStatusClass(row.status))}">
+            <span>${escapeHtml(row.label || row.id || "coverage")}</span>
+            <strong>${escapeHtml(pct)}</strong>
+            <small>${escapeHtml(ratio || row.detail || row.status || "")}</small>
+          </div>
+        `;
+      }).join("")}
+    </div>
+    <div class="decision-list compact">
+      ${rows.map((row) => `
+        <div class="decision-list-row">
+          <span><strong>${escapeHtml(row.label || row.id)}</strong><br><small>${escapeHtml(row.detail || "")}${row.latest_at ? ` · ${escapeHtml(row.latest_at)}` : ""}</small></span>
+          <strong class="${escapeHtml(decisionStatusClass(row.status))}">${escapeHtml(row.status || "unavailable")}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderAiPortfolioSnapshotTimeline(items) {
+  if (!els.aiPortfolioSnapshotTimelineSurface) return;
+  if (!Array.isArray(items) || !items.length) {
+    els.aiPortfolioSnapshotTimelineSurface.innerHTML = decisionEmpty("아직 생성된 성과 스냅샷이 없습니다. 성과 스냅샷 작업을 실행하면 timeline에 기록됩니다.");
+    return;
+  }
+  els.aiPortfolioSnapshotTimelineSurface.innerHTML = `
+    <div class="decision-section-title">Snapshot Timeline</div>
+    <div class="ai-snapshot-timeline">
+      ${items.slice(0, 12).map((item) => `
+        <div class="ai-snapshot-point ${escapeHtml(decisionStatusClass(item.coverage_status))}">
+          <span>${escapeHtml(item.date || item.created_at || "-")}</span>
+          <strong>${escapeHtml(item.portfolio_value !== null && item.portfolio_value !== undefined ? _fmtNumber(item.portfolio_value) : "NAV unavailable")}</strong>
+          <small>
+            ${escapeHtml(item.period_return !== null && item.period_return !== undefined ? `Return ${fmtPct(item.period_return)}` : "Return unavailable")}
+            · ${escapeHtml(item.price_available_pct !== null && item.price_available_pct !== undefined ? `Price ${fmtDecimal(item.price_available_pct, 1)}%` : "Price unavailable")}
+          </small>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderAiPortfolioOpsDashboard(dashboard) {
+  if (!els.aiPortfolioOpsSurface) return;
+  const store = dashboard?.store_status || {};
+  const collections = store.collections || {};
+  const health = dashboard?.data_health_summary || {};
+  const counts = health.table_counts || {};
+  const legacy = Array.isArray(store.legacy_json) ? store.legacy_json : [];
+  const legacyExisting = legacy.filter((item) => item.exists);
+  const selected = dashboard?.selected_policy;
+  const operationSummary = dashboard?.operation_summary || {};
+  const legacyRows = legacyExisting.map((item) => `
+    <div class="decision-list-row">
+      <span>${escapeHtml(item.collection)} · ${escapeHtml(String(item.item_count || 0))} legacy rows</span>
+      <strong class="warn">seed only</strong>
+    </div>
+  `).join("");
+  els.aiPortfolioOpsSurface.innerHTML = `
+    <div class="decision-status-row">
+      <span class="decision-badge ok">${escapeHtml(store.primary_store || "sqlite")}</span>
+      <span>${escapeHtml(selected ? `${selected.portfolio_name} · ${selected.data_quality_status}` : "선택된 정책 없음")}</span>
+    </div>
+    <div class="decision-metric-grid dense">
+      ${decisionMetric("정책", String(collections.policies?.item_count || dashboard?.policy_counts?.total || 0), "ok")}
+      ${decisionMetric("활성 정책", String(dashboard?.policy_counts?.active || 0), dashboard?.policy_counts?.active ? "ok" : "warn")}
+      ${decisionMetric("추천", String(collections.recommendations?.item_count || 0), "ok")}
+      ${decisionMetric("스냅샷", String(collections.snapshots?.item_count || 0), collections.snapshots?.item_count ? "ok" : "warn")}
+      ${decisionMetric("작업", String(operationSummary.total_count || collections.operations?.item_count || 0), operationSummary.total_count ? "ok" : "warn")}
+      ${decisionMetric("가격 행", _fmtNumber(counts.prices_daily || 0), counts.prices_daily ? "ok" : "warn")}
+      ${decisionMetric("재무 스냅샷", _fmtNumber(counts.fundamentals_snapshots || 0), counts.fundamentals_snapshots ? "ok" : "warn")}
+      ${decisionMetric("SEC 팩트", _fmtNumber(counts.sec_financial_facts || 0), counts.sec_financial_facts ? "ok" : "warn")}
+    </div>
+    <div class="decision-summary ${legacyExisting.length ? "warn" : "ok"}">
+      현재 쓰기 경로: SQLite · ${escapeHtml(store.write_path || store.db_path || "-")}
+      ${legacyExisting.length ? " · legacy JSON 파일은 migration seed로만 사용됩니다." : " · legacy JSON 잔여 파일 없음"}
+    </div>
+    <div class="decision-section-title">Legacy JSON 상태</div>
+    <div class="decision-list compact">
+      ${legacyRows || '<div class="muted small">legacy JSON 파일이 감지되지 않았습니다.</div>'}
+    </div>
+  `;
+  renderAiPortfolioCoverage(dashboard?.coverage_rows || []);
+  renderAiPortfolioSnapshotTimeline(dashboard?.snapshot_timeline || []);
+}
+
 async function loadAiPortfolioOps(force = false) {
-  if (!els.aiPortfolioOpsSurface || (!force && state.aiPortfolioOpsLoaded)) return;
-  els.aiPortfolioOpsSurface.innerHTML = decisionEmpty("AI Portfolio 저장소와 데이터 마트 상태를 확인하는 중입니다.");
+  if (!els.aiPortfolioOpsSurface || (!force && state.aiPortfolioOpsLoaded)) {
+    if (state.aiPortfolioDashboard) {
+      renderAiPortfolioOpsDashboard(state.aiPortfolioDashboard);
+    }
+    return;
+  }
+  els.aiPortfolioOpsSurface.innerHTML = decisionEmpty("AI Portfolio 운영 대시보드를 확인하는 중입니다.");
+  if (els.aiPortfolioCoverageSurface) els.aiPortfolioCoverageSurface.innerHTML = decisionEmpty("데이터 coverage를 불러오는 중입니다.");
+  if (els.aiPortfolioSnapshotTimelineSurface) els.aiPortfolioSnapshotTimelineSurface.innerHTML = decisionEmpty("스냅샷 timeline을 불러오는 중입니다.");
   try {
-    const [storeRes, dataRes] = await Promise.all([
-      fetch(API.aiPortfolioStoreStatus),
-      fetch(API.dataHealth),
-    ]);
-    const store = await storeRes.json();
-    const data = await dataRes.json();
-    if (!storeRes.ok) throw new Error(store.detail || `store HTTP ${storeRes.status}`);
-    if (!dataRes.ok) throw new Error(data.detail || `data HTTP ${dataRes.status}`);
-    const counts = data.table_counts || {};
-    const collections = store.collections || {};
-    const legacy = Array.isArray(store.legacy_json) ? store.legacy_json : [];
-    const legacyExisting = legacy.filter((item) => item.exists);
-    const legacyRows = legacyExisting.map((item) => `
-      <div class="decision-list-row">
-        <span>${escapeHtml(item.collection)} · ${escapeHtml(String(item.item_count || 0))} legacy rows</span>
-        <strong class="warn">seed only</strong>
-      </div>
-    `).join("");
-    els.aiPortfolioOpsSurface.innerHTML = `
-      <div class="decision-status-row">
-        <span class="decision-badge ok">${escapeHtml(store.primary_store || "sqlite")}</span>
-        <span>${escapeHtml(store.legacy_json_policy || "legacy JSON is not the write path")}</span>
-      </div>
-      <div class="decision-metric-grid dense">
-        ${decisionMetric("정책", String(collections.policies?.item_count || 0), "ok")}
-        ${decisionMetric("추천", String(collections.recommendations?.item_count || 0), "ok")}
-        ${decisionMetric("신호", String(collections.signals?.item_count || 0), "ok")}
-        ${decisionMetric("이력", String(collections.history?.item_count || 0), "ok")}
-        ${decisionMetric("가격 행", _fmtNumber(counts.prices_daily || 0), counts.prices_daily ? "ok" : "warn")}
-        ${decisionMetric("재무 스냅샷", _fmtNumber(counts.fundamentals_snapshots || 0), counts.fundamentals_snapshots ? "ok" : "warn")}
-        ${decisionMetric("밸류에이션", _fmtNumber(counts.valuation_metrics || 0), counts.valuation_metrics ? "ok" : "warn")}
-        ${decisionMetric("재무제표형 지표", _fmtNumber(counts.financial_statements || 0), counts.financial_statements ? "ok" : "warn")}
-        ${decisionMetric("SEC 기업", _fmtNumber(counts.sec_company_registry || 0), counts.sec_company_registry ? "ok" : "warn")}
-        ${decisionMetric("SEC 팩트", _fmtNumber(counts.sec_financial_facts || 0), counts.sec_financial_facts ? "ok" : "warn")}
-        ${decisionMetric("SEC 공시", _fmtNumber(counts.filings || 0), counts.filings ? "ok" : "warn")}
-      </div>
-      <div class="decision-summary ${legacyExisting.length ? "warn" : "ok"}">
-        현재 쓰기 경로: SQLite · ${escapeHtml(store.write_path || store.db_path || "-")}
-        ${legacyExisting.length ? " · legacy JSON 파일은 migration seed로만 사용됩니다." : " · legacy JSON 잔여 파일 없음"}
-      </div>
-      <div class="decision-section-title">Legacy JSON 상태</div>
-      <div class="decision-list compact">
-        ${legacyRows || '<div class="muted small">legacy JSON 파일이 감지되지 않았습니다.</div>'}
-      </div>
-    `;
+    const res = await fetch(aiPortfolioDashboardUrl());
+    const dashboard = await res.json();
+    if (!res.ok) throw new Error(dashboard.detail || `dashboard HTTP ${res.status}`);
+    state.aiPortfolioDashboard = dashboard;
+    state.aiPortfolioOperations = dashboard.operation_summary?.recent_operations || [];
+    renderAiPortfolioOpsDashboard(dashboard);
+    renderAiPortfolioOperations(state.aiPortfolioOperations);
     state.aiPortfolioOpsLoaded = true;
   } catch (err) {
     els.aiPortfolioOpsSurface.innerHTML = decisionEmpty(`운영 상태 조회 실패: ${err.message || err}`);
+    if (els.aiPortfolioCoverageSurface) els.aiPortfolioCoverageSurface.innerHTML = decisionEmpty("coverage 조회 실패");
+    if (els.aiPortfolioSnapshotTimelineSurface) els.aiPortfolioSnapshotTimelineSurface.innerHTML = decisionEmpty("snapshot timeline 조회 실패");
   }
 }
 
@@ -7923,7 +8883,7 @@ function renderAiPortfolioOperations(items) {
       ${items.slice(0, 8).map((item) => `
         <div class="decision-list-row">
           <span><strong>${escapeHtml(item.operation_type || "operation")}</strong><br><small>${escapeHtml(item.created_at || "")} · ${escapeHtml(item.operation_id || "")}</small></span>
-          <strong class="${item.status === "completed" || item.status === "dry_run" ? "ok" : "warn"}">${escapeHtml(item.status || "-")}</strong>
+          <strong class="${escapeHtml(decisionStatusClass(item.status || "unknown"))}">${escapeHtml(item.status || "-")}</strong>
         </div>
       `).join("")}
     </div>
@@ -7956,10 +8916,13 @@ async function loadAiPortfolioOperations(force = false) {
   }
   els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty("운영 작업 이력을 불러오는 중입니다.");
   try {
-    const res = await fetch(API.aiPortfolioOperations);
+    const res = await fetch(aiPortfolioDashboardUrl());
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-    state.aiPortfolioOperations = Array.isArray(data.items) ? data.items : [];
+    state.aiPortfolioDashboard = data;
+    state.aiPortfolioOperations = Array.isArray(data.operation_summary?.recent_operations) ? data.operation_summary.recent_operations : [];
+    renderAiPortfolioCoverage(data.coverage_rows || []);
+    renderAiPortfolioSnapshotTimeline(data.snapshot_timeline || []);
     renderAiPortfolioOperations(state.aiPortfolioOperations);
   } catch (err) {
     els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty(`운영 작업 로드 실패: ${err.message || err}`);
@@ -8031,6 +8994,7 @@ async function runAiPortfolioHydrateData({ missingOnly = false } = {}) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
     state.aiPortfolioOperations = [];
+    state.aiPortfolioDashboard = null;
     renderAiPortfolioOperations([data]);
     state.aiPortfolioOpsLoaded = false;
     loadAiPortfolioOps(true);
@@ -8052,7 +9016,10 @@ async function runAiPortfolioSnapshotJob() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
     state.aiPortfolioOperations = [];
+    state.aiPortfolioDashboard = null;
     renderAiPortfolioOperations([data]);
+    state.aiPortfolioOpsLoaded = false;
+    loadAiPortfolioOps(true);
     loadAiPortfolioOperations(true);
     loadAiPortfolioHistory();
   } catch (err) {
@@ -8084,6 +9051,7 @@ async function runAiPortfolioSecRefresh() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
     state.aiPortfolioOperations = [];
+    state.aiPortfolioDashboard = null;
     renderAiPortfolioOperations([data]);
     state.aiPortfolioOpsLoaded = false;
     loadAiPortfolioOps(true);
@@ -8191,6 +9159,9 @@ async function runAiPortfolioGenerate() {
     const data = await res.json();
     if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data));
     renderAiPortfolioResult(data);
+    state.aiPortfolioDashboard = null;
+    state.aiPortfolioOpsLoaded = false;
+    loadAiPortfolioOps(true);
   } catch (err) {
     if (els.aiPortfolioOverviewSurface) els.aiPortfolioOverviewSurface.innerHTML = decisionEmpty(`AI Portfolio 생성 실패: ${err.message || err}`);
   }
@@ -8421,10 +9392,13 @@ async function loadDashboardNews(force = false) {
 
 function loadMarketDashboard(force = false) {
   initializeTradingViewDashboard(force);
-  loadDashboardEquityHeatmap(force);
-  loadDashboardMarket(force);
-  loadDataHealth(force);
-  loadDashboardNews(force);
+  loadDashboardMarketOverview(force);
+  Promise.allSettled([
+    loadDashboardEquityHeatmap(force),
+    loadDashboardMarket(force),
+    loadDataHealth(force),
+    loadDashboardNews(force),
+  ]).then(() => loadDashboardMarketOverview(true));
 }
 
 function forecastDatasetConfigFromControls() {
@@ -8550,6 +9524,7 @@ async function loadForecastLab(force = false) {
     loadForecastAiProviderStatus(force),
     loadForecastDrift(force),
     loadForecastModelComparison(force),
+    loadForecastJobs(force),
     loadForecastHistory(force),
     loadForecastRegistry(force),
   ]);
@@ -8661,6 +9636,37 @@ async function runForecastExperiment() {
   } finally {
     setButtonBusy(els.forecastRunTrain, false);
   }
+}
+
+async function runForecastQueuedJob() {
+  setButtonBusy(els.forecastQueueJob, true, "제출 중");
+  if (els.forecastJobsSurface) els.forecastJobsSurface.innerHTML = decisionEmpty("Forecast job을 제출하는 중입니다.");
+  try {
+    const request = forecastRunRequestFromControls();
+    const data = await forecastFetchJson(API.forecastJobs, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        request,
+        runtime_budget_s: forecastRuntimeBudgetSeconds(request),
+        notes: "ui_async_forecast_job",
+      }),
+    });
+    renderForecastJobs([data]);
+    scheduleForecastJobPoll(data.job_id);
+    await loadForecastJobs(true);
+  } catch (err) {
+    if (els.forecastJobsSurface) els.forecastJobsSurface.innerHTML = decisionEmpty(`Forecast job 제출 실패: ${err.message || err}`);
+  } finally {
+    setButtonBusy(els.forecastQueueJob, false);
+  }
+}
+
+function forecastRuntimeBudgetSeconds(request) {
+  const model = String(request?.model_config?.model_name || "");
+  if (["lstm", "gru", "temporal_cnn", "transformer", "temporal_fusion_transformer"].includes(model)) return 1800;
+  if (["xgboost", "lightgbm"].includes(model)) return 1200;
+  return 600;
 }
 
 function forecastSetAllSurfacesLoading(message) {
@@ -8954,6 +9960,95 @@ async function loadForecastAiProviderStatus(force = false) {
   }
 }
 
+async function loadForecastJobs(force = false) {
+  if (!els.forecastJobsSurface) return;
+  if (!force && els.forecastJobsSurface.dataset.loaded === "true") return;
+  try {
+    const data = await forecastFetchJson(`${API.forecastJobs}?limit=10`);
+    els.forecastJobsSurface.dataset.loaded = "true";
+    renderForecastJobs(data.items || []);
+  } catch (err) {
+    els.forecastJobsSurface.innerHTML = decisionEmpty(`Forecast job 로드 실패: ${err.message || err}`);
+  }
+}
+
+function renderForecastJobs(items) {
+  if (!els.forecastJobsSurface) return;
+  els.forecastJobsSurface.innerHTML = items.length ? `
+    <div class="decision-table-wrap"><table class="decision-table"><thead><tr><th>Job</th><th>Status</th><th>Ticker</th><th>Model</th><th>Stage</th><th>Result</th><th>Action</th></tr></thead><tbody>
+      ${items.map((item) => {
+        const summary = item.result_summary || {};
+        const experimentId = summary.experiment_id || "";
+        const canCancel = item.can_cancel && !["succeeded", "failed", "cancelled"].includes(item.job_status);
+        const canRetry = item.can_retry || ["failed", "cancelled"].includes(item.job_status);
+        return `<tr>
+          <td>${escapeHtml(item.job_id || "")}</td>
+          <td><span class="decision-badge ${escapeHtml(forecastJobStatusClass(item.job_status))}">${escapeHtml(item.job_status || "")}</span></td>
+          <td>${escapeHtml(item.ticker || "")}</td>
+          <td>${escapeHtml(item.model_name || "")}</td>
+          <td>${escapeHtml(item.progress_stage || "")}<br><span class="muted">${escapeHtml(item.progress_message || "")}</span></td>
+          <td>${experimentId ? `<button type="button" class="linkish" data-action="forecast-experiment-detail" data-experiment-id="${escapeHtml(experimentId)}">${escapeHtml(experimentId)}</button>` : escapeHtml(summary.status || "")}</td>
+          <td>
+            <button type="button" class="linkish" data-action="forecast-job-refresh" data-job-id="${escapeHtml(item.job_id || "")}">refresh</button>
+            ${canCancel ? `<button type="button" class="linkish" data-action="forecast-job-cancel" data-job-id="${escapeHtml(item.job_id || "")}">cancel</button>` : ""}
+            ${canRetry ? `<button type="button" class="linkish" data-action="forecast-job-retry" data-job-id="${escapeHtml(item.job_id || "")}">retry</button>` : ""}
+          </td>
+        </tr>`;
+      }).join("")}
+    </tbody></table></div>
+  ` : decisionEmpty("아직 제출된 Forecast job이 없습니다.");
+}
+
+function forecastJobStatusClass(status) {
+  if (status === "succeeded") return "ok";
+  if (status === "failed" || status === "cancelled") return "fail";
+  if (status === "running") return "warn";
+  return "neutral";
+}
+
+function scheduleForecastJobPoll(jobId) {
+  if (!jobId) return;
+  if (state.forecastJobPollTimer) window.clearInterval(state.forecastJobPollTimer);
+  state.forecastJobPollTimer = window.setInterval(() => refreshForecastJob(jobId), 2500);
+}
+
+async function refreshForecastJob(jobId) {
+  if (!jobId) return;
+  try {
+    const data = await forecastFetchJson(API.forecastJob(jobId));
+    await loadForecastJobs(true);
+    if (["succeeded", "failed", "cancelled"].includes(data.job_status)) {
+      if (state.forecastJobPollTimer) window.clearInterval(state.forecastJobPollTimer);
+      state.forecastJobPollTimer = null;
+      if (data.job_status === "succeeded" && data.result?.status && data.result.status !== "failed") {
+        state.lastForecastPayload = data.result;
+        renderForecastPayload(data.result, Date.now());
+        await Promise.allSettled([loadForecastHistory(true), loadForecastRegistry(true), loadForecastModelComparison(true), loadForecastDrift(true)]);
+      }
+    }
+  } catch (err) {
+    if (els.forecastJobsSurface) els.forecastJobsSurface.insertAdjacentHTML("afterbegin", `<div class="decision-warning">Forecast job 상태 확인 실패: ${escapeHtml(err.message || err)}</div>`);
+  }
+}
+
+async function cancelForecastJob(jobId) {
+  if (!jobId) return;
+  await forecastFetchJson(API.forecastJobCancel(jobId), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason: "ui_cancel_request" }),
+  });
+  await loadForecastJobs(true);
+}
+
+async function retryForecastJob(jobId) {
+  if (!jobId) return;
+  const data = await forecastFetchJson(API.forecastJobRetry(jobId), { method: "POST" });
+  renderForecastJobs([data]);
+  scheduleForecastJobPoll(data.job_id);
+  await loadForecastJobs(true);
+}
+
 async function loadForecastHistory(force = false) {
   if (!els.forecastHistorySurface) return;
   if (!force && els.forecastHistorySurface.dataset.loaded === "true") return;
@@ -8963,7 +10058,7 @@ async function loadForecastHistory(force = false) {
     els.forecastHistorySurface.dataset.loaded = "true";
     els.forecastHistorySurface.innerHTML = items.length ? `
       <div class="decision-table-wrap"><table class="decision-table"><thead><tr><th>Experiment</th><th>Ticker</th><th>Status</th><th>Model</th><th>Data Snapshot</th></tr></thead><tbody>
-        ${items.map((item) => `<tr><td>${escapeHtml(item.experiment_id || "")}</td><td>${escapeHtml(item.ticker || "")}</td><td>${escapeHtml(item.status || "")}</td><td>${escapeHtml(item.model_id || "")}</td><td>${escapeHtml(item.data_snapshot_id || "")}</td></tr>`).join("")}
+        ${items.map((item) => `<tr><td><button type="button" class="linkish" data-action="forecast-experiment-detail" data-experiment-id="${escapeHtml(item.experiment_id || "")}">${escapeHtml(item.experiment_id || "")}</button></td><td>${escapeHtml(item.ticker || "")}</td><td>${escapeHtml(item.status || "")}</td><td>${escapeHtml(item.model_id || "")}</td><td>${escapeHtml(item.data_snapshot_id || "")}</td></tr>`).join("")}
       </tbody></table></div>
     ` : decisionEmpty("저장된 ML Forecast 실험이 없습니다.");
   } catch (err) {
@@ -9110,6 +10205,118 @@ async function verifyForecastModelArtifact(modelId) {
   } catch (err) {
     if (target) target.innerHTML = decisionEmpty(`아티팩트 검증 실패: ${err.message || err}`);
   }
+}
+
+async function openForecastExperimentDetail(experimentId) {
+  if (!experimentId || !els.forecastDetailModal || !els.forecastDetailBody) return;
+  els.forecastDetailTitle.textContent = experimentId;
+  els.forecastDetailBody.innerHTML = decisionEmpty("실험 상세와 registry audit를 불러오는 중입니다.");
+  els.forecastDetailModal.classList.remove("hidden");
+  try {
+    const detail = await forecastFetchJson(API.forecastExperiment(experimentId));
+    const modelId = detail.forecast_result?.model_id || detail.experiment?.artifact_refs?.model_id || "";
+    const audit = modelId
+      ? await forecastFetchJson(`${API.forecastRegistryAudit}?model_id=${encodeURIComponent(modelId)}&limit=20`).catch((err) => ({ status: "failed", items: [], error: err.message || String(err) }))
+      : { status: "empty", items: [] };
+    renderForecastExperimentDetail(detail, audit);
+  } catch (err) {
+    els.forecastDetailBody.innerHTML = decisionEmpty(`실험 상세 로드 실패: ${err.message || err}`);
+  }
+}
+
+function closeForecastExperimentDetail() {
+  els.forecastDetailModal?.classList.add("hidden");
+}
+
+function renderForecastExperimentDetail(payload, audit = {}) {
+  if (!els.forecastDetailBody) return;
+  const experiment = payload.experiment || {};
+  const forecast = payload.forecast_result || {};
+  const signal = payload.signal_result || {};
+  const snapshot = payload.data_snapshot || {};
+  const feature = payload.feature_payload || {};
+  const target = payload.target_config || experiment.target_config || {};
+  const validation = experiment.validation_config || {};
+  const model = experiment.model_config || {};
+  const leakage = payload.leakage_check || {};
+  const training = payload.training_result || {};
+  const aggregate = training.aggregate_metrics || {};
+  const artifactRefs = experiment.artifact_refs || {};
+  const auditItems = audit.items || [];
+  els.forecastDetailBody.innerHTML = `
+    <div class="forecast-detail-grid">
+      <section class="forecast-detail-section">
+        <h3>Run Identity</h3>
+        <div class="decision-practical-grid forecast-metric-grid">
+          ${decisionMetric("Status", payload.status || experiment.status || "unknown", decisionStatusClass(payload.status || experiment.status))}
+          ${decisionMetric("Ticker", forecast.ticker || experiment.ticker || "", "ok")}
+          ${decisionMetric("Model", forecast.model_id || "", "ok")}
+          ${decisionMetric("Signal", signal.signal || forecast.signal || "unavailable", decisionStatusClass(signal.signal || forecast.signal))}
+          ${decisionMetric("Confidence", fmtDecimal(forecast.model_confidence?.score, 3), "ok")}
+          ${decisionMetric("Created", experiment.created_at || payload.generated_at || "", "ok")}
+        </div>
+      </section>
+      <section class="forecast-detail-section">
+        <h3>Data Snapshot</h3>
+        ${forecastDetailRows([
+          ["data_snapshot_id", snapshot.data_snapshot_id],
+          ["source_coverage_hash", snapshot.source_coverage_hash],
+          ["price_rows", snapshot.price_coverage?.rows],
+          ["price_range", `${snapshot.price_coverage?.start_date || ""} -> ${snapshot.price_coverage?.end_date || ""}`],
+          ["benchmark_rows", snapshot.benchmark_coverage?.rows],
+          ["feature_schema_hash", snapshot.feature_schema_hash],
+        ])}
+      </section>
+      <section class="forecast-detail-section">
+        <h3>Feature / Target / Validation</h3>
+        ${forecastDetailRows([
+          ["feature_count", (feature.feature_names || []).length],
+          ["feature_shift", feature.summary?.feature_shift],
+          ["target_type", target.target_type],
+          ["horizon", target.horizon],
+          ["validation_method", validation.validation_method],
+          ["purge_window", validation.purge_window],
+          ["embargo_window", validation.embargo_window],
+          ["model_name", model.model_name],
+        ])}
+      </section>
+      <section class="forecast-detail-section">
+        <h3>Leakage / OOS Metrics</h3>
+        ${forecastDetailRows([
+          ["leakage_status", leakage.status],
+          ["issues", (leakage.issues || []).join(", ")],
+          ["mae", aggregate.mae],
+          ["rmse", aggregate.rmse],
+          ["directional_accuracy", aggregate.directional_accuracy],
+          ["ic", aggregate.ic],
+          ["purged_cv_status", training.purged_combinatorial_cv?.status],
+          ["purged_cv_folds", training.purged_combinatorial_cv?.fold_count],
+        ])}
+      </section>
+      <section class="forecast-detail-section">
+        <h3>Artifacts</h3>
+        ${forecastDetailRows(Object.entries(artifactRefs).map(([key, value]) => [key, compactArtifactPath(value)]))}
+      </section>
+      <section class="forecast-detail-section">
+        <h3>Registry Audit</h3>
+        ${auditItems.length ? `
+          <div class="decision-table-wrap"><table class="decision-table"><thead><tr><th>Time</th><th>Action</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+            ${auditItems.map((item) => `<tr><td>${escapeHtml(item.created_at || "")}</td><td>${escapeHtml(item.action || "")}</td><td>${escapeHtml(item.previous_status || "")} -> ${escapeHtml(item.new_status || "")}</td><td>${escapeHtml(item.notes || "")}</td></tr>`).join("")}
+          </tbody></table></div>
+        ` : decisionEmpty(audit.error ? `Audit 로드 실패: ${audit.error}` : "연결된 registry audit가 없습니다.")}
+      </section>
+    </div>
+  `;
+}
+
+function forecastDetailRows(rows) {
+  const cleanRows = (rows || []).filter((row) => row && row[0]);
+  if (!cleanRows.length) return decisionEmpty("표시할 상세 값이 없습니다.");
+  return `
+    <div class="decision-table-wrap"><table class="decision-table forecast-detail-table"><tbody>
+      ${cleanRows.map(([key, value]) => `<tr><th>${escapeHtml(key)}</th><td>${escapeHtml(value === null || value === undefined || value === "" ? "N/A" : String(value))}</td></tr>`).join("")}
+    </tbody></table></div>
+  `;
 }
 
 function fmtPercent(value) {
@@ -9912,8 +11119,19 @@ async function runAnalysis(e) {
   }
 
   persistForm();
+  if (payload.stale_ticker_ignored) {
+    const proxies = Array.isArray(payload.topic_related_tickers) && payload.topic_related_tickers.length
+      ? ` 관련 프록시: ${payload.topic_related_tickers.join(", ")}.`
+      : "";
+    setFormNotice(`${payload.stale_ticker_ignored}는 질문에 직접 언급되지 않아 ${payload.topic_hint || "주제"} 분석으로 처리합니다.${proxies}`, "info");
+  }
   setLoading(true, payload.ticker || "TOPIC");
-  if (payload.extracted_ticker) {
+  if (payload.stale_ticker_ignored) {
+    const topicTickers = Array.isArray(payload.topic_related_tickers) && payload.topic_related_tickers.length
+      ? ` 관련 프록시: ${payload.topic_related_tickers.join(", ")}.`
+      : "";
+    els.loadingSub.textContent = `${payload.stale_ticker_ignored}는 질문에 직접 언급되지 않아 주제 분석으로 처리합니다.${topicTickers}`;
+  } else if (payload.extracted_ticker) {
     els.loadingSub.textContent = `질문에서 ${payload.extracted_ticker} 티커를 감지했습니다. Universal 라우터로 경로를 판별합니다.`;
   }
   try {
@@ -11195,6 +12413,36 @@ function normalizeScenarioItem(item) {
   };
 }
 
+function scenarioSimulationToScenarios(simulation) {
+  if (!simulation || typeof simulation !== "object" || !Array.isArray(simulation.scenarios)) return [];
+  return simulation.scenarios.map((scenario) => normalizeScenarioItem({
+    scenario: scenario.name || scenario.id,
+    probability: scenario.probability != null ? `${Math.round(Number(scenario.probability) * 100)}%` : "명시 없음",
+    expected_outcome: scenario.expected_reaction || scenario.assumptions?.join(" · "),
+    asset_implication: [
+      scenario.direction ? `Direction: ${scenario.direction}` : "",
+      Array.isArray(scenario.triggers) && scenario.triggers.length ? `Triggers: ${scenario.triggers.join(" · ")}` : "",
+      Array.isArray(scenario.invalidation_signals) && scenario.invalidation_signals.length ? `Invalidation: ${scenario.invalidation_signals.join(" · ")}` : "",
+    ].filter(Boolean).join(" / "),
+    decision_read: scenario.expected_reaction,
+    evidence_doc_ids: Array.isArray(scenario.evidence_doc_ids) ? scenario.evidence_doc_ids : [],
+  }));
+}
+
+function scenarioSimulationToStrategies(simulation) {
+  const decision = simulation?.decision_implication;
+  if (!decision || typeof decision !== "object") return [];
+  return [
+    normalizeStrategyItem({
+      strategy: `Scenario decision framework: ${decision.bias || "mixed"}`,
+      trigger: Array.isArray(decision.entry_conditions) ? decision.entry_conditions.join(" · ") : "",
+      rationale: Array.isArray(decision.monitoring_indicators) ? decision.monitoring_indicators.join(" · ") : "",
+      risk_control: Array.isArray(decision.risk_management) ? decision.risk_management.join(" · ") : decision.disclaimer,
+      evidence_doc_ids: [],
+    }),
+  ];
+}
+
 function normalizeStrategyItem(item) {
   if (typeof item === "string") {
     return {
@@ -11244,6 +12492,9 @@ function scenarioBundleToArray(bundle) {
 
 function scenarioSources(data) {
   const extras = data?.execution_meta?.extras || {};
+  const simulation = extras.scenario_simulation;
+  const simulated = scenarioSimulationToScenarios(simulation);
+  if (simulated.length) return simulated;
   const bundled = scenarioBundleToArray(data?.scenario_analysis);
   if (bundled.length) return bundled.map(normalizeScenarioItem);
   return firstNonEmptyArray(
@@ -11259,6 +12510,8 @@ function scenarioSources(data) {
 
 function strategySources(data) {
   const extras = data?.execution_meta?.extras || {};
+  const simulationStrategies = scenarioSimulationToStrategies(extras.scenario_simulation);
+  if (simulationStrategies.length) return simulationStrategies;
   return firstNonEmptyArray(
     data?.execution_strategy,
     data?.fallback_execution_strategy,
@@ -11290,10 +12543,24 @@ function renderScenarioPanel(data) {
   const scenarios = existingScenarios.length ? existingScenarios : derived.scenarios.map(normalizeScenarioItem);
   const strategies = existingStrategies.length ? existingStrategies : derived.strategies.map(normalizeStrategyItem);
   els.scenarioPanel.innerHTML = "";
+  const simulation = data?.execution_meta?.extras?.scenario_simulation;
 
   if (!scenarios.length && !strategies.length) {
     els.scenarioPanel.innerHTML = `<div class="metric-empty">시나리오/실행 전략이 생성되지 않았습니다.</div>`;
     return;
+  }
+
+  if (simulation && typeof simulation === "object") {
+    const status = simulation.status || "unknown";
+    const scores = simulation.scores || {};
+    const summary = document.createElement("section");
+    summary.className = "scenario-card scenario-simulation-summary";
+    summary.innerHTML = `
+      <h4>Scenario Simulation</h4>
+      <p><strong>Status:</strong> ${escapeHtml(status)}</p>
+      <p><strong>Evidence strength:</strong> ${escapeHtml(scores.evidence_strength != null ? Number(scores.evidence_strength).toFixed(2) : "명시 없음")} · <strong>Risk score:</strong> ${escapeHtml(scores.risk_score != null ? Number(scores.risk_score).toFixed(2) : "명시 없음")}</p>
+    `;
+    els.scenarioPanel.appendChild(summary);
   }
 
   if (scenarios.length) {
@@ -12147,24 +13414,25 @@ function bindInputs() {
       }
       els.ticker.focus();
       persistForm();
+      refreshRoutingNotice();
     });
   });
   if (els.tickerSearchOpen) els.tickerSearchOpen.addEventListener("click", () => openSymbolPicker("research"));
   if (els.compareMode) {
     els.compareMode.addEventListener("change", () => {
       updateCompareModeUI();
-      setFormNotice("");
       persistForm();
+      refreshRoutingNotice();
     });
     updateCompareModeUI();
   }
-  els.ticker.addEventListener("input", () => { setFormNotice(""); persistForm(); });
+  els.ticker.addEventListener("input", () => { persistForm(); refreshRoutingNotice(); });
   els.researchModeInputs().forEach((i) => i.addEventListener("change", () => {
     updateCompareModeUI();
-    setFormNotice("");
     persistForm();
+    refreshRoutingNotice();
   }));
-  els.question.addEventListener("input", () => { setFormNotice(""); persistForm(); });
+  els.question.addEventListener("input", () => { persistForm(); refreshRoutingNotice(); });
   els.model.addEventListener("change", persistForm);
   els.sourceInputs().forEach((i) => i.addEventListener("change", persistForm));
 
@@ -12234,6 +13502,34 @@ function bindInputs() {
   if (els.macroBriefGenerate) els.macroBriefGenerate.addEventListener("click", () => generateMacroBrief());
   if (els.macroReportExport) els.macroReportExport.addEventListener("click", () => exportMacroReport());
   if (els.macroSeriesSearchRun) els.macroSeriesSearchRun.addEventListener("click", () => searchMacroSeries());
+  [els.macroCategoryFilter, els.macroProviderFilter].forEach((control) => {
+    if (!control) return;
+    control.addEventListener("change", () => {
+      if (state.macroSeriesSearch?.items?.length) {
+        renderMacroSeriesSearchResults(state.macroSeriesSearch);
+      } else {
+        renderMacroSearchStarter(state.macroSeriesList || {});
+      }
+    });
+  });
+  if (els.macroScenarioSurface) {
+    els.macroScenarioSurface.addEventListener("click", (event) => {
+      const rawTarget = event.target;
+      const target = rawTarget?.closest ? rawTarget.closest('[data-action="macro-scenario"]') : null;
+      if (!target?.dataset?.scenarioPreset) return;
+      event.preventDefault();
+      runMacroScenario(target.dataset.scenarioPreset);
+    });
+  }
+  if (els.macroResearchPreviewRun) els.macroResearchPreviewRun.addEventListener("click", () => runMacroResearchPreview());
+  if (els.macroResearchTicker) {
+    els.macroResearchTicker.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        runMacroResearchPreview();
+      }
+    });
+  }
   if (els.macroSeriesSearchInput) {
     els.macroSeriesSearchInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
@@ -12294,6 +13590,18 @@ function bindInputs() {
       if (target && target.dataset && target.dataset.action === "cross-run-cleanup-apply") {
         applyCrossRunExportCleanup();
       }
+      if (target && target.dataset && target.dataset.action === "toggle-run-compare") {
+        setQuantRunCompareSelection(target.dataset.runId || "", !!target.checked);
+      }
+      if (target && target.dataset && target.dataset.action === "run-compare-selected") {
+        compareSelectedQuantRuns();
+      }
+      if (target && target.dataset && target.dataset.action === "open-quant-run") {
+        loadQuantBacktestArtifact(target.dataset.runId || "");
+      }
+      if (target && target.dataset && target.dataset.action === "refresh-run-history") {
+        loadQuantRunHistory(true);
+      }
     });
   }
   if (els.backtestRun) els.backtestRun.addEventListener("click", runHomeBacktest);
@@ -12303,13 +13611,46 @@ function bindInputs() {
   if (els.forecastHydrateDataset) els.forecastHydrateDataset.addEventListener("click", runForecastDatasetHydrate);
   if (els.forecastBuildFeatures) els.forecastBuildFeatures.addEventListener("click", runForecastFeatureAndLeakagePreview);
   if (els.forecastRunTrain) els.forecastRunTrain.addEventListener("click", runForecastExperiment);
+  if (els.forecastQueueJob) els.forecastQueueJob.addEventListener("click", runForecastQueuedJob);
   if (els.forecastGenerateAi) els.forecastGenerateAi.addEventListener("click", renderForecastAiFromLastPayload);
   if (els.forecastGenerateProviderAi) els.forecastGenerateProviderAi.addEventListener("click", renderForecastProviderAiFromLastPayload);
   if (els.forecastAiProviderCheck) els.forecastAiProviderCheck.addEventListener("click", () => loadForecastAiProviderStatus(true));
   if (els.forecastDriftRefresh) els.forecastDriftRefresh.addEventListener("click", () => loadForecastDrift(true));
   if (els.forecastModelComparisonRefresh) els.forecastModelComparisonRefresh.addEventListener("click", () => loadForecastModelComparison(true));
+  if (els.forecastJobsRefresh) els.forecastJobsRefresh.addEventListener("click", () => loadForecastJobs(true));
   if (els.forecastHistoryRefresh) els.forecastHistoryRefresh.addEventListener("click", () => loadForecastHistory(true));
   if (els.forecastRegistryRefresh) els.forecastRegistryRefresh.addEventListener("click", () => loadForecastRegistry(true));
+  if (els.forecastJobsSurface) {
+    els.forecastJobsSurface.addEventListener("click", async (event) => {
+      const rawTarget = event.target;
+      const target = rawTarget?.closest ? rawTarget.closest("[data-action]") : rawTarget;
+      if (!target || !target.dataset) return;
+      if (target.dataset.action === "forecast-job-refresh") {
+        await refreshForecastJob(target.dataset.jobId);
+      } else if (target.dataset.action === "forecast-job-cancel") {
+        await cancelForecastJob(target.dataset.jobId);
+      } else if (target.dataset.action === "forecast-job-retry") {
+        await retryForecastJob(target.dataset.jobId);
+      } else if (target.dataset.action === "forecast-experiment-detail") {
+        await openForecastExperimentDetail(target.dataset.experimentId);
+      }
+    });
+  }
+  if (els.forecastHistorySurface) {
+    els.forecastHistorySurface.addEventListener("click", async (event) => {
+      const rawTarget = event.target;
+      const target = rawTarget?.closest ? rawTarget.closest("[data-action]") : rawTarget;
+      if (target?.dataset?.action === "forecast-experiment-detail") {
+        await openForecastExperimentDetail(target.dataset.experimentId);
+      }
+    });
+  }
+  if (els.forecastDetailClose) els.forecastDetailClose.addEventListener("click", closeForecastExperimentDetail);
+  if (els.forecastDetailModal) {
+    els.forecastDetailModal.addEventListener("click", (event) => {
+      if (event.target === els.forecastDetailModal) closeForecastExperimentDetail();
+    });
+  }
   if (els.forecastRegistrySurface) {
     els.forecastRegistrySurface.addEventListener("click", (event) => {
       const rawTarget = event.target;
@@ -12560,6 +13901,9 @@ function bindInputs() {
     }
     if (e.key === "Escape" && els.symbolPickerModal && !els.symbolPickerModal.classList.contains("hidden")) {
       closeSymbolPicker();
+    }
+    if (e.key === "Escape" && els.forecastDetailModal && !els.forecastDetailModal.classList.contains("hidden")) {
+      closeForecastExperimentDetail();
     }
   });
 }

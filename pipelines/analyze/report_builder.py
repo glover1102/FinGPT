@@ -3,6 +3,7 @@ from typing import Sequence, Tuple
 
 from core.schemas.request import AnalysisRequest
 from core.schemas.response import AnalysisResponse, CatalystTimeline, KeyMetric
+from pipelines.analyze.scenario_report_renderer import scenario_simulation_html, scenario_simulation_md
 
 
 def build_report(request: AnalysisRequest, response: AnalysisResponse, language: str = "ko") -> Tuple[str, str]:
@@ -736,7 +737,6 @@ def _open_questions_md(questions: Sequence[str], uncertainty: str, strings: dict
         parts.append(f"_{strings['no_questions']}_")
     return "\n\n".join(parts)
 
-
 def _build_markdown(response: AnalysisResponse, strings: dict) -> str:
     sentiment = response.sentiment or "Neutral"
     sentiment_label = strings["sentiments"].get(sentiment, sentiment)
@@ -779,6 +779,7 @@ def _build_markdown(response: AnalysisResponse, strings: dict) -> str:
 {snapshot_md}## {strings['metrics']} / Evidence Audit
 {_metrics_table_md(response.key_metrics, strings)}
 
+{scenario_simulation_md(response)}
 ## {strings['open_questions']}
 {_open_questions_md(response.open_questions, response.uncertainty, strings)}
 
@@ -1023,6 +1024,7 @@ def _build_html(response: AnalysisResponse, strings: dict, sentiment_label: str)
         {_snapshot_table_html(response, strings)}
         <h2>{escape(strings['metrics'])} / Evidence Audit</h2>
         {_metrics_table_html(response.key_metrics, strings)}
+        {scenario_simulation_html(response)}
         <h2>{escape(strings['open_questions'])}</h2>
         {_open_questions_html(response.open_questions, response.uncertainty, strings)}
         {thesis_evidence_block}

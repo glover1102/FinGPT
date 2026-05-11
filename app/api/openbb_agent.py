@@ -4,7 +4,6 @@ import asyncio
 import json
 import queue as threadqueue
 import re
-import time
 from typing import Any, Iterable
 
 from fastapi import APIRouter, Request

@@ -62,6 +62,27 @@ class QueryRouterTests(unittest.TestCase):
         self.assertEqual(routed.tickers[:2], ["005930.KS", "000660.KS"])
         self.assertNotIn("TLT", routed.tickers)
 
+    def test_kospi_inverse_question_overrides_stale_tlt_hint(self):
+        question = "\uc9c0\uae08 \ucf54\uc2a4\ud53c \uc778\ubc84\uc2a4 \ub4e4\uc5b4\uac00\uae30\uc5d0 \uc801\uc808\ud55c\uac00?"
+        with patch.object(query_router, "_call_router_model") as call_model:
+            routed = query_router.route_query(question, hint_ticker="TLT")
+
+        call_model.assert_not_called()
+        self.assertEqual(routed.mode, "sector_macro")
+        self.assertEqual(routed.tickers[:2], ["114800.KS", "252670.KS"])
+        self.assertIn("EWY", routed.tickers)
+        self.assertNotIn("TLT", routed.tickers)
+
+    def test_topic_question_overrides_stale_non_equity_hint(self):
+        with patch.object(query_router, "_call_router_model") as call_model:
+            routed = query_router.route_query("credit spread widening risks", hint_ticker="GLD")
+
+        call_model.assert_not_called()
+        self.assertEqual(routed.mode, "sector_macro")
+        self.assertEqual(routed.tickers, ["HYG", "LQD", "TLT"])
+        self.assertNotIn("GLD", routed.tickers)
+        self.assertIn("stale ticker hint", routed.reasoning)
+
     def test_single_korean_company_name_routes_to_single_equity(self):
         with patch.object(query_router, "_call_router_model") as call_model:
             routed = query_router.route_query("\uc0bc\uc131\uc804\uc790 \uc8fc\uac00\ub294 \uc9c0\uae08 \ud569\ub9ac\uc801\uc778\uac00?")

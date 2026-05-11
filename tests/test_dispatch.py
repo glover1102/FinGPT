@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from core.schemas.request import UniversalRequest
+from core.schemas.request import DEFAULT_COLLECTION_SOURCES, UniversalRequest
 from core.schemas.response import AnalysisResponse, CompareResponse
 from core.schemas.topic import TopicResponse
 from pipelines.orchestration.dispatch import dispatch_async
@@ -46,7 +46,7 @@ class DispatchRoutingTests(unittest.IsolatedAsyncioTestCase):
         run_topic.assert_not_awaited()
         request = run_pipeline.await_args.args[0]
         self.assertEqual(request.ticker, "QQQ")
-        self.assertEqual(request.sources, ["news", "macro", "transcript"])
+        self.assertEqual(request.sources, list(DEFAULT_COLLECTION_SOURCES))
 
     async def test_auto_mode_question_company_names_override_stale_ticker_hint(self):
         question = "\uc0bc\uc131\uc804\uc790\uc640 \ud558\uc774\ub2c9\uc2a4\uc758 \uc8fc\uac00\ub294 \ud569\ub9ac\uc801\uc778\uac00?"
@@ -83,6 +83,73 @@ class DispatchRoutingTests(unittest.IsolatedAsyncioTestCase):
         run_pipeline.assert_not_awaited()
         run_topic.assert_not_awaited()
 
+    async def test_auto_mode_kospi_inverse_question_drops_stale_tlt_hint(self):
+        question = "\uc9c0\uae08 \ucf54\uc2a4\ud53c \uc778\ubc84\uc2a4 \ub4e4\uc5b4\uac00\uae30\uc5d0 \uc801\uc808\ud55c\uac00?"
+        response = TopicResponse(
+            question=question,
+            theme=question,
+            mode="sector_macro",
+            status="partial",
+            executive_summary="\ucf54\uc2a4\ud53c \uc778\ubc84\uc2a4\ub294 \ud55c\uad6d \uc99d\uc2dc \ud558\ubc29 \uc2dc\ub098\ub9ac\uc624\ub85c \ub530\ub85c \ud310\ub2e8\ud574\uc57c \ud569\ub2c8\ub2e4.",
+            core_thesis="TLT\uac00 \uc544\ub2cc \ud55c\uad6d \uc778\ubc84\uc2a4 ETF\uc640 \ud55c\uad6d \uc2dc\uc7a5 proxy\ub97c \uae30\uc900\uc73c\ub85c \ubcf4\uc544\uc57c \ud569\ub2c8\ub2e4.",
+        )
+        with patch(
+            "pipelines.orchestration.dispatch.run_pipeline_async",
+            new=AsyncMock(),
+        ) as run_pipeline, patch(
+            "pipelines.orchestration.dispatch.run_topic_pipeline_async",
+            new=AsyncMock(return_value=response),
+        ) as run_topic:
+            result = await dispatch_async(
+                UniversalRequest(
+                    ticker="TLT",
+                    question=question,
+                    mode_hint="auto",
+                    sources=None,
+                )
+            )
+
+        self.assertEqual(result.mode, "sector_macro")
+        run_pipeline.assert_not_awaited()
+        run_topic.assert_awaited_once()
+        request = run_topic.await_args.args[0]
+        self.assertEqual(request.related_tickers[:2], ["114800.KS", "252670.KS"])
+        self.assertIn("EWY", request.related_tickers)
+        self.assertNotIn("TLT", request.related_tickers)
+
+    async def test_auto_mode_topic_question_drops_stale_proxy_hint(self):
+        question = "credit spread widening risks"
+        response = TopicResponse(
+            question=question,
+            theme=question,
+            mode="sector_macro",
+            status="partial",
+            executive_summary="Credit conditions should be assessed with credit and rates proxies.",
+            core_thesis="The stale GLD hint should not drive a credit-risk question.",
+        )
+        with patch(
+            "pipelines.orchestration.dispatch.run_pipeline_async",
+            new=AsyncMock(),
+        ) as run_pipeline, patch(
+            "pipelines.orchestration.dispatch.run_topic_pipeline_async",
+            new=AsyncMock(return_value=response),
+        ) as run_topic:
+            result = await dispatch_async(
+                UniversalRequest(
+                    ticker="GLD",
+                    question=question,
+                    mode_hint="auto",
+                    sources=None,
+                )
+            )
+
+        self.assertEqual(result.mode, "sector_macro")
+        run_pipeline.assert_not_awaited()
+        run_topic.assert_awaited_once()
+        request = run_topic.await_args.args[0]
+        self.assertEqual(request.related_tickers, ["HYG", "LQD", "TLT"])
+        self.assertNotIn("GLD", request.related_tickers)
+
     async def test_auto_mode_without_ticker_uses_explicit_ticker_in_question(self):
         response = AnalysisResponse(
             ticker="QQQ",
@@ -112,7 +179,7 @@ class DispatchRoutingTests(unittest.IsolatedAsyncioTestCase):
         run_topic.assert_not_awaited()
         request = run_pipeline.await_args.args[0]
         self.assertEqual(request.ticker, "QQQ")
-        self.assertEqual(request.sources, ["news", "macro", "transcript"])
+        self.assertEqual(request.sources, list(DEFAULT_COLLECTION_SOURCES))
 
     async def test_topic_mode_preserves_ticker_hint_as_related_ticker(self):
         with patch(

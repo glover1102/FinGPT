@@ -142,7 +142,7 @@ def _recent_fingpt_annotations(ticker: str, db_path: str | Path | None) -> list[
         return []
     try:
         return [_serialize_fingpt_annotation(annotation) for annotation in annotations[:20]]
-    except Exception as exc:
+    except Exception:
         logger.warning(
             "Failed to serialize FinGPT annotations for ticker=%s db_path=%s; omitting annotations.",
             clean_ticker,

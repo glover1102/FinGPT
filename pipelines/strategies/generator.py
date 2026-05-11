@@ -187,7 +187,10 @@ def _fallback_generation(prompt: str, context: dict[str, Any]) -> dict[str, Any]
 
 def _repair_required_strategy_fields(strategy: dict[str, Any], prompt: str, context: dict[str, Any]) -> dict[str, Any]:
     clean = _code_only_strategy(strategy)
-    prompt_hash = hashlib.sha1(prompt.encode("utf-8", errors="ignore")).hexdigest()[:10]
+    prompt_hash = hashlib.sha1(
+        prompt.encode("utf-8", errors="ignore"),
+        usedforsecurity=False,
+    ).hexdigest()[:10]
     lookback = _number_near(
         prompt,
         [r"(\d{2,4})\s*일", r"(\d{2,4})\s*day", r"(\d{2,4})d"],

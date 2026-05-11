@@ -28,6 +28,7 @@ _CORE_KNOWN_TICKERS = {
     "JPM", "GS", "SPY", "QQQ", "XLK", "SOXX", "SMH", "TLT", "IEF", "SHY", "AGG", "LQD", "HYG",
     "USO", "GLD", "SLV", "ASML", "AMAT", "KLAC", "INTC", "AMD",
     "BTC-USD", "ETH-USD", "EURUSD=X", "DXY", "CL=F",
+    "114800.KS", "252670.KS", "251340.KS", "EWY",
 }
 _KNOWN_TICKERS = _CORE_KNOWN_TICKERS | known_symbol_tickers()
 _NON_EQUITY_PROXY_TICKERS = {
@@ -100,6 +101,26 @@ _SECTOR_THEME_INTENT_TERMS = [
     "\uacf5\uae09\ub9dd",
     "\ud074\ub77c\uc6b0\ub4dc",
 ]
+_KOREA_MARKET_TERMS = [
+    "kospi",
+    "kosdaq",
+    "krx",
+    "\ucf54\uc2a4\ud53c",
+    "\ucf54\uc2a4\ub2e5",
+    "\ud55c\uad6d \uc99d\uc2dc",
+    "\uad6d\ub0b4 \uc99d\uc2dc",
+    "\ud55c\uad6d \uc2dc\uc7a5",
+]
+_KOREA_INVERSE_TERMS = [
+    "inverse",
+    "short kospi",
+    "short korea",
+    "\uc778\ubc84\uc2a4",
+    "\uace1\ubc84\uc2a4",
+    "\uc120\ubb3c\uc778\ubc84\uc2a4",
+    "\ud558\ub77d \ubca0\ud305",
+]
+_KOREA_INVERSE_RELATED_TICKERS = ["114800.KS", "252670.KS", "251340.KS", "EWY"]
 
 _SIMPLE_TICKERS = {ticker for ticker in _CORE_KNOWN_TICKERS if re.fullmatch(r"[A-Z0-9]+", ticker)}
 _TICKER_PATTERN = "|".join(sorted((re.escape(t) for t in _SIMPLE_TICKERS), key=len, reverse=True))
@@ -129,6 +150,11 @@ _SPECIAL_TICKER_PATTERNS = {
 }
 _EXPLICIT_TICKER_TOKEN_RE = re.compile(
     r"(?<![A-Za-z0-9.$=-])(?P<marker>\$?)(?P<ticker>[A-Za-z][A-Za-z0-9]{0,9}(?:[.\-=][A-Za-z0-9]{1,8})?|\d{6}\.(?:KS|KQ))(?![A-Za-z0-9])"
+)
+_DIRECT_TICKER_ONLY_RE = re.compile(
+    r"^\s*(?:\$?(?:[A-Za-z][A-Za-z0-9]{0,9}(?:[.\-=][A-Za-z0-9]{1,8})?|\d{6}\.(?:KS|KQ)))"
+    r"(?:[\s,]+(?:outlook|analysis|analyze|view|전망|분석|주가|실적|리스크))*\s*$",
+    re.IGNORECASE,
 )
 _CLASS_SHARE_DOT_RE = re.compile(r"^(?P<root>[A-Z]{1,5})\.(?P<class>[A-Z])$")
 _SUPPORTED_EXPLICIT_TICKER_RE = re.compile(
@@ -318,9 +344,10 @@ def _extract_known_tickers(text: str) -> list[str]:
     for ticker, pattern in _SPECIAL_TICKER_PATTERNS.items():
         if pattern.search(haystack):
             found.append(ticker)
-    found.extend(resolve_symbol_aliases(haystack))
     literal_tokens = _extract_literal_ticker_tokens(haystack)
     found.extend(literal_tokens)
+    if not (found and _DIRECT_TICKER_ONLY_RE.fullmatch(haystack)):
+        found.extend(resolve_symbol_aliases(haystack))
     explicit_unregistered = [ticker for ticker in literal_tokens if ticker not in _KNOWN_TICKERS]
     leading_equity = _leading_equity_literal_ticker(haystack)
     if leading_equity:
@@ -374,6 +401,10 @@ def _contains_any(text: str, terms: list[str]) -> bool:
     return any(term in text for term in terms)
 
 
+def _contains_korea_inverse_topic(original: str, lower: str) -> bool:
+    return _contains_any(lower, _KOREA_MARKET_TERMS) and _contains_any(lower, _KOREA_INVERSE_TERMS)
+
+
 def _contains_gold_intent(original: str, lower: str) -> bool:
     if any(term in lower for term in ("gold", "gld", "금값", "금 가격", "금 현물", "금 투자")):
         return True
@@ -393,6 +424,96 @@ def _infer_horizon(question: str) -> Literal["short_term", "medium_term", "unspe
     if _contains_any(q_lower, ["2026", "year", "12 month", "\uc911\uae30", "\uae08\ub9ac \uacbd\ub85c"]):
         return "medium_term"
     return "unspecified"
+
+
+def _question_topic_intent_route(
+    question: str,
+    lower: str,
+    horizon: Literal["short_term", "medium_term", "unspecified"],
+) -> RoutedQuery | None:
+    if _contains_any(lower, _CREDIT_INTENT_TERMS):
+        return RoutedQuery(
+            mode="sector_macro",
+            tickers=["HYG", "LQD", "TLT"],
+            theme=question[:120] or "credit risk and corporate bond spreads",
+            horizon=horizon,
+            reasoning="question topic routed to credit-risk proxies before stale ticker hint",
+        )
+    if _contains_commodity_intent(question, lower):
+        return RoutedQuery(
+            mode="sector_macro",
+            tickers=["GLD", "USO"],
+            theme=question[:120] or "commodity market regime",
+            horizon=horizon,
+            reasoning="question topic routed to commodity proxies before stale ticker hint",
+        )
+    if _contains_any(lower, _BROAD_MARKET_RISK_TERMS):
+        return RoutedQuery(
+            mode="sector_macro",
+            tickers=["SPY", "QQQ", "HYG", "LQD", "TLT"],
+            theme=question[:120] or "broad market risk regime",
+            horizon=horizon,
+            reasoning="broad market risk question topic routed to cross-asset proxies before stale ticker hint",
+        )
+    if _contains_any(lower, _RATES_INTENT_TERMS):
+        return RoutedQuery(
+            mode="sector_macro",
+            tickers=["TLT"],
+            theme=question[:120] or "rates and bonds",
+            horizon=horizon,
+            reasoning="question topic routed to rates/bonds proxies before stale ticker hint",
+        )
+    if _contains_any(lower, _FX_INTENT_TERMS):
+        return RoutedQuery(
+            mode="sector_macro",
+            tickers=["EURUSD=X"],
+            theme=question[:120] or "fx and dollar regime",
+            horizon=horizon,
+            reasoning="question topic routed to fx proxies before stale ticker hint",
+        )
+    if _contains_any(lower, _CRYPTO_INTENT_TERMS):
+        return RoutedQuery(
+            mode="sector_macro",
+            tickers=["BTC-USD"],
+            theme=question[:120] or "crypto market regime",
+            horizon=horizon,
+            reasoning="question topic routed to crypto proxies before stale ticker hint",
+        )
+    if _contains_any(lower, _SECTOR_THEME_INTENT_TERMS):
+        if _contains_any(lower, ["semiconductor", "semiconductors", "\ubc18\ub3c4\uccb4", "\uacf5\uae09\ub9dd"]):
+            tickers = ["AMAT", "ASML", "KLAC"]
+            reasoning = "question topic routed to semiconductor proxies before stale ticker hint"
+        elif _contains_any(lower, ["cloud", "\ud074\ub77c\uc6b0\ub4dc"]):
+            tickers = ["MSFT", "AMZN", "GOOGL"]
+            reasoning = "question topic routed to cloud platform proxies before stale ticker hint"
+        else:
+            tickers = ["SPY", "QQQ", "XLK"]
+            reasoning = "question topic routed to broad sector proxies before stale ticker hint"
+        return RoutedQuery(
+            mode="sector_macro",
+            tickers=tickers,
+            theme=question[:120] or "sector theme",
+            horizon=horizon,
+            reasoning=reasoning,
+        )
+    return None
+
+
+def _korea_market_inverse_route(question: str, hint_ticker: str | None = None) -> RoutedQuery | None:
+    q = question or ""
+    q_lower = q.lower()
+    if not _contains_korea_inverse_topic(q, q_lower):
+        return None
+
+    explicit = _extract_known_tickers(q)
+    tickers = _merge_tickers(explicit, _KOREA_INVERSE_RELATED_TICKERS)
+    return RoutedQuery(
+        mode="sector_macro",
+        tickers=tickers[:5],
+        theme=q[:120] or "KOSPI inverse ETF timing",
+        horizon=_infer_horizon(q),
+        reasoning="korean market inverse topic routed before stale ticker hint",
+    )
 
 
 def _explicit_ticker_route(question: str, hint_ticker: str | None = None) -> RoutedQuery | None:
@@ -442,6 +563,11 @@ def _non_equity_intent_route(question: str, hint_ticker: str | None = None) -> R
     concept_like = _contains_any(q_lower, ["what does", "explain", "mean", "meaning", "뜻", "의미", "설명"])
     if not non_equity and concept_like:
         return None
+
+    if not found:
+        topic_route = _question_topic_intent_route(q, q_lower, horizon)
+        if topic_route is not None:
+            return topic_route
 
     if any(ticker in {"TLT", "IEF", "SHY", "AGG", "LQD", "HYG"} for ticker in non_equity):
         tickers = _merge_tickers(non_equity or ["TLT"], ["TLT"])
@@ -548,13 +674,15 @@ def _non_equity_intent_route(question: str, hint_ticker: str | None = None) -> R
 
 
 def should_route_hint_as_topic(question: str, hint_ticker: str | None = None) -> bool:
-    return _non_equity_intent_route(question, hint_ticker) is not None
+    return _korea_market_inverse_route(question) is not None or _non_equity_intent_route(question, hint_ticker) is not None
 
 
 def _augment_theme_tickers(routed: RoutedQuery, question: str) -> RoutedQuery:
     text = f"{question} {routed.theme or ''}".lower()
     if routed.mode == "sector_macro":
-        if _contains_any(text, _CREDIT_INTENT_TERMS):
+        if _contains_korea_inverse_topic(f"{question} {routed.theme or ''}", text):
+            routed.tickers = _merge_tickers(_KOREA_INVERSE_RELATED_TICKERS, routed.tickers)
+        elif _contains_any(text, _CREDIT_INTENT_TERMS):
             routed.tickers = _merge_tickers(["HYG", "LQD", "TLT"], routed.tickers)
         elif _contains_any(text, ["semiconductor", "\ubc18\ub3c4\uccb4", "\ud6c4\uacf5\uc815"]):
             routed.tickers = _merge_tickers(["AMAT", "ASML", "KLAC"], routed.tickers)
@@ -582,6 +710,11 @@ def _augment_theme_tickers(routed: RoutedQuery, question: str) -> RoutedQuery:
 
 def _fallback_route(question: str, hint_ticker: str | None = None) -> RoutedQuery:
     q = question or ""
+    korea_inverse = _korea_market_inverse_route(q)
+    if korea_inverse is not None:
+        korea_inverse.reasoning = f"{korea_inverse.reasoning} by fallback"
+        return korea_inverse
+
     non_equity = _non_equity_intent_route(q, hint_ticker)
     if non_equity is not None:
         non_equity.reasoning = f"{non_equity.reasoning} by fallback"
@@ -606,7 +739,6 @@ def _fallback_route(question: str, hint_ticker: str | None = None) -> RoutedQuer
     ]
     fx_terms = ["eurusd", "eur/usd", "fx", "dollar", "\ud658\uc728", "\ub2ec\ub7ec"]
     crypto_terms = ["bitcoin", "btc", "crypto", "\ube44\ud2b8\ucf54\uc778", "\uc554\ud638\ud654\ud3d0"]
-    commodity_terms = ["gold", "oil", "commodity", "\uc6d0\uc790\uc7ac", "\uc720\uac00", "\uae08\uac12", "\uae08 \uac00\uaca9", "\uae08 \ud604\ubb3c"]
     concept_terms = ["what does", "explain", "mean", "meaning", "\ub73b", "\uc758\ubbf8", "\uc124\uba85"]
     if _contains_any(q_lower, concept_terms):
         inferred: list[str] = []
@@ -652,6 +784,10 @@ def route_query(question: str, hint_ticker: Optional[str] = None) -> RoutedQuery
     if hint_ticker and not question.strip():
         ticker = _clean_tickers([hint_ticker])
         return RoutedQuery(mode="single_ticker", tickers=ticker, theme=None, reasoning="ticker hint only")
+
+    korea_inverse = _korea_market_inverse_route(question)
+    if korea_inverse is not None:
+        return korea_inverse
 
     non_equity = _non_equity_intent_route(question, hint_ticker)
     if non_equity is not None:

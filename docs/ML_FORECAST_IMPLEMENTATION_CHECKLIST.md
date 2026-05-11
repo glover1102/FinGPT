@@ -59,6 +59,7 @@ Source of truth for the ML Forecast implementation in `F:\LLM\FinGPT`.
 - Phase 10: experiment history, model registry, integration points - Status: DONE
 - Phase 11: tests, validation, smoke checks, documentation - Status: DONE
 - Priority continuation 2026-05-09: data snapshot governance, registry audit UI, and purged combinatorial CV diagnostics - Status: DONE
+- Priority continuation 2026-05-11: async forecast jobs and experiment detail drawer - Status: DONE
 
 ## 4. Detailed Task Format
 
@@ -188,6 +189,39 @@ Source of truth for the ML Forecast implementation in `F:\LLM\FinGPT`.
 - Result Notes:
   - DONE. XGBoost and LightGBM live train smoke returned `status=success`; Shapley fallback produced 15 explanation rows; LSTM live train smoke returned `status=success` with signed artifact integrity refs.
 
+### [MF-007] Async Forecast Jobs and Experiment Detail Drawer
+- Status: DONE
+- Target Files:
+  - `core/schemas/forecast.py`
+  - `pipelines/forecast/jobs.py`
+  - `app/api/routers/forecast.py`
+  - `app/web/index.html`
+  - `app/web/app.js`
+  - `app/web/styles.css`
+  - `scripts/check_ui_contract.py`
+  - `tests/test_forecast_lab.py`
+  - `tests/test_ui_routing_contract.py`
+- Expected Behavior:
+  - ML Forecast can submit long-running train/forecast runs as background jobs with persistent local status, structured errors, retry, and cancellation request visibility.
+  - Experiment history can open a detail drawer that surfaces data snapshot, feature/target config, leakage, validation, artifact refs, registry, and audit context without requiring direct JSON file inspection.
+- Leakage / Bias Check:
+  - Job execution must reuse the existing `ForecastRunRequest` path, keeping walk-forward, purge/embargo, feature shift, advisory-only, and fail-closed data behavior unchanged.
+- Visualization Notes:
+  - UI additions must preserve the existing static `/ui/` dashboard patterns and provide loading, empty, failed, and success states.
+- Verification Method:
+  - schema/API unit tests, UI contract checks, JS syntax check, live API/browser smoke.
+- Verification Command:
+  - `python -m compileall -q core\schemas\forecast.py pipelines\forecast\jobs.py app\api\routers\forecast.py`
+  - `node --check app\web\app.js`
+  - `python scripts\check_ui_contract.py`
+  - `python -m pytest tests\test_forecast_lab.py -q`
+  - `python -m pytest tests\test_ui_routing_contract.py -q`
+  - `python -m ruff check pipelines\forecast\jobs.py app\api\routers\forecast.py core\schemas\forecast.py tests\test_forecast_lab.py tests\test_ui_routing_contract.py scripts\check_ui_contract.py`
+- Result Notes:
+  - DONE. Added persistent SQLite forecast job storage, job submit/list/detail/cancel/retry API, UI Queue Job action, Forecast Jobs panel, and experiment detail drawer.
+  - Live API smoke on fresh `http://127.0.0.1:8142` submitted `fj_e7a7d32eacbf46a6ae3d`; it completed `succeeded` with experiment `exp_e0b38904da258988cf7d`.
+  - Browser smoke on `http://127.0.0.1:8142/ui/#ml-forecast` verified `Queue Job`, `Forecast Jobs`, job result link, experiment detail drawer with `Data Snapshot`, `Feature / Target / Validation`, `Registry Audit`, and zero console errors.
+
 ## 5. Backend Checklist
 - forecast module/package creation: DONE
 - schemas/types creation: DONE
@@ -215,6 +249,7 @@ Source of truth for the ML Forecast implementation in `F:\LLM\FinGPT`.
 - explainability service: DONE
 - AI interpretation service: DONE
 - experiment store: DONE
+- async forecast job store: DONE
 - model registry: DONE
 - SQLite registry audit trail: DONE
 - registry audit timeline UI: DONE
@@ -241,6 +276,8 @@ Source of truth for the ML Forecast implementation in `F:\LLM\FinGPT`.
 - Explainability panel: DONE
 - AI Interpretation panel: DONE
 - Experiment History panel: DONE
+- Forecast Jobs panel: DONE
+- Experiment Detail drawer: DONE
 - Model Registry panel: DONE
 - Leakage Check panel: DONE
 - loading states: DONE
@@ -521,6 +558,7 @@ Source of truth for the ML Forecast implementation in `F:\LLM\FinGPT`.
 - `pipelines/forecast/integrations/macro_context.py`
 - `pipelines/forecast/integrations/portfolio_signal.py`
 - `pipelines/forecast/integrations/research_context.py`
+- `pipelines/forecast/jobs.py`
 - `pipelines/forecast/leakage.py`
 - `pipelines/forecast/modeling.py`
 - `pipelines/forecast/registry_policy.py`

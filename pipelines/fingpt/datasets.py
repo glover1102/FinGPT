@@ -44,6 +44,7 @@ def load_dataset_rows(
     split: str | None = None,
     max_rows: int = 500,
     cache_dir: Path | str | None = None,
+    revision: str = "main",
 ) -> list[dict[str, Any]]:
     if not enabled:
         raise FinGPTDatasetUnavailable("FinGPT dataset loading is disabled")
@@ -65,7 +66,11 @@ def load_dataset_rows(
         ) from exc
 
     try:
-        dataset_bundle = load_dataset(spec.hf_id, cache_dir=str(cache_dir) if cache_dir is not None else None)
+        dataset_bundle = load_dataset(
+            spec.hf_id,
+            cache_dir=str(cache_dir) if cache_dir is not None else None,
+            revision=revision or "main",
+        )
     except Exception as exc:
         raise FinGPTDatasetUnavailable(
             f"failed to load FinGPT dataset for task {task!r} ({spec.hf_id}): {exc}"

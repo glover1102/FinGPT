@@ -1433,7 +1433,10 @@ def _run_manifest(request: TopicRequest, *, asset_class: str, target: str, colle
         "route": "universal_topic",
         "asset_class": asset_class,
         "target": target,
-        "question_hash": hashlib.sha1(request.question.encode("utf-8")).hexdigest()[:12],
+        "question_hash": hashlib.sha1(
+            request.question.encode("utf-8"),
+            usedforsecurity=False,
+        ).hexdigest()[:12],
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "data_sources": [str(getattr(row, "source", "")) for row in (getattr(collection, "source_results", []) or [])],
         "model_route": str(request.model),
@@ -2328,6 +2331,31 @@ async def run_topic_pipeline_async(
 
     report_started = time.time()
     _emit(event_sink, "stage_started", stage="report")
+    simulation_override = getattr(request, "scenario_simulation_enabled", None)
+    simulation_enabled = bool(simulation_override) if simulation_override is not None else bool(getattr(settings, "scenario_simulation_enabled", False))
+    if simulation_enabled:
+        try:
+            from pipelines.simulate.simulation_pipeline import run_scenario_simulation
+
+            simulation = await run_scenario_simulation(
+                analysis_response=response,
+                retrieved_documents=getattr(response, "raw_context", None),
+                quant_snapshot=response.execution_meta.extras.get("quant_snapshot") if response.execution_meta else None,
+                settings=settings,
+            )
+            if response.execution_meta is None:
+                response.execution_meta = ExecutionMeta()
+            response.execution_meta.extras["scenario_simulation"] = simulation.model_dump(mode="json")
+        except Exception as exc:
+            if getattr(settings, "scenario_simulation_fail_open", True):
+                if response.execution_meta is None:
+                    response.execution_meta = ExecutionMeta()
+                response.execution_meta.extras["scenario_simulation"] = {
+                    "status": "failed",
+                    "diagnostics": {"errors": [str(exc)], "warnings": [], "fallback_used": False, "llm_used": False},
+                }
+            else:
+                raise
     report_md, report_html = build_topic_report(response, language=getattr(settings, "output_language", "ko"))
     stage_timings["report"] = round(time.time() - report_started, 2)
     _emit(event_sink, "stage_completed", stage="report", duration_s=stage_timings["report"])

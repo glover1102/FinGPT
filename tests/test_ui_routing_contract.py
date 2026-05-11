@@ -147,6 +147,23 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn("loadDashboardEquityHeatmap(true)", self.source)
         self.assertIn("표시 ${escapeHtml(_fmtNumber(displayItems.length))}", self.source)
 
+    def test_market_dashboard_overview_contract(self):
+        html = INDEX_HTML.read_text(encoding="utf-8")
+        for marker in [
+            'id="marketOverviewMeta"',
+            'id="marketTapeSurface"',
+            'id="marketSignalSurface"',
+        ]:
+            self.assertIn(marker, html)
+        for marker in [
+            "dashboardMarketOverview",
+            "function renderMarketTape",
+            "function renderMarketSignals",
+            "function loadDashboardMarketOverview",
+            "loadDashboardMarketOverview(force)",
+        ]:
+            self.assertIn(marker, self.source)
+
     def _symbol_list_count(self, const_name: str) -> int:
         match = re.search(rf"const {const_name} = symbolList\(`(?P<body>.*?)`\);", self.source, re.S)
         self.assertIsNotNone(match, const_name)
@@ -291,8 +308,13 @@ class UiRoutingContractTests(unittest.TestCase):
             'data-testid="macro-brief-generate"',
             'id="macroReportExport"',
             'data-testid="macro-report-export"',
+            'id="macroLoadStatus"',
             'id="macroOverviewSurface"',
             'id="macroCoverageSurface"',
+            'id="macroProviderHealthSurface"',
+            'id="macroProviderFilter"',
+            'id="macroCategoryFilter"',
+            'id="macroCompareSurface"',
             'id="macroIndicatorTable"',
             'id="macroChartSurface"',
             'id="macroInterestRatesSurface"',
@@ -306,6 +328,13 @@ class UiRoutingContractTests(unittest.TestCase):
             'id="macroCommoditiesSurface"',
             'id="macroRegimeSurface"',
             'id="macroAssetImpactSurface"',
+            'id="macroScenarioSurface"',
+            'data-action="macro-scenario"',
+            'id="macroResearchPreviewSurface"',
+            'id="macroResearchTicker"',
+            'id="macroResearchPreviewRun"',
+            'data-testid="macro-research-preview-run"',
+            'id="macroResearchPreviewResult"',
             'id="macroPortfolioHintsSurface"',
             'id="macroBriefSurface"',
             'id="macroDataQualitySurface"',
@@ -319,7 +348,11 @@ class UiRoutingContractTests(unittest.TestCase):
             html.index('class="home-card macro-card macro-brief-card macro-surface"'),
         )
         for marker in [
-            "API.macroOverview",
+            "macroOverview:",
+            "API.macroDashboard",
+            "API.macroProviderHealth",
+            "API.macroScenario",
+            "API.macroResearchContext",
             "API.macroSeriesList",
             "API.macroHousingConsumer",
             "API.macroFinancialConditions",
@@ -328,8 +361,20 @@ class UiRoutingContractTests(unittest.TestCase):
             "API.macroBrief",
             "API.macroReport",
             "function loadMacro",
+            "function loadMacroProgressive",
             "function refreshMacroData",
             "function renderMacroOverview",
+            "function renderMacroProviderHealth",
+            "function runMacroScenario",
+            "function runMacroResearchPreview",
+            "function macroFetchJsonWithTimeout",
+            "function renderMacroLoadStatus",
+            "function renderMacroPanelFailure",
+            "function renderMacroActionPaneStarters",
+            "기존 대시보드 화면을 유지",
+            "return true;",
+            "return false;",
+            "renderMacroLoadStatus(\"매크로 공급자 갱신 실패\"",
             "function renderMacroCoverage",
             "function renderMacroIndicatorTable",
             "function renderMacroSeriesChart",

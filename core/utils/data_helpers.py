@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 from datetime import date, datetime
@@ -44,8 +45,6 @@ def _get_key(item: Any, key: str) -> Any:
         else:
             current = getattr(current, part, None)
     return current
-
-import re
 
 def as_clean_text(value: Any) -> str:
     if value is None:
@@ -106,7 +105,7 @@ def iso_datetime(value: Any) -> str:
         return text
 
 def build_doc_id(symbol: str, doc_type: str, seed: str) -> str:
-    digest = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha1(seed.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
     return f"{symbol.lower()}_{doc_type}_{digest}"
 
 def doc_id_to_point_id(doc_id: str) -> str:
@@ -153,28 +152,41 @@ def shorten_text(text: str, max_chars: int = 500) -> str:
     return cleaned[: max_chars - 3].rstrip() + "..."
 
 def extract_records(response: Any) -> list[Any]:
-    if response is None: return []
-    if isinstance(response, list): return response
-    if isinstance(response, tuple): return list(response)
+    if response is None:
+        return []
+    if isinstance(response, list):
+        return response
+    if isinstance(response, tuple):
+        return list(response)
     if isinstance(response, dict):
-        if isinstance(response.get("results"), list): return response["results"]
-        if isinstance(response.get("data"), list): return response["data"]
+        if isinstance(response.get("results"), list):
+            return response["results"]
+        if isinstance(response.get("data"), list):
+            return response["data"]
         return [response]
     for attr in ("results", "data"):
         nested = getattr(response, attr, None)
-        if nested is None: continue
+        if nested is None:
+            continue
         records = extract_records(nested)
-        if records: return records
+        if records:
+            return records
     for method_name in ("to_df", "to_dict", "model_dump", "dict"):
         method = getattr(response, method_name, None)
-        if not callable(method): continue
-        try: result = method()
-        except Exception: continue
+        if not callable(method):
+            continue
+        try:
+            result = method()
+        except Exception:
+            continue
         if method_name == "to_df":
-            try: return result.to_dict(orient="records")
-            except Exception: continue
+            try:
+                return result.to_dict(orient="records")
+            except Exception:
+                continue
         records = extract_records(result)
-        if records: return records
+        if records:
+            return records
     return [response]
 
 def normalize_news_records(records: list[Any], symbol: str, company_name: str = "", source_hint: str = "openbb") -> list[dict[str, Any]]:
@@ -185,7 +197,8 @@ def normalize_news_records(records: list[Any], symbol: str, company_name: str = 
         excerpt = as_clean_text(safe_get(item, "excerpt", "summary", "teaser", default=""))
         body = as_clean_text(safe_get(item, "body", "content", "text", default=""))
         text = unique_text([title, excerpt, body])
-        if not text: continue
+        if not text:
+            continue
 
         # --- Purity Check ---
         is_pure, reason = check_purity(text, symbol, company_name)
@@ -214,7 +227,8 @@ def normalize_news_records(records: list[Any], symbol: str, company_name: str = 
 def normalize_transcript_records(records: list[Any], symbol: str, company_name: str = "", source_hint: str = "fmp") -> list[dict[str, Any]]:
     def normalize_quarter(val):
         t = as_clean_text(val).upper().replace("QUARTER", "").strip()
-        if not t: return ""
+        if not t:
+            return ""
         return t if t.startswith("Q") else f"Q{t}"
 
     documents: list[dict[str, Any]] = []
@@ -224,7 +238,8 @@ def normalize_transcript_records(records: list[Any], symbol: str, company_name: 
         quarter = normalize_quarter(safe_get(item, "quarter", default=""))
         published_at = iso_datetime(safe_get(item, "date", default=""))
         content = as_clean_text(safe_get(item, "content", "text", "body", default=""))
-        if not content: continue
+        if not content:
+            continue
 
         # --- Purity Check ---
         # Note: Transcripts from FMP generally are pure, but we apply the tiered check for robustness

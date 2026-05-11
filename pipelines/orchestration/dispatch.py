@@ -81,6 +81,7 @@ async def _run_compare_async(request: CompareRequest) -> CompareResponse:
                         lookback_days=request.lookback_days,
                         top_k=request.top_k,
                         model=request.model,
+                        scenario_simulation_enabled=request.scenario_simulation_enabled,
                     )
                 )
                 return ticker, resp
@@ -161,6 +162,7 @@ async def dispatch_async(
                 top_k=universal.top_k,
                 model=universal.model,
                 output_dir=universal.output_dir,
+                scenario_simulation_enabled=universal.scenario_simulation_enabled,
             ),
             event_sink=event_sink,
         )
@@ -174,6 +176,7 @@ async def dispatch_async(
                 lookback_days=universal.lookback_days,
                 top_k=universal.top_k,
                 model=universal.model,
+                scenario_simulation_enabled=universal.scenario_simulation_enabled,
             )
         )
 
@@ -188,7 +191,9 @@ async def dispatch_async(
             conclusion="Enable TOPIC_MODE_ENABLED to route tickerless questions.",
         )
 
-    related = _merge_ticker_hints([hint] if hint else [], tickers)
+    explicit_question_tickers = set(extract_explicit_tickers(universal.question))
+    hint_is_user_topic_context = bool(hint and (universal.mode_hint == "topic" or hint in explicit_question_tickers))
+    related = _merge_ticker_hints([hint] if hint_is_user_topic_context else [], tickers)
     return await run_topic_pipeline_async(
         TopicRequest(
             question=universal.question,
@@ -198,6 +203,7 @@ async def dispatch_async(
             top_k=universal.top_k or getattr(settings, "topic_retrieval_top_k", 12),
             model=universal.model,
             output_dir=universal.output_dir,
+            scenario_simulation_enabled=universal.scenario_simulation_enabled,
         ),
         mode="sector_macro" if routed_mode == "sector_macro" else "concept",
         event_sink=event_sink,

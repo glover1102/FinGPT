@@ -204,6 +204,7 @@ def list_registry_audit(model_id: str | None = None, limit: int = 100) -> dict[s
         params.append(model_id)
     params.append(max(1, min(int(limit), 500)))
     with _registry_connection() as conn:
+        # Optional WHERE clause is selected from a fixed template.
         rows = conn.execute(
             f"""
             SELECT model_id, action, previous_status, new_status, notes, actor, created_at, item_json

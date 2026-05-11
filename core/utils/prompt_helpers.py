@@ -53,13 +53,18 @@ def extract_json_object(text: str) -> str:
     for index in range(start, len(text)):
         char = text[index]
         if in_string:
-            if escaped: escaped = False
-            elif char == "\\": escaped = True
-            elif char == "\"": in_string = False
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == "\"":
+                in_string = False
             continue
 
-        if char == "\"": in_string = True
-        elif char == "{": depth += 1
+        if char == "\"":
+            in_string = True
+        elif char == "{":
+            depth += 1
         elif char == "}":
             depth -= 1
             if depth == 0:

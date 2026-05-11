@@ -169,6 +169,9 @@ def test_quant_backtest_endpoint_persists_manifest(tmp_path, monkeypatch) -> Non
     runs = client.get("/api/v1/quant/backtests?limit=5")
     assert runs.status_code == 200
     assert any(item["run_id"] == body["run_id"] for item in runs.json()["items"])
+    run_item = next(item for item in runs.json()["items"] if item["run_id"] == body["run_id"])
+    assert run_item["config_hash"]
+    assert run_item["data_snapshot"]["price_counts"]["SPY"] == 90
     bundle = client.get(f"/api/v1/quant/backtest/{body['run_id']}/bundle")
     assert bundle.status_code == 200
     assert bundle.json()["manifest"]["run_id"] == body["run_id"]
@@ -245,6 +248,41 @@ def test_quant_backtest_endpoint_persists_manifest(tmp_path, monkeypatch) -> Non
     else:
         assert parquet_export.json()["export_written"] is False
     assert bad_export.status_code == 400
+
+
+def test_quant_backtests_compare_endpoint_is_read_only(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "research_mart.db"
+    _seed_prices(db_path)
+    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
+    monkeypatch.setattr(quant_lab_pipeline, "ARTIFACT_ROOT", tmp_path / "artifacts")
+    client = TestClient(app)
+
+    primary = client.post(
+        "/api/v1/quant/backtest",
+        json={"tickers": ["SPY", "QQQ", "TLT"], "benchmark": "SPY", "lookback": 21, "top_n": 1},
+    )
+    comparison = client.post(
+        "/api/v1/quant/backtest",
+        json={"tickers": ["SPY", "QQQ", "TLT"], "benchmark": "SPY", "lookback": 21, "top_n": 2},
+    )
+    assert primary.status_code == 200
+    assert comparison.status_code == 200
+    before = sorted(path.name for path in (tmp_path / "artifacts").iterdir() if path.is_dir())
+
+    response = client.post(
+        "/api/v1/quant/backtests/compare",
+        json={"run_ids": [primary.json()["run_id"], comparison.json()["run_id"]]},
+    )
+    after = sorted(path.name for path in (tmp_path / "artifacts").iterdir() if path.is_dir())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema_version"] == "quant_lab_run_compare_v1"
+    assert body["lineage"]["config_hash_match"] is False
+    assert any(row["field"] == "top_n" for row in body["config_differences"])
+    assert any(row["metric"] == "sharpe" for row in body["metrics"])
+    assert body["diagnostics"]["lookahead_safe_all"] is True
+    assert before == after
 
 
 def test_export_cleanup_preview_and_apply_endpoint(tmp_path, monkeypatch) -> None:

@@ -68,6 +68,16 @@ LLM numeric policy:
 - RAG documents are qualitative/citation evidence.
 - If a required structured value is missing or stale, the report must surface partial/unknown state instead of inventing a metric.
 
+## Macro Dashboard Workbench
+
+The static `/ui/#macro` tab is a read-only decision workbench over the Macro service boundary:
+
+- `app/web/app.js` loads `/api/v1/macro/dashboard` first, then hydrates provider health, category panels, portfolio hints, and action panes independently so one failed panel does not erase the rest of the dashboard.
+- `pipelines/macro/dashboard.py` aggregates registry coverage, latest observations, heatmap/summary data, quality state, and advisory metadata without mutating provider state.
+- `pipelines/macro/provider_health.py` exposes configured/unconfigured provider status, latest rows, stale series, scheduler state, and explicit warnings.
+- `pipelines/macro/scenario.py` provides deterministic shock analysis for rates, inflation, growth, credit, and oil inputs. Its API is advisory-only and returns asset impacts plus sleeve hints; it does not place orders, rebalance, or mutate AI Portfolio policy.
+- `scripts/macro_ui_smoke.py` is the browser acceptance probe for the static Macro tab and can start a disposable local FastAPI server when no base URL is provided.
+
 ## Quant Analytics Boundary
 
 The deterministic quant layer is split by responsibility:
@@ -102,6 +112,13 @@ The deterministic quant layer is split by responsibility:
 - The snapshot is injected into the topic prompt as authoritative evidence, merged into `key_metrics`, and stored at `execution_meta.extras.quant_snapshot`.
 - Quant-backed buckets can substitute for missing market-structure evidence. For TLT, missing latest catalyst/news is warning-only when macro plus market-structure or quant substitute exists.
 - Quality gates record `metric_as_of_coverage`, `claim_evidence_date_coverage`, bucket coverage, substituted buckets, and actionable partial reasons.
+
+## Universal Routing Guard
+
+- `pipelines/router/query_router.py` treats the written question as authoritative when a stale optional ticker hint conflicts with a recognizable topic.
+- If a user leaves `GLD`, `TLT`, `BTC-USD`, or another proxy in the ticker box but asks a credit, rates, commodity, FX, crypto, sector, or Korea inverse ETF question, auto mode routes to the topic proxies inferred from the question.
+- Explicit tickers inside the question still win. For example, a question that names `GLD` remains commodity-oriented, while a credit-risk question with stale `GLD` routes to `HYG`, `LQD`, and `TLT`.
+- The static UI mirrors this guard with a pre-run notice so users can see when the ticker field will be ignored and which proxies will be used.
 
 ## Model Capability Boundary
 

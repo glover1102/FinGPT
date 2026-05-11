@@ -10,10 +10,15 @@ from core.schemas.ai_portfolio import (
     GeneratePortfolioResponse,
     PolicyCreateRequest,
     PolicyUpdateRequest,
+    PortfolioCoverageRow,
+    PortfolioDashboardPolicySummary,
+    PortfolioDashboardResponse,
     PortfolioHistoryEvent,
+    PortfolioOperationSummary,
     PortfolioPolicy,
     PortfolioRecommendation,
     PortfolioSnapshot,
+    PortfolioSnapshotTimelinePoint,
     RebalanceActionRequest,
     RebalanceSignal,
     ReportGenerateRequest,
@@ -521,6 +526,266 @@ def list_reports(policy_id: str) -> list[dict[str, Any]]:
 def list_operations(limit: int = 25) -> list[dict[str, Any]]:
     bounded = max(1, min(200, int(limit or 25)))
     return list_items("operations")[:bounded]
+
+
+def _pct(numerator: int | float | None, denominator: int | float | None) -> float | None:
+    if denominator in (None, 0):
+        return None
+    return round(float(numerator or 0) / float(denominator) * 100, 2)
+
+
+def _coverage_status(pct_value: float | None, *, ok_at: float = 95.0) -> str:
+    if pct_value is None:
+        return "unavailable"
+    if pct_value >= ok_at:
+        return "ok"
+    if pct_value > 0:
+        return "partial"
+    return "unavailable"
+
+
+def _count_by(items: list[dict[str, Any]], key: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        value = str(item.get(key) or "unknown")
+        counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
+def _provider_status_counts(data_health: dict[str, Any]) -> dict[str, int]:
+    rows = data_health.get("recent_provider_status") or []
+    counts: dict[str, int] = {}
+    for row in rows:
+        status = str((row or {}).get("status") or "unknown")
+        counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
+def _compact_data_health(data_health: dict[str, Any]) -> dict[str, Any]:
+    table_counts = data_health.get("table_counts") or {}
+    count_keys = (
+        "asset_identity",
+        "asset_classification",
+        "etf_exposure",
+        "kr_equity_profile",
+        "crypto_profile",
+        "prices_daily",
+        "fundamentals_snapshots",
+        "valuation_metrics",
+        "financial_statements",
+        "filings",
+        "sec_company_registry",
+        "sec_financial_facts",
+        "provider_status",
+        "data_quality_checks",
+    )
+    return {
+        "status": data_health.get("status", "unknown"),
+        "database": data_health.get("database"),
+        "table_counts": {key: int(table_counts.get(key) or 0) for key in count_keys},
+        "latest_fundamental": data_health.get("latest_fundamental"),
+        "latest_sec_filing": data_health.get("latest_sec_filing"),
+        "latest_sec_fact": data_health.get("latest_sec_fact"),
+        "latest_macro_observation": data_health.get("latest_macro_observation"),
+        "latest_run": data_health.get("latest_run"),
+        "provider_status_counts": _provider_status_counts(data_health),
+    }
+
+
+def _compact_operation(operation: dict[str, Any]) -> dict[str, Any]:
+    compact = {
+        "operation_id": operation.get("operation_id"),
+        "operation_type": operation.get("operation_type"),
+        "status": operation.get("status"),
+        "created_at": operation.get("created_at"),
+        "request_id": operation.get("request_id"),
+        "policy_count": operation.get("policy_count"),
+        "created_count": operation.get("created_count"),
+        "failure_count": operation.get("failure_count"),
+        "asset_count": operation.get("asset_count"),
+    }
+    if isinstance(operation.get("sec_result"), dict):
+        result = operation["sec_result"]
+        compact["sec_result"] = {
+            "run_id": result.get("run_id"),
+            "status": result.get("status"),
+            "rows_inserted": result.get("rows_inserted"),
+            "rows_updated": result.get("rows_updated"),
+            "provider_status_counts": result.get("provider_status_counts", {}),
+        }
+    if isinstance(operation.get("metadata_result"), dict):
+        compact["metadata_result"] = operation["metadata_result"]
+    return {key: value for key, value in compact.items() if value is not None}
+
+
+def _selected_policy(policies: list[PortfolioPolicy], policy_id: str | None) -> PortfolioPolicy | None:
+    if policy_id:
+        return next((policy for policy in policies if policy.policy_id == policy_id), None)
+    return (
+        next((policy for policy in policies if policy.status == "active"), None)
+        or (policies[0] if policies else None)
+    )
+
+
+def _snapshot_points(policy: PortfolioPolicy | None, policies: list[PortfolioPolicy], limit: int) -> list[PortfolioSnapshotTimelinePoint]:
+    names = {item.policy_id: item.portfolio_name for item in policies}
+    points: list[PortfolioSnapshotTimelinePoint] = []
+    for item in list_items("snapshots"):
+        if policy and str(item.get("policy_id")) != policy.policy_id:
+            continue
+        try:
+            snapshot = PortfolioSnapshot.model_validate(item)
+        except Exception:
+            continue
+        price_coverage = (snapshot.audit or {}).get("price_data_coverage") or {}
+        price_pct = price_coverage.get("available_pct")
+        points.append(
+            PortfolioSnapshotTimelinePoint(
+                snapshot_id=snapshot.snapshot_id,
+                policy_id=snapshot.policy_id,
+                policy_name=names.get(snapshot.policy_id),
+                date=snapshot.date,
+                created_at=snapshot.created_at,
+                portfolio_value=snapshot.portfolio_value,
+                period_return=snapshot.period_return,
+                benchmark_return=snapshot.benchmark_return,
+                volatility=snapshot.volatility,
+                max_drawdown=snapshot.max_drawdown,
+                sharpe=snapshot.sharpe,
+                coverage_status=_coverage_status(float(price_pct)) if price_pct is not None else "unavailable",
+                price_available_pct=float(price_pct) if price_pct is not None else None,
+                audit=snapshot.audit,
+            )
+        )
+    return sorted(points, key=lambda item: item.created_at, reverse=True)[: max(1, min(50, limit))]
+
+
+def _coverage_rows(recommendation: PortfolioRecommendation | None, data_health: dict[str, Any]) -> list[PortfolioCoverageRow]:
+    table_counts = (data_health.get("table_counts") or {})
+    dq = recommendation.data_quality if recommendation else None
+    coverage = dq.metadata_coverage if dq else {}
+    price_pct = _pct(dq.available_asset_count if dq else None, dq.asset_count if dq else None)
+    fundamentals_pct = coverage.get("fundamentals_pct") if isinstance(coverage, dict) else None
+    sector_pct = coverage.get("sector_pct") if isinstance(coverage, dict) else None
+    provider_counts = _provider_status_counts(data_health)
+    provider_total = sum(provider_counts.values())
+    provider_ok = provider_counts.get("ok", 0) + provider_counts.get("success", 0) + provider_counts.get("completed", 0)
+    provider_pct = _pct(provider_ok, provider_total)
+    metadata_total = int(table_counts.get("asset_identity") or 0)
+    classification_total = int(table_counts.get("asset_classification") or 0)
+    return [
+        PortfolioCoverageRow(
+            id="price_data",
+            label="Price Data",
+            status=_coverage_status(price_pct),
+            available_count=dq.available_asset_count if dq else None,
+            total_count=dq.asset_count if dq else None,
+            pct=price_pct,
+            latest_at=(data_health.get("latest_run") or {}).get("finished_at") if isinstance(data_health.get("latest_run"), dict) else None,
+            detail="Selected policy universe price coverage",
+            metadata={
+                "missing_assets": list(dq.missing_assets if dq else [])[:20],
+                "insufficient_assets": list(dq.insufficient_assets if dq else [])[:20],
+            },
+        ),
+        PortfolioCoverageRow(
+            id="fundamentals",
+            label="Fundamentals",
+            status=_coverage_status(float(fundamentals_pct)) if fundamentals_pct is not None else "unavailable",
+            available_count=int(coverage.get("fundamentals_count") or 0) if isinstance(coverage, dict) else None,
+            total_count=dq.asset_count if dq else None,
+            pct=float(fundamentals_pct) if fundamentals_pct is not None else None,
+            latest_at=(data_health.get("latest_fundamental") or {}).get("collected_at") if isinstance(data_health.get("latest_fundamental"), dict) else None,
+            detail="Provider-backed fundamentals snapshots for selected universe",
+        ),
+        PortfolioCoverageRow(
+            id="metadata",
+            label="Asset Metadata",
+            status=_coverage_status(float(sector_pct)) if sector_pct is not None else ("ok" if metadata_total else "unavailable"),
+            available_count=classification_total or metadata_total or None,
+            total_count=dq.asset_count if dq else None,
+            pct=float(sector_pct) if sector_pct is not None else None,
+            detail="Identity, classification, ETF, Korea, and crypto metadata",
+            metadata={
+                "asset_identity": metadata_total,
+                "asset_classification": classification_total,
+                "etf_exposure": int(table_counts.get("etf_exposure") or 0),
+                "kr_equity_profile": int(table_counts.get("kr_equity_profile") or 0),
+                "crypto_profile": int(table_counts.get("crypto_profile") or 0),
+            },
+        ),
+        PortfolioCoverageRow(
+            id="sec_financials",
+            label="SEC Financials",
+            status="ok" if int(table_counts.get("sec_financial_facts") or 0) else "unavailable",
+            available_count=int(table_counts.get("sec_company_registry") or 0),
+            total_count=int(table_counts.get("sec_financial_facts") or 0),
+            pct=None,
+            latest_at=(data_health.get("latest_sec_fact") or {}).get("collected_at") if isinstance(data_health.get("latest_sec_fact"), dict) else None,
+            detail="SEC company registry, filings, and companyfacts rows",
+            metadata={
+                "filings": int(table_counts.get("filings") or 0),
+                "sec_company_registry": int(table_counts.get("sec_company_registry") or 0),
+                "sec_financial_facts": int(table_counts.get("sec_financial_facts") or 0),
+            },
+        ),
+        PortfolioCoverageRow(
+            id="provider_status",
+            label="Provider Status",
+            status=_coverage_status(provider_pct, ok_at=80.0) if provider_total else "unavailable",
+            available_count=provider_ok if provider_total else None,
+            total_count=provider_total or None,
+            pct=provider_pct,
+            latest_at=(data_health.get("latest_run") or {}).get("finished_at") if isinstance(data_health.get("latest_run"), dict) else None,
+            detail="Recent provider run status mix",
+            metadata={"status_counts": provider_counts},
+        ),
+    ]
+
+
+def portfolio_dashboard(policy_id: str | None = None, *, limit: int = 12) -> PortfolioDashboardResponse:
+    policies = list_policies()
+    policy = _selected_policy(policies, policy_id)
+    latest = latest_recommendation(policy.policy_id) if policy else None
+    snapshots = _snapshot_points(policy if policy_id else None, policies, limit)
+    data_health = data_repository.data_health()
+    operations = list_operations(50)
+    policy_counts = _count_by([policy.model_dump(mode="json") for policy in policies], "status")
+    if policies:
+        policy_counts["total"] = len(policies)
+    selected_summary = None
+    if policy:
+        dq = latest.data_quality if latest else None
+        price_pct = _pct(dq.available_asset_count if dq else None, dq.asset_count if dq else None)
+        data_status = _coverage_status(price_pct) if latest else "unavailable"
+        selected_snapshots = [item for item in snapshots if item.policy_id == policy.policy_id]
+        selected_summary = PortfolioDashboardPolicySummary(
+            policy_id=policy.policy_id,
+            portfolio_name=policy.portfolio_name,
+            status=policy.status,
+            investment_type=policy.investment_type,
+            universe_id=policy.universe_id,
+            automation_level=policy.automation_level,
+            latest_recommendation_id=latest.recommendation_id if latest else None,
+            latest_recommendation_at=latest.created_at if latest else None,
+            latest_snapshot_at=selected_snapshots[0].created_at if selected_snapshots else None,
+            data_quality_status=data_status,
+        )
+    return PortfolioDashboardResponse(
+        generated_at=now_iso(),
+        selected_policy=selected_summary,
+        policy_counts=policy_counts,
+        store_status=storage_status(),
+        data_health_summary=_compact_data_health(data_health),
+        coverage_rows=_coverage_rows(latest, data_health),
+        snapshot_timeline=snapshots,
+        operation_summary=PortfolioOperationSummary(
+            total_count=len(operations),
+            by_type=_count_by(operations, "operation_type"),
+            by_status=_count_by(operations, "status"),
+            recent_operations=[_compact_operation(item) for item in operations[:10]],
+        ),
+    )
 
 
 def recommendation_diff(policy_id: str) -> dict[str, Any]:

@@ -28,6 +28,10 @@ class TopicRequest(BaseModel):
     top_k: int = 12
     model: SupportedInferenceRoute = "qwen"
     output_dir: Optional[str] = None
+    scenario_simulation_enabled: Optional[bool] = Field(
+        default=None,
+        description="Optional per-request override for the default-off scenario simulation layer.",
+    )
 
 
 class KeyDriver(BaseModel):

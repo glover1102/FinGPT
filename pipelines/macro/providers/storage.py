@@ -53,6 +53,7 @@ class DataMartMacroProvider(MacroDataProvider):
                 params.append(end_date)
             where = " AND ".join(clauses)
             with connect(self.db_path) as conn:
+                # WHERE clauses are fixed templates with bound values.
                 rows = conn.execute(
                     f"""
                     SELECT o.date, o.value, o.source, o.collected_at

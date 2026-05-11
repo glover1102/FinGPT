@@ -165,6 +165,7 @@ async def compare_research(request: CompareRequest) -> CompareResponse:
                     lookback_days=request.lookback_days,
                     top_k=request.top_k,
                     model=request.model,
+                    scenario_simulation_enabled=request.scenario_simulation_enabled,
                 )
                 return ticker, await run_pipeline_async(sub_request)
             except Exception as exc:  # noqa: BLE001

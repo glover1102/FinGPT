@@ -5,7 +5,6 @@ import time
 async def fetch(ticker):
     try:
         async with httpx.AsyncClient() as client:
-            start = time.time()
             data = {
                 "ticker": ticker,
                 "question": f"Analysis for {ticker}",

@@ -206,12 +206,17 @@ def _extract_json(raw_text: str) -> Dict[str, Any]:
     for idx in range(start, len(raw_text)):
         ch = raw_text[idx]
         if in_string:
-            if escaped: escaped = False
-            elif ch == "\\": escaped = True
-            elif ch == "\"": in_string = False
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == "\"":
+                in_string = False
             continue
-        if ch == "\"": in_string = True
-        elif ch == "{": depth += 1
+        if ch == "\"":
+            in_string = True
+        elif ch == "{":
+            depth += 1
         elif ch == "}":
             depth -= 1
             if depth == 0:

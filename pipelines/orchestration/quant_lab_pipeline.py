@@ -509,6 +509,54 @@ def compare_backtest_replay(
     return report
 
 
+def compare_backtest_runs(run_ids: list[str] | tuple[str, ...]) -> dict[str, Any]:
+    clean_ids = _clean_compare_run_ids(run_ids)
+    primary = _run_compare_snapshot(clean_ids[0])
+    comparison = _run_compare_snapshot(clean_ids[1])
+    metrics = _compare_metric_payload(primary["metrics"], comparison["metrics"])
+    config_differences = _config_differences(primary["config"], comparison["config"])
+    diagnostics = {
+        "lookahead_safe_all": bool(primary["diagnostics"].get("lookahead_safe"))
+        and bool(comparison["diagnostics"].get("lookahead_safe")),
+        "signal_shift_bars": {
+            primary["run_id"]: primary["diagnostics"].get("signal_shift_bars"),
+            comparison["run_id"]: comparison["diagnostics"].get("signal_shift_bars"),
+        },
+        "stale_assets": sorted(
+            set(primary["diagnostics"].get("stale_assets") or [])
+            | set(comparison["diagnostics"].get("stale_assets") or [])
+        ),
+        "missing_assets": sorted(
+            set(primary["diagnostics"].get("missing_assets") or [])
+            | set(comparison["diagnostics"].get("missing_assets") or [])
+        ),
+        "warning_count": len(primary["diagnostics"].get("warnings") or [])
+        + len(comparison["diagnostics"].get("warnings") or []),
+    }
+    lineage = {
+        "config_hash_match": primary["config_hash"] == comparison["config_hash"],
+        "primary_config_hash": primary["config_hash"],
+        "comparison_config_hash": comparison["config_hash"],
+        "code_commit_match": _code_commit(primary["code_version"]) == _code_commit(comparison["code_version"]),
+        "primary_code_version": primary["code_version"],
+        "comparison_code_version": comparison["code_version"],
+        "data_snapshot_match": _stable_compare_json(primary["data_snapshot"])
+        == _stable_compare_json(comparison["data_snapshot"]),
+    }
+    return {
+        "schema_version": "quant_lab_run_compare_v1",
+        "status": "success",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "primary_run_id": primary["run_id"],
+        "comparison_run_id": comparison["run_id"],
+        "runs": [primary, comparison],
+        "metrics": metrics,
+        "config_differences": config_differences,
+        "diagnostics": diagnostics,
+        "lineage": lineage,
+    }
+
+
 def export_backtest_artifacts(
     run_id: str,
     export_format: str = "jsonl",
@@ -642,13 +690,27 @@ def list_backtest_runs(limit: int = 20) -> dict[str, Any]:
             metrics = _read_artifact_json(run_dir / "metrics.json", default={})
             diagnostics = _read_artifact_json(run_dir / "diagnostics.json", default={})
             config = _read_artifact_json(run_dir / "config.json", default={})
+            data_snapshot = dict(manifest.get("data_snapshot") or {})
             items.append(
                 {
                     "run_id": manifest.get("run_id") or run_dir.name,
                     "generated_at": manifest.get("generated_at") or "",
+                    "config_hash": manifest.get("config_hash") or "",
+                    "code_version": manifest.get("code_version") or {},
+                    "data_snapshot": {
+                        "price_counts": data_snapshot.get("price_counts") or {},
+                        "latest_price_dates": data_snapshot.get("latest_price_dates") or {},
+                        "freshness_policy": data_snapshot.get("freshness_policy") or {},
+                    },
                     "template": config.get("template") or "unknown",
                     "tickers": config.get("tickers") or [],
                     "benchmark": config.get("benchmark") or "",
+                    "strategy_id": config.get("strategy_id") or "",
+                    "freshness_policy": diagnostics.get("freshness_policy") or data_snapshot.get("freshness_policy") or {},
+                    "costs": {
+                        "transaction_cost_bps": config.get("transaction_cost_bps"),
+                        "slippage_bps": config.get("slippage_bps"),
+                    },
                     "status": "success" if metrics else "partial",
                     "metrics": {
                         "total_return": metrics.get("total_return"),
@@ -671,6 +733,120 @@ def list_backtest_runs(limit: int = 20) -> dict[str, Any]:
             if len(items) >= limit:
                 break
     return {"status": "success", "count": len(items), "items": items}
+
+
+def _clean_compare_run_ids(run_ids: list[str] | tuple[str, ...]) -> list[str]:
+    if not isinstance(run_ids, (list, tuple)):
+        raise ValueError("run_ids must contain exactly two saved Quant Lab run ids")
+    clean: list[str] = []
+    for raw in run_ids:
+        value = "".join(ch for ch in str(raw or "") if ch.isalnum() or ch in {"_", "-"})
+        if value and value not in clean:
+            clean.append(value)
+    if len(clean) != 2:
+        raise ValueError("run_ids must contain exactly two distinct saved Quant Lab run ids")
+    return clean
+
+
+def _run_compare_snapshot(run_id: str) -> dict[str, Any]:
+    manifest = load_backtest_artifact(run_id, "manifest")
+    config = load_backtest_artifact(run_id, "config")
+    metrics = load_backtest_artifact(run_id, "metrics")
+    diagnostics = load_backtest_artifact(run_id, "diagnostics")
+    data_snapshot = dict(manifest.get("data_snapshot") or {})
+    return {
+        "run_id": manifest.get("run_id") or run_id,
+        "generated_at": manifest.get("generated_at") or "",
+        "template": config.get("template") or "unknown",
+        "tickers": config.get("tickers") or [],
+        "benchmark": config.get("benchmark") or "",
+        "strategy_id": config.get("strategy_id") or "",
+        "status": "success" if metrics else "partial",
+        "metrics": metrics,
+        "diagnostics": diagnostics,
+        "config": _compare_config_summary(config),
+        "config_hash": manifest.get("config_hash") or "",
+        "code_version": manifest.get("code_version") or {},
+        "data_snapshot": {
+            "price_counts": data_snapshot.get("price_counts") or {},
+            "latest_price_dates": data_snapshot.get("latest_price_dates") or {},
+            "freshness_policy": data_snapshot.get("freshness_policy") or {},
+        },
+    }
+
+
+def _compare_config_summary(config: dict[str, Any]) -> dict[str, Any]:
+    keys = [
+        "strategy_id",
+        "template",
+        "tickers",
+        "benchmark",
+        "start_date",
+        "end_date",
+        "freshness_profile",
+        "lookback",
+        "top_n",
+        "rebalance_every",
+        "transaction_cost_bps",
+        "slippage_bps",
+        "use_research_score",
+        "require_fresh_prices",
+        "max_market_calendar_lag_days",
+    ]
+    return {key: config.get(key) for key in keys if key in config}
+
+
+def _compare_metric_payload(primary: dict[str, Any], comparison: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    keys = sorted(set(primary) | set(comparison))
+    for key in keys:
+        primary_value = _number_or_none(primary.get(key))
+        comparison_value = _number_or_none(comparison.get(key))
+        if primary_value is None and comparison_value is None:
+            continue
+        delta = None if primary_value is None or comparison_value is None else comparison_value - primary_value
+        relative_delta = None
+        if delta is not None and primary_value not in (None, 0):
+            relative_delta = delta / abs(primary_value)
+        rows.append(
+            {
+                "metric": key,
+                "primary": primary_value,
+                "comparison": comparison_value,
+                "delta": delta,
+                "relative_delta": relative_delta,
+            }
+        )
+    return rows
+
+
+def _config_differences(primary: dict[str, Any], comparison: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for key in sorted(set(primary) | set(comparison)):
+        left = primary.get(key)
+        right = comparison.get(key)
+        if _stable_compare_json(left) != _stable_compare_json(right):
+            rows.append({"field": key, "primary": left, "comparison": right})
+    return rows
+
+
+def _number_or_none(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _stable_compare_json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=True, sort_keys=True, default=str)
+
+
+def _code_commit(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    return str(value.get("git_commit") or "")
 
 
 def _read_artifact_json(path: Path, *, default: Any) -> Any:

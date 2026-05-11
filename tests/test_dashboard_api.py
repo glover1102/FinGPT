@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import sys
+import tempfile
 import types
 import unittest
 from datetime import datetime, timedelta
+from pathlib import Path
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
@@ -12,6 +15,19 @@ from fastapi.testclient import TestClient
 
 from app.api import server as api_server
 from app.api.routers import dashboard as dashboard_router
+from pipelines.dashboard.market_service import (
+    MARKET_SNAPSHOT_CACHE_KEY,
+    MARKET_SNAPSHOT_REFRESH_LOCK_KEY,
+    clear_market_snapshot_cache,
+    get_market_snapshot,
+)
+from pipelines.data_mart.storage.repository import (
+    acquire_dashboard_refresh_lock,
+    clear_dashboard_refresh_locks,
+    clear_dashboard_snapshot,
+    release_dashboard_refresh_lock,
+    upsert_dashboard_snapshot,
+)
 
 
 class _FakeTicker:
@@ -70,6 +86,16 @@ def _fake_stale_intraday_download(tickers, *args, **kwargs):
 
 
 class DashboardApiTests(unittest.TestCase):
+    def setUp(self) -> None:
+        clear_market_snapshot_cache()
+        clear_dashboard_snapshot(MARKET_SNAPSHOT_CACHE_KEY)
+        clear_dashboard_refresh_locks(MARKET_SNAPSHOT_REFRESH_LOCK_KEY)
+
+    def tearDown(self) -> None:
+        clear_market_snapshot_cache()
+        clear_dashboard_snapshot(MARKET_SNAPSHOT_CACHE_KEY)
+        clear_dashboard_refresh_locks(MARKET_SNAPSHOT_REFRESH_LOCK_KEY)
+
     def test_dashboard_news_includes_category(self):
         docs = [
             {
@@ -98,10 +124,13 @@ class DashboardApiTests(unittest.TestCase):
         client = TestClient(api_server.app)
 
         with patch.dict(sys.modules, {"yfinance": fake_yf}):
-            resp = client.get("/api/v1/dashboard/market")
+            resp = client.get("/api/v1/dashboard/market?force=true")
+            cached_resp = client.get("/api/v1/dashboard/market")
 
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
+        self.assertFalse(body["cache_hit"])
+        self.assertTrue(cached_resp.json()["cache_hit"])
         self.assertEqual(body["provider"], "yfinance")
         self.assertGreaterEqual(body["ok_count"], 6)
         self.assertGreaterEqual(body["decision_usable_count"], 6)
@@ -113,6 +142,170 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn(first["freshness_status"], {"fresh", "delayed", "closed"})
         self.assertIn("1d", first["returns"])
         self.assertIsInstance(first["returns"]["1d"], float)
+
+    def test_dashboard_market_overview_returns_tape_signals_and_heatmap_summary(self):
+        fake_yf = types.SimpleNamespace(Ticker=lambda symbol: _FakeTicker(symbol))
+        client = TestClient(api_server.app)
+        old_cache = dict(dashboard_router._dashboard_equity_heatmap_cache)
+        dashboard_router._dashboard_equity_heatmap_cache["payload"] = {
+            "provider": "yfinance",
+            "interval": "5m",
+            "universe_version": "test_universe",
+            "universe_size": 237,
+            "decision_usable_count": 236,
+            "stale_or_unavailable_count": 1,
+            "latest_as_of": "2026-05-08T19:55:00+00:00",
+            "warning": "1 symbols excluded",
+        }
+
+        try:
+            with patch.dict(sys.modules, {"yfinance": fake_yf}):
+                resp = client.get("/api/v1/dashboard/market/overview?force=true")
+        finally:
+            dashboard_router._dashboard_equity_heatmap_cache.clear()
+            dashboard_router._dashboard_equity_heatmap_cache.update(old_cache)
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertTrue(body["advisory_only"])
+        self.assertEqual(body["freshness_summary"]["status"], "ok")
+        self.assertEqual(body["heatmap_summary"]["status"], "partial")
+        self.assertEqual(body["heatmap_summary"]["universe_version"], "test_universe")
+        symbols = {item["symbol"] for item in body["market_tape"]}
+        self.assertIn("SPY", symbols)
+        signal_ids = {item["signal_id"] for item in body["signals"]}
+        self.assertIn("equity_momentum", signal_ids)
+        self.assertIn("rates_pressure", signal_ids)
+        self.assertIn("credit_tone", signal_ids)
+        self.assertIn("cross_asset_confirmation", signal_ids)
+
+    def test_dashboard_market_reuses_persisted_snapshot_after_memory_clear(self):
+        fake_yf = types.SimpleNamespace(Ticker=lambda symbol: _FakeTicker(symbol))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "research_mart.db"
+            with patch.dict(sys.modules, {"yfinance": fake_yf}):
+                first = asyncio.run(get_market_snapshot(force=True, db_path=db_path))
+
+            clear_market_snapshot_cache()
+
+            def fail_ticker(symbol: str):
+                raise AssertionError(f"provider should not be called for {symbol}")
+
+            with patch.dict(sys.modules, {"yfinance": types.SimpleNamespace(Ticker=fail_ticker)}):
+                cached = asyncio.run(get_market_snapshot(db_path=db_path))
+
+        self.assertFalse(first["cache_hit"])
+        self.assertEqual(first["cache_layer"], "provider")
+        self.assertTrue(cached["cache_hit"])
+        self.assertEqual(cached["cache_layer"], "persisted")
+        self.assertEqual(cached["provider"], "yfinance")
+        self.assertGreaterEqual(len(cached["items"]), 6)
+
+    def test_dashboard_market_waits_for_refresh_lock_owner_snapshot(self):
+        payload = {
+            "items": [
+                {
+                    "symbol": "SPY",
+                    "label": "S&P 500",
+                    "asset_class": "equity_index",
+                    "price": 101.5,
+                    "as_of": "2026-05-11T13:35:00+00:00",
+                    "source": "test",
+                    "status": "ok",
+                    "is_decision_usable": True,
+                    "freshness_status": "fresh",
+                    "returns": {"1d": 1.0, "5d": 2.0, "1m": 3.0, "3m": 4.0},
+                }
+            ],
+            "generated_at": "2026-05-11T13:35:00Z",
+            "provider": "test-provider",
+            "ok_count": 1,
+            "decision_usable_count": 1,
+            "freshness_counts": {"fresh": 1},
+            "freshness_policy": "test",
+            "warning": "",
+        }
+
+        async def write_snapshot_after_delay(db_path: Path) -> None:
+            await asyncio.sleep(0.5)
+            upsert_dashboard_snapshot(
+                MARKET_SNAPSHOT_CACHE_KEY,
+                payload,
+                source="dashboard_market",
+                ttl_seconds=45,
+                db_path=db_path,
+            )
+
+        async def run_waiter(db_path: Path) -> dict:
+            writer = asyncio.create_task(write_snapshot_after_delay(db_path))
+            try:
+                return await get_market_snapshot(db_path=db_path)
+            finally:
+                await writer
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "research_mart.db"
+            lock = acquire_dashboard_refresh_lock(
+                MARKET_SNAPSHOT_REFRESH_LOCK_KEY,
+                owner_token="other-worker",
+                ttl_seconds=5,
+                db_path=db_path,
+            )
+            self.assertTrue(lock["acquired"])
+
+            def fail_ticker(symbol: str):
+                raise AssertionError(f"provider should not be called for {symbol}")
+
+            try:
+                with patch.dict(sys.modules, {"yfinance": types.SimpleNamespace(Ticker=fail_ticker)}):
+                    cached = asyncio.run(run_waiter(db_path))
+            finally:
+                release_dashboard_refresh_lock(MARKET_SNAPSHOT_REFRESH_LOCK_KEY, "other-worker", db_path=db_path)
+
+        self.assertTrue(cached["cache_hit"])
+        self.assertEqual(cached["cache_layer"], "persisted")
+        self.assertEqual(cached["refresh_lock"], "waited")
+        self.assertEqual(cached["provider"], "test-provider")
+        self.assertEqual(cached["items"][0]["symbol"], "SPY")
+
+    def test_dashboard_refresh_lock_is_exclusive_and_releasable(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "research_mart.db"
+            first = acquire_dashboard_refresh_lock(
+                MARKET_SNAPSHOT_REFRESH_LOCK_KEY,
+                owner_token="worker-a",
+                ttl_seconds=30,
+                db_path=db_path,
+            )
+            second = acquire_dashboard_refresh_lock(
+                MARKET_SNAPSHOT_REFRESH_LOCK_KEY,
+                owner_token="worker-b",
+                ttl_seconds=30,
+                db_path=db_path,
+            )
+            wrong_release = release_dashboard_refresh_lock(
+                MARKET_SNAPSHOT_REFRESH_LOCK_KEY,
+                "worker-b",
+                db_path=db_path,
+            )
+            right_release = release_dashboard_refresh_lock(
+                MARKET_SNAPSHOT_REFRESH_LOCK_KEY,
+                "worker-a",
+                db_path=db_path,
+            )
+            third = acquire_dashboard_refresh_lock(
+                MARKET_SNAPSHOT_REFRESH_LOCK_KEY,
+                owner_token="worker-c",
+                ttl_seconds=30,
+                db_path=db_path,
+            )
+
+        self.assertTrue(first["acquired"])
+        self.assertFalse(second["acquired"])
+        self.assertFalse(wrong_release)
+        self.assertTrue(right_release)
+        self.assertTrue(third["acquired"])
 
     def test_dashboard_equity_heatmap_returns_intraday_as_of_and_freshness(self):
         fake_yf = types.SimpleNamespace(download=_fake_intraday_download)

@@ -121,21 +121,23 @@ Quant/ML status: research-lab usable.
 
 Goal: move long-running training away from synchronous request paths.
 
+- Status: DONE 2026-05-11 for local workstation scope.
 - Background forecast job queue
 - Job status endpoint
 - Cancellation and retry
-- Progress/event stream
+- Progress/status polling
 - Runtime budget controls per model family
 
 Completion criteria:
 
-- A slow LSTM/XGBoost run does not block request workers.
-- Users can cancel or inspect failed jobs with structured errors.
+- A slow LSTM/XGBoost run can be submitted through `/api/v1/forecast/jobs` without blocking the initiating request.
+- Users can cancel, retry, list, and inspect jobs with structured status and errors.
 
 ### Phase B: Experiment Detail Drawer
 
 Goal: make one experiment fully auditable from the UI.
 
+- Status: DONE 2026-05-11 for the static `/ui/` surface.
 - Experiment detail drawer
 - Data snapshot panel
 - Feature schema and target summary panel

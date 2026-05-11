@@ -2,15 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, time as dt_time, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
 
 from app.api.heatmap_universe import HEATMAP_UNIVERSE_VERSION, US_EQUITY_HEATMAP_UNIVERSE
 from core.utils.logger import get_logger
 from pipelines.collect.google_news_rss import collect_news_from_google_rss
+from pipelines.dashboard.market_service import (
+    build_market_dashboard_overview,
+    get_market_snapshot,
+    market_freshness_is_decision_usable as _dashboard_freshness_is_decision_usable,
+    us_market_freshness as _us_market_freshness,
+)
 
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
@@ -239,194 +244,19 @@ async def dashboard_news(limit: int = 20) -> dict[str, Any]:
 
 
 @router.get("/market")
-async def dashboard_market() -> dict[str, Any]:
+async def dashboard_market(force: bool = False) -> dict[str, Any]:
     """Local market snapshot for the UI dashboard."""
 
-    symbols = [
-        {"symbol": "SPY", "label": "S&P 500", "asset_class": "equity_index"},
-        {"symbol": "QQQ", "label": "Nasdaq 100", "asset_class": "equity_index"},
-        {"symbol": "TLT", "label": "Long Treasury", "asset_class": "rates_bonds"},
-        {"symbol": "HYG", "label": "High Yield Credit", "asset_class": "credit"},
-        {"symbol": "LQD", "label": "IG Credit", "asset_class": "credit"},
-        {"symbol": "GLD", "label": "Gold", "asset_class": "commodity"},
-        {"symbol": "BTC-USD", "label": "Bitcoin", "asset_class": "crypto"},
-        {"symbol": "DX-Y.NYB", "label": "DXY", "asset_class": "fx"},
-        {"symbol": "^TNX", "label": "US 10Y Yield", "asset_class": "rates"},
-    ]
-
-    def pct_change(close_values: Any, periods: int) -> float | None:
-        try:
-            if len(close_values) <= periods:
-                return None
-            current = float(close_values.iloc[-1])
-            previous = float(close_values.iloc[-1 - periods])
-            if previous == 0:
-                return None
-            return round((current / previous - 1.0) * 100.0, 2)
-        except Exception:
-            return None
-
-    def _as_iso(value: Any) -> str:
-        if hasattr(value, "isoformat"):
-            return value.isoformat()
-        return str(value)
-
-    def _close_series(frame: Any) -> Any:
-        if frame is None or frame.empty or "Close" not in frame:
-            raise RuntimeError("no close data")
-        close = frame["Close"].dropna()
-        if close.empty:
-            raise RuntimeError("empty close series")
-        return close
-
-    def collect_one(item: dict[str, str]) -> dict[str, Any]:
-        intraday_error = ""
-        try:
-            import yfinance as yf
-
-            ticker = yf.Ticker(item["symbol"])
-            intraday = ticker.history(period="5d", interval="5m", auto_adjust=False, prepost=False)
-            close = _close_series(intraday)
-            daily_last = close.groupby(close.index.date).last().dropna()
-            if len(daily_last) < 2:
-                raise RuntimeError("not enough intraday days for 1d return")
-            last_idx = close.index[-1]
-            as_of = _as_iso(last_idx)
-            freshness = _us_market_freshness(as_of)
-            usable = _dashboard_freshness_is_decision_usable(freshness.get("freshness_status"))
-            daily_history = ticker.history(period="6mo", interval="1d", auto_adjust=False)
-            daily_close = _close_series(daily_history)
-            return {
-                **item,
-                "price": round(float(close.iloc[-1]), 4),
-                "as_of": as_of,
-                "source": "yfinance_intraday_5m",
-                "status": "ok" if usable else "stale",
-                "is_decision_usable": usable,
-                "freshness_status": freshness.get("freshness_status", "unknown"),
-                "age_minutes": freshness.get("age_minutes"),
-                "market_clock": freshness.get("market_clock"),
-                "returns": {
-                    "1d": round((float(daily_last.iloc[-1]) / float(daily_last.iloc[-2]) - 1.0) * 100.0, 2),
-                    "5d": pct_change(daily_close, 5),
-                    "1m": pct_change(daily_close, 21),
-                    "3m": pct_change(daily_close, 63),
-                },
-            }
-        except Exception as exc:  # noqa: BLE001
-            intraday_error = str(exc)
-            try:
-                import yfinance as yf
-
-                history = yf.Ticker(item["symbol"]).history(period="6mo", interval="1d", auto_adjust=False)
-                close = _close_series(history)
-                last_idx = close.index[-1]
-                as_of = last_idx.date().isoformat() if hasattr(last_idx, "date") else str(last_idx)
-                freshness = _us_market_freshness(as_of)
-                usable = _dashboard_freshness_is_decision_usable(freshness.get("freshness_status"))
-                return {
-                    **item,
-                    "price": round(float(close.iloc[-1]), 4),
-                    "as_of": as_of,
-                    "source": "yfinance_daily_fallback",
-                    "status": "ok" if usable else "stale",
-                    "is_decision_usable": usable,
-                    "freshness_status": freshness.get("freshness_status", "unknown"),
-                    "age_minutes": freshness.get("age_minutes"),
-                    "market_clock": freshness.get("market_clock"),
-                    "intraday_error": intraday_error,
-                    "returns": {
-                        "1d": pct_change(close, 1),
-                        "5d": pct_change(close, 5),
-                        "1m": pct_change(close, 21),
-                        "3m": pct_change(close, 63),
-                    },
-                }
-            except Exception as fallback_exc:  # noqa: BLE001
-                logger.warning("[DASHBOARD_MARKET] %s failed: %s", item["symbol"], fallback_exc)
-                return {
-                    **item,
-                    "price": None,
-                    "as_of": "",
-                    "source": "yfinance",
-                    "status": "unavailable",
-                    "is_decision_usable": False,
-                    "freshness_status": "unknown",
-                    "age_minutes": None,
-                    "error": str(fallback_exc),
-                    "intraday_error": intraday_error,
-                    "returns": {"1d": None, "5d": None, "1m": None, "3m": None},
-                }
-
-    items = await asyncio.gather(*(asyncio.to_thread(collect_one, item) for item in symbols))
-    ok_count = sum(1 for item in items if item.get("status") == "ok")
-    decision_usable_count = sum(1 for item in items if item.get("is_decision_usable"))
-    freshness_counts: dict[str, int] = {}
-    for item in items:
-        key = str(item.get("freshness_status") or "unknown")
-        freshness_counts[key] = freshness_counts.get(key, 0) + 1
-    return {
-        "items": items,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "provider": "yfinance",
-        "ok_count": ok_count,
-        "decision_usable_count": decision_usable_count,
-        "freshness_counts": freshness_counts,
-        "freshness_policy": "US market hours require fresh or delayed intraday data; stale prior-close data is labelled and excluded from decision-usable counts.",
-        "warning": "" if decision_usable_count else "No fresh or delayed intraday market snapshot could be loaded from yfinance.",
-    }
+    return await get_market_snapshot(force=force)
 
 
-def _previous_business_day(value: Any) -> Any:
-    day = value
-    while day.weekday() >= 5:
-        day -= timedelta(days=1)
-    return day
+@router.get("/market/overview")
+async def dashboard_market_overview(force: bool = False) -> dict[str, Any]:
+    """Decision-support overview assembled from local market dashboard data."""
 
-
-def _expected_latest_us_market_date(now_ny: datetime) -> Any:
-    today = now_ny.date()
-    if now_ny.weekday() >= 5:
-        return _previous_business_day(today - timedelta(days=1))
-    if now_ny.time() < dt_time(9, 30):
-        return _previous_business_day(today - timedelta(days=1))
-    return today
-
-
-def _dashboard_freshness_is_decision_usable(status: Any) -> bool:
-    return str(status or "").lower() in {"fresh", "delayed", "closed"}
-
-
-def _us_market_freshness(as_of: str) -> dict[str, Any]:
-    try:
-        latest = datetime.fromisoformat(str(as_of).replace("Z", "+00:00"))
-    except Exception:
-        return {"freshness_status": "unknown", "age_minutes": None, "is_intraday": False}
-
-    ny_tz = ZoneInfo("America/New_York")
-    latest_ny = latest.astimezone(ny_tz) if latest.tzinfo else latest.replace(tzinfo=ny_tz)
-    now_ny = datetime.now(ny_tz)
-    age_minutes = max(0.0, round((now_ny - latest_ny).total_seconds() / 60.0, 1))
-    expected_date = _expected_latest_us_market_date(now_ny)
-    market_open = now_ny.weekday() < 5 and dt_time(9, 30) <= now_ny.time() <= dt_time(16, 15)
-    is_intraday = latest_ny.date() == expected_date
-    if latest_ny.date() < expected_date:
-        status = "stale_prior_close"
-    elif market_open and age_minutes <= 25:
-        status = "fresh"
-    elif market_open and age_minutes <= 90:
-        status = "delayed"
-    elif market_open:
-        status = "stale"
-    else:
-        status = "closed"
-    return {
-        "freshness_status": status,
-        "age_minutes": age_minutes,
-        "is_intraday": is_intraday,
-        "market_clock": now_ny.isoformat(),
-        "expected_market_date": expected_date.isoformat(),
-    }
+    market = await get_market_snapshot(force=force)
+    overview = build_market_dashboard_overview(market, _dashboard_equity_heatmap_cache.get("payload"))
+    return overview.model_dump(mode="json")
 
 
 def _tile_span(weight: float) -> dict[str, int]:

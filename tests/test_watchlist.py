@@ -1,7 +1,6 @@
 """Watchlist persistence + scheduler + endpoint tests."""
 from __future__ import annotations
 
-import asyncio
 import json
 import tempfile
 import time
@@ -74,7 +73,7 @@ class WatchlistStoreTests(_TmpDataDirMixin, unittest.TestCase):
         # Stamp a run ~2h ago; still due because elapsed > interval.
         old_ts = time.time() - 2 * 3600
         from datetime import datetime, timezone
-        patched_item = wl_store.mark_run(item.id, status="success")
+        wl_store.mark_run(item.id, status="success")
         # mark_run stamps `now`, so manually rewrite last_run_at to 2h ago.
         raw = json.loads(Path(self.tmp.name, "watchlist.json").read_text("utf-8"))
         raw["items"][0]["last_run_at"] = (

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as dataclass_field
 from typing import Any
 
 import httpx
@@ -256,7 +256,7 @@ class TopicPlan:
 class EvidenceBucket:
     name: str
     label: str
-    items: list[RetrievalItem] = field(default_factory=list)
+    items: list[RetrievalItem] = dataclass_field(default_factory=list)
 
     def add(self, item: RetrievalItem) -> None:
         doc_id = _parent_doc_id(item)

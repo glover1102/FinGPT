@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 6
 
 DDL_STATEMENTS: tuple[str, ...] = (
     """
@@ -336,6 +336,24 @@ DDL_STATEMENTS: tuple[str, ...] = (
         checked_at TEXT NOT NULL
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS dashboard_snapshots (
+        snapshot_key TEXT PRIMARY KEY,
+        source TEXT NOT NULL DEFAULT 'dashboard',
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        generated_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS dashboard_refresh_locks (
+        lock_key TEXT PRIMARY KEY,
+        owner_token TEXT NOT NULL,
+        acquired_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_prices_ticker_date ON prices_daily(ticker, date DESC)",
     "CREATE INDEX IF NOT EXISTS idx_macro_series_date ON macro_observations(series_id, date DESC)",
     "CREATE INDEX IF NOT EXISTS idx_fingpt_annotations_ticker_task ON fingpt_article_annotations(ticker, task, created_at DESC)",
@@ -352,4 +370,6 @@ DDL_STATEMENTS: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_kr_equity_profile_market ON kr_equity_profile(market)",
     "CREATE INDEX IF NOT EXISTS idx_provider_status_run ON provider_status(run_id)",
     "CREATE INDEX IF NOT EXISTS idx_quality_entity ON data_quality_checks(entity_type, entity_id, checked_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_dashboard_snapshots_expires ON dashboard_snapshots(expires_at)",
+    "CREATE INDEX IF NOT EXISTS idx_dashboard_refresh_locks_expires ON dashboard_refresh_locks(expires_at)",
 )

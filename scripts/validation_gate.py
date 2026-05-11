@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -516,6 +517,7 @@ def _start_validation_server(*, timeout_s: int) -> tuple[subprocess.Popen[str], 
         env=env,
     )
     base_url = f"http://{host}:{port}"
+    health_url = _validated_health_url(base_url)
     deadline = time.time() + timeout_s
     last_error = ""
     while time.time() < deadline:
@@ -526,7 +528,8 @@ def _start_validation_server(*, timeout_s: int) -> tuple[subprocess.Popen[str], 
                 f"returncode={proc.returncode}; stdout={_clip(stdout, 1200)}; stderr={_clip(stderr, 1200)}"
             )
         try:
-            with urllib.request.urlopen(f"{base_url}/api/v1/health", timeout=2) as response:
+            # URL is limited to http(s) health probes before urlopen.
+            with urllib.request.urlopen(health_url, timeout=2) as response:  # nosec
                 if response.status == 200:
                     return proc, base_url
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
@@ -534,6 +537,14 @@ def _start_validation_server(*, timeout_s: int) -> tuple[subprocess.Popen[str], 
         time.sleep(0.5)
     _stop_validation_server(proc)
     raise ValidationError(f"validation UI server did not become healthy within {timeout_s}s: {last_error}")
+
+
+def _validated_health_url(base_url: str) -> str:
+    url = f"{base_url.rstrip('/')}/api/v1/health"
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValidationError(f"unsupported validation health URL: {url!r}")
+    return url
 
 
 def _stop_validation_server(proc: subprocess.Popen[str] | None) -> None:

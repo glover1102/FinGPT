@@ -103,6 +103,7 @@ def _fingpt_annotations_needs_model_id_rebuild(conn: sqlite3.Connection) -> bool
 
 
 def _copy_fingpt_annotations_rows(conn: sqlite3.Connection, model_expr: str) -> None:
+    # Table names and model expression are internal migration constants.
     conn.execute(
         f"""
         INSERT INTO {FINGPT_ANNOTATIONS_TABLE}(

@@ -219,6 +219,146 @@ def test_api_responses_include_data_quality(monkeypatch, tmp_path) -> None:
         assert "data_quality" in body
 
 
+def test_macro_dashboard_summary_endpoint_is_compact_and_operable(monkeypatch, tmp_path) -> None:
+    _reset_macro_runtime(monkeypatch, tmp_path)
+    client = TestClient(app)
+
+    response = client.get("/api/v1/macro/dashboard")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] in {"ok", "partial", "stale", "unavailable"}
+    assert "overview" in body
+    assert "coverage" in body
+    assert "data_quality" in body
+    assert "refresh" in body
+    assert "generated_at" in body
+    assert body["coverage"]["registry_series"] >= 70
+    assert body["coverage"]["countries"]
+    assert "US" in body["coverage"]["countries"]
+    assert all(len(item["observations"]) <= 20 for item in body["overview"]["key_indicators"])
+
+
+def test_macro_provider_health_endpoint_reports_scheduler_and_stale_causes(monkeypatch, tmp_path) -> None:
+    _reset_macro_runtime(monkeypatch, tmp_path)
+
+    def fake_data_quality():
+        return {
+            "status": "partial",
+            "data_quality": MacroDataQuality(
+                status="partial",
+                provider="test",
+                stale_series=["STALE_TEST"],
+                missing_series=["UNAVAILABLE_TEST"],
+            ).model_dump(mode="json"),
+            "series": [
+                {
+                    "series_id": "STALE_TEST",
+                    "display_name": "Stale Test",
+                    "status": "stale",
+                    "latest_date": "2025-01-01",
+                    "provider": "test",
+                    "errors": [],
+                    "notes": ["stale"],
+                },
+                {
+                    "series_id": "UNAVAILABLE_TEST",
+                    "display_name": "Unavailable Test",
+                    "status": "unavailable",
+                    "latest_date": None,
+                    "provider": "test",
+                    "errors": ["missing"],
+                    "notes": [],
+                },
+                {
+                    "series_id": "PARTIAL_TEST",
+                    "display_name": "Partial Test",
+                    "status": "partial",
+                    "latest_date": "2026-01-01",
+                    "provider": "test",
+                    "errors": [],
+                    "notes": ["partial"],
+                },
+            ],
+    }
+
+    monkeypatch.setattr("pipelines.macro.provider_health.macro_service.get_data_quality", fake_data_quality)
+
+    class FakeScheduler:
+        def status(self):
+            return {
+                "enabled": True,
+                "jobs": {"macro_platform_data": True},
+                "last_result": {
+                    "jobs": {
+                        "macro_platform_data": {
+                            "providers": [
+                                {
+                                    "provider": "fred",
+                                    "status": "failed",
+                                    "rows": 0,
+                                    "error": {"message": "boom"},
+                                    "detail": {"stage": "test"},
+                                }
+                            ]
+                        }
+                    }
+                },
+            }
+
+    monkeypatch.setattr("app.api.routers.macro.get_data_mart_scheduler", lambda: FakeScheduler())
+    client = TestClient(app)
+
+    response = client.get("/api/v1/macro/provider-health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] in {"ok", "partial", "stale", "unavailable"}
+    assert "providers" in body
+    assert body["providers"]
+    provider = body["providers"][0]
+    assert {"provider", "enabled", "configured", "latest_status", "latest_rows", "latest_error"}.issubset(provider)
+    assert "rows" not in provider
+    assert "error" not in provider
+    fred = next(item for item in body["providers"] if item["provider"] == "fred")
+    assert fred["latest_status"] == "failed"
+    assert fred["latest_rows"] == 0
+    assert "boom" in fred["latest_error"]
+    assert "scheduler" in body
+    assert isinstance(body["stale_series"], list)
+    stale_statuses = {item["status"] for item in body["stale_series"]}
+    assert {"stale", "unavailable", "partial"}.issubset(stale_statuses)
+    assert {item["series_id"] for item in body["stale_series"]} >= {"STALE_TEST", "UNAVAILABLE_TEST", "PARTIAL_TEST"}
+
+
+def test_macro_scenario_endpoint_returns_advisory_asset_impacts(monkeypatch, tmp_path) -> None:
+    _reset_macro_runtime(monkeypatch, tmp_path)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/macro/scenario",
+        json={
+            "name": "rates_up",
+            "rate_shock_bp": 100,
+            "inflation_shock_pct": 0.5,
+            "credit_spread_shock_bp": 150,
+            "oil_shock_pct": 20,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["advisory_only"] is True
+    assert body["scenario"]["name"] == "rates_up"
+    assert body["scenario"]["rate_shock_bp"] == 100
+    assert body["risk_level"] in {"watch", "reduce", "neutral"}
+    assert body["explanation"]
+    assert body["data_quality"]["status"] == "ok"
+    assert len(body["asset_impacts"]) >= 4
+    assert "orders" not in body
+    assert "trades" not in body
+
+
 def test_expanded_macro_category_surfaces_have_visible_items(monkeypatch, tmp_path) -> None:
     _reset_macro_runtime(monkeypatch, tmp_path)
     monkeypatch.setattr("pipelines.macro.providers.yahoo.yf", None)

@@ -92,6 +92,17 @@ class Settings(BaseSettings):
     quant_lab_qlib_enabled: bool = Field(default=False)
     qlib_provider_uri: str = Field(default="")
 
+    # Optional MiroFish-style scenario simulation layer. Disabled by default
+    # so the existing research path and report output remain unchanged.
+    scenario_simulation_enabled: bool = Field(default=False)
+    scenario_simulation_max_personas: int = Field(default=6)
+    scenario_simulation_min_personas: int = Field(default=5)
+    scenario_simulation_debate_rounds: int = Field(default=1)
+    scenario_simulation_max_scenarios: int = Field(default=4)
+    scenario_simulation_llm_enabled: bool = Field(default=True)
+    scenario_simulation_strict_evidence: bool = Field(default=True)
+    scenario_simulation_fail_open: bool = Field(default=True)
+
     # Collection cache — small in-memory TTL cache to avoid re-hammering FMP / SEC /
     # Yahoo when the user re-runs the same (ticker, sources, lookback) within a
     # short window (e.g. retrying with a different question). Set TTL to 0 to
@@ -127,6 +138,7 @@ class Settings(BaseSettings):
     alpha_vantage_api_key: str = Field(default="")
     fmp_api_key: str = Field(default="")
     hf_token: str = Field(default="")
+    hf_model_revision: str = Field(default="main")
 
     # SEC EDGAR fair-access identity. Operators should replace the default
     # with an organization/contact string before sustained automated use.

@@ -185,13 +185,6 @@ def universe_source(universe_id: str | None) -> str:
     return "direct_input" if _canonical_universe_id(universe_id) == "custom" else "preset"
 
 
-def universe_label(universe_id: str | None) -> str:
-    clean = _canonical_universe_id(universe_id)
-    if clean == "custom":
-        return "직접 입력 심볼 목록"
-    return UNIVERSE_PRESET_LABELS.get(clean, str(universe_id or "default_multi_asset"))
-
-
 @lru_cache(maxsize=1)
 def _static_heatmap_sectors() -> dict[str, str]:
     source_path = PROJECT_ROOT / "app" / "web" / "app.js"
@@ -248,26 +241,6 @@ def normalize_ai_asset_class(ticker: str, raw_class: str | None = None) -> str:
     if clean == "crypto":
         return "alternative"
     return normalize_asset_class(clean if clean not in {"stock", "etf"} else "equity")
-
-
-def asset_role(asset_class: str) -> str:
-    if asset_class == "bond":
-        return "변동성 완충 / 금리 민감 자산"
-    if asset_class == "cash":
-        return "현금성 완충 / 리밸런싱 대기 자금"
-    if asset_class == "alternative":
-        return "분산 / 실물·대체 노출"
-    return "성장 / 주식 위험 프리미엄"
-
-
-def asset_key_risk(asset_class: str) -> str:
-    if asset_class == "bond":
-        return "금리 상승, 신용 스프레드 확대"
-    if asset_class == "cash":
-        return "낮은 기대수익, 재투자 위험"
-    if asset_class == "alternative":
-        return "원자재·대체자산 변동성, 유동성"
-    return "주식시장 하락, 실적/밸류에이션 재평가"
 
 
 def universe_label(universe_id: str | None) -> str:
@@ -345,49 +318,6 @@ def load_universe(universe_id: str | None) -> tuple[list[UniverseAsset], list[st
         seen.add(asset.ticker)
         unique.append(asset)
     return unique, warnings
-
-
-def universe_presets() -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    for preset_id in [
-        "default_multi_asset",
-        "quant_lab_default",
-        "sp500_top_200",
-        "etf_core_100",
-        "kr_300",
-        "crypto_core",
-        "all_supported",
-    ]:
-        assets, warnings = load_universe(preset_id)
-        mix: dict[str, int] = {}
-        for asset in assets:
-            mix[asset.asset_class] = mix.get(asset.asset_class, 0) + 1
-        out.append(
-            {
-                "id": preset_id,
-                "display_name": universe_label(preset_id),
-                "source_type": "preset",
-                "description": UNIVERSE_PRESET_DESCRIPTIONS.get(preset_id, ""),
-                "asset_count": len(assets),
-                "asset_class_mix": mix,
-                "sample_assets": [asset.ticker for asset in assets[:8]],
-                "request_hint": preset_id,
-                "warnings": warnings,
-            }
-        )
-    out.append(
-        {
-            "id": "custom",
-            "display_name": "직접 입력 심볼 목록",
-            "source_type": "direct_input",
-            "description": "사용자가 쉼표로 입력한 심볼만 사용합니다. 프리셋과 별도이며, 요청 값은 custom:SPY,TLT 형식으로 전달됩니다.",
-            "asset_count": 0,
-            "asset_class_mix": {},
-            "sample_assets": [],
-            "request_hint": "custom:SPY,TLT,GLD",
-        }
-    )
-    return out
 
 
 def universe_presets() -> list[dict[str, Any]]:

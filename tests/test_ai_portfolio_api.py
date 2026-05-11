@@ -461,6 +461,39 @@ def test_snapshot_job_and_recommendation_diff(tmp_path, monkeypatch) -> None:
     assert body["created_count"] >= 1
 
 
+def test_ai_portfolio_dashboard_summarizes_coverage_operations_and_snapshots(tmp_path, monkeypatch) -> None:
+    client = _client(tmp_path, monkeypatch)
+    generated = client.post(
+        "/api/v1/ai-portfolio/generate",
+        json={
+            "portfolio_name": "Dashboard",
+            "investment_type": "balanced_growth",
+            "universe_id": "custom:SPY,TLT,GLD,SGOV",
+            "automation_level": "alert_only",
+            "policy_overrides": {"lookback_window_months": 3},
+        },
+    ).json()
+    policy_id = generated["policy"]["policy_id"]
+    assert client.post(f"/api/v1/ai-portfolio/policies/{policy_id}/activate").status_code == 200
+    assert client.post("/api/v1/ai-portfolio/operations/snapshots", json={"active_only": True}).status_code == 200
+
+    response = client.get(f"/api/v1/ai-portfolio/dashboard?policy_id={policy_id}")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["selected_policy"]["policy_id"] == policy_id
+    assert body["policy_counts"]["active"] >= 1
+    coverage_ids = {row["id"] for row in body["coverage_rows"]}
+    assert {"price_data", "fundamentals", "metadata", "sec_financials", "provider_status"}.issubset(coverage_ids)
+    price_row = next(row for row in body["coverage_rows"] if row["id"] == "price_data")
+    assert price_row["pct"] == 100.0
+    assert body["snapshot_timeline"]
+    assert body["snapshot_timeline"][0]["policy_id"] == policy_id
+    assert body["operation_summary"]["by_type"]["snapshot_job"] >= 1
+    assert body["data_health_summary"]["table_counts"]["prices_daily"] > 0
+    assert "details_json" not in str(body)
+
+
 def test_rebalance_action_body_records_reason_actor_and_audit(tmp_path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
     generated = client.post(

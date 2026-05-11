@@ -288,6 +288,31 @@ Remaining production-only work:
 - OS/CI-level scheduled jobs are still not installed; local FastAPI now has an in-process scheduler for workstation use.
 - Rich ETF holdings exposure, ISIN/CUSIP, delisting status, and detailed Korean sector taxonomy require provider-specific metadata sources beyond the current deterministic universe registry.
 
+## 2026-05-11 Operations Dashboard Enhancement
+
+Status: `DONE`
+
+| Area | Change | Verification |
+|---|---|---|
+| Dashboard API | Added `GET /api/v1/ai-portfolio/dashboard`, combining selected policy summary, policy counts, compact store/data-health state, coverage rows, snapshot timeline, and compact operation history. | `test_ai_portfolio_dashboard_summarizes_coverage_operations_and_snapshots`; live `dashboard?limit=5` smoke |
+| Coverage model | Added typed dashboard response models for coverage, snapshot timeline, operation summary, and selected-policy status. | `python -m compileall -q core/schemas/ai_portfolio.py pipelines/ai_portfolio app/api/routers/ai_portfolio.py` |
+| Operations compaction | Dashboard recent operations intentionally omit raw provider `details_json` payloads while preserving status, counts, request IDs, and SEC/metadata summaries. | API test assertion and live smoke verified `details_json` absence |
+| Static UI | Added coverage heatmap and snapshot timeline surfaces to the existing static `/ui/#ai-portfolio` operations card. | `node --check app\web\app.js`; UI contract; browser smoke on `http://127.0.0.1:8142/ui/#ai-portfolio` |
+| State refresh | Portfolio generation, hydration, SEC refresh, and snapshot jobs invalidate and reload the new dashboard state. | Code inspection plus browser-rendered dashboard response |
+| Boundary | Scope remains local workstation SQLite and advisory-only operations. Remote DB migration, broker order execution, and autonomous real-money rebalancing remain out of scope. | Checklist reconciliation in `docs/AI_PORTFOLIO_ENHANCEMENT_CHECKLIST.md` |
+
+Validation completed for this pass:
+
+```powershell
+python -m compileall -q core/schemas/ai_portfolio.py pipelines/ai_portfolio app/api/routers/ai_portfolio.py
+node --check app\web\app.js
+python -m pytest tests/test_ai_portfolio_api.py -q
+python -m pytest tests/test_ui_routing_contract.py -q
+python scripts/check_ui_contract.py --output reports/ai_portfolio_enhancement_ui_contract.json
+python -m ruff check core\schemas\ai_portfolio.py pipelines\ai_portfolio\service.py app\api\routers\ai_portfolio.py tests\test_ai_portfolio_api.py tests\test_ui_routing_contract.py scripts\check_ui_contract.py
+python -m pytest tests -q
+```
+
 ## Validation Runbook
 
 Status: `DONE`

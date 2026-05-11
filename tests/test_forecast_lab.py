@@ -16,6 +16,7 @@ from core.schemas.forecast import (
     FeatureConfig,
     ForecastDatasetConfig,
     ForecastResult,
+    ForecastJobSubmitRequest,
     ForecastRunRequest,
     ModelConfig,
     ModelRegistryItem,
@@ -32,6 +33,7 @@ from pipelines.forecast.data_loader import load_benchmark_rows, load_price_rows
 from pipelines.forecast.experiment_store import forecast_root, register_model, save_experiment, save_model_artifact, verify_model_artifact_integrity
 from pipelines.forecast.feature_engineering import build_features
 from pipelines.forecast.integrations.macro_context import build_macro_regime_artifact
+from pipelines.forecast import jobs as forecast_jobs
 from pipelines.forecast.leakage import run_leakage_check
 from pipelines.forecast.modeling import train_and_forecast
 from pipelines.forecast.signal_generator import generate_signal
@@ -476,6 +478,50 @@ def test_forecast_api_train_persists_experiment_and_registry(tmp_path, monkeypat
     assert audit.status_code == 200
     assert audit.json()["storage"] == "sqlite"
     assert audit.json()["count"] >= 1
+
+
+def test_forecast_job_store_runs_inline_and_api_reads_detail(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+
+    def fake_train(request: ForecastRunRequest) -> dict:
+        return {
+            "status": "success",
+            "experiment": {"experiment_id": "exp_job_unit", "status": "success", "artifact_refs": {"data_snapshot_id": "ds_job_unit"}},
+            "forecast_result": {
+                "experiment_id": "exp_job_unit",
+                "model_id": "mlf_job_unit",
+                "ticker": request.dataset_config.ticker,
+                "signal": "neutral",
+                "model_confidence": {"score": 0.51},
+            },
+            "data_snapshot": {"data_snapshot_id": "ds_job_unit", "source_coverage_hash": "hash_job_unit"},
+            "errors": [],
+            "warnings": [],
+        }
+
+    monkeypatch.setattr("pipelines.forecast.service.train", fake_train)
+    request = ForecastRunRequest(
+        dataset_config=ForecastDatasetConfig(ticker="SPY", benchmark="QQQ"),
+        target_config=TargetConfig(target_type="forward_return", horizon=5),
+        model_config=ModelConfig(model_name="ridge_regression", model_type="regression"),
+    )
+
+    submitted = forecast_jobs.submit_forecast_job(ForecastJobSubmitRequest(request=request, runtime_budget_s=120), run_inline=True)
+    job_id = submitted["job_id"]
+    detail = forecast_jobs.get_forecast_job(job_id)
+    client = TestClient(app)
+    api_detail = client.get(f"/api/v1/forecast/jobs/{job_id}")
+    api_list = client.get("/api/v1/forecast/jobs?limit=5")
+
+    assert submitted["job_status"] == "succeeded"
+    assert detail["result_summary"]["experiment_id"] == "exp_job_unit"
+    assert detail["result_summary"]["data_snapshot_id"] == "ds_job_unit"
+    assert api_detail.status_code == 200
+    assert api_detail.json()["job_status"] == "succeeded"
+    assert api_detail.json()["result"]["forecast_result"]["model_id"] == "mlf_job_unit"
+    assert api_list.status_code == 200
+    listed = next(item for item in api_list.json()["items"] if item["job_id"] == job_id)
+    assert listed["result_summary"]["experiment_id"] == "exp_job_unit"
 
 
 def test_forecast_experiment_id_rejects_path_traversal(tmp_path, monkeypatch) -> None:

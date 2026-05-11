@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FinGPT Local Research Assistant</title>
-  <link rel="stylesheet" href="styles.css?v=20260510-macro-explorer" />
+  <link rel="stylesheet" href="styles.css?v=20260511-market-dashboard-overview" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='48' font-size='48'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E" />
 </head>
 <body>
@@ -291,6 +291,24 @@
           <span><strong>Execution</strong> Advisory</span>
         </div>
         <div id="homeSurfaceGrid" class="home-grid dashboard-surface-grid" data-dashboard-tab="market">
+          <section class="home-card market-overview-card market-surface">
+            <div class="home-card-head">
+              <h3>시장 테이프</h3>
+              <span id="marketOverviewMeta">freshness, source, decision usability</span>
+            </div>
+            <div id="marketTapeSurface" class="decision-surface market-tape-surface">
+              <div class="home-news-empty">시장 테이프를 불러오는 중입니다.</div>
+            </div>
+          </section>
+          <section class="home-card market-signals-card market-surface">
+            <div class="home-card-head">
+              <h3>교차자산 신호</h3>
+              <span>rules, not predictions</span>
+            </div>
+            <div id="marketSignalSurface" class="decision-surface market-signal-surface">
+              <div class="home-news-empty">시장 신호를 불러오는 중입니다.</div>
+            </div>
+          </section>
           <section class="home-card home-chart-card market-surface">
             <div class="home-card-head">
               <h3>TradingView 단일 차트</h3>
@@ -348,6 +366,9 @@
               <button type="button" id="macroRefresh" class="ghost-btn" data-testid="macro-refresh">Refresh Data</button>
               <button type="button" id="macroReportExport" class="ghost-btn" data-testid="macro-report-export">Export Report</button>
             </div>
+            <div id="macroLoadStatus" class="macro-load-status" role="status" aria-live="polite">
+              <div class="home-news-empty">매크로 대시보드 로드 상태를 준비 중입니다.</div>
+            </div>
             <div id="macroOverviewSurface" class="decision-surface">
               <div class="home-news-empty">Macro overview is loading.</div>
             </div>
@@ -361,7 +382,7 @@
           <section class="home-card macro-card macro-search-card macro-surface">
             <div class="home-card-head">
               <h3>Macro Explorer</h3>
-              <span>search, time series, components</span>
+              <span>search, filters, time series</span>
             </div>
             <div class="decision-form macro-search-form">
               <label>
@@ -371,12 +392,33 @@
                   <button type="button" id="macroSeriesSearchRun" class="ghost-btn" data-testid="macro-series-search-run">검색</button>
                 </div>
               </label>
+              <label>
+                <span>범주</span>
+                <select id="macroCategoryFilter" aria-label="Macro category filter">
+                  <option value="">전체 범주</option>
+                </select>
+              </label>
+              <label>
+                <span>공급자</span>
+                <select id="macroProviderFilter" aria-label="Macro provider filter">
+                  <option value="">전체 공급자</option>
+                </select>
+              </label>
             </div>
             <div id="macroSeriesSearchResults" class="decision-surface compact-surface">
               <div class="home-news-empty">검색어를 입력하면 연결 가능한 매크로 시계열이 표시됩니다.</div>
             </div>
             <div id="macroSeriesDetailSurface" class="decision-surface">
               <div class="home-news-empty">시계열을 선택하면 차트, 변화율, 원자료, 관련 구성 지표를 확인할 수 있습니다.</div>
+            </div>
+            <div id="macroCompareSurface" class="decision-surface compact-surface">
+              <div class="home-news-empty">비교 패널은 필터와 선택 상태를 확인하는 자리입니다. 다중 시계열 비교는 이후 단계에서 확장합니다.</div>
+            </div>
+          </section>
+          <section class="home-card macro-card macro-provider-card macro-surface">
+            <div class="home-card-head"><h3>Provider Health</h3><span>configured, latest rows, stale series</span></div>
+            <div id="macroProviderHealthSurface" class="decision-surface compact-surface">
+              <div class="home-news-empty">공급자 상태를 불러오는 중입니다.</div>
             </div>
           </section>
           <section class="home-card macro-card macro-indicators-card macro-surface">
@@ -434,6 +476,36 @@
           <section class="home-card macro-card macro-impact-card macro-surface">
             <div class="home-card-head"><h3>Asset Impact</h3><span>impact, confidence, risks</span></div>
             <div id="macroAssetImpactSurface" class="decision-surface"><div class="home-news-empty">Loading asset impacts.</div></div>
+          </section>
+          <section class="home-card macro-card macro-scenario-card macro-surface">
+            <div class="home-card-head"><h3>Scenario Starter</h3><span>advisory-only shock preview</span></div>
+            <div id="macroScenarioSurface" class="decision-surface">
+              <div class="macro-scenario-presets">
+                <button type="button" class="ghost-btn" data-action="macro-scenario" data-scenario-preset="rates_up">금리 상승</button>
+                <button type="button" class="ghost-btn" data-action="macro-scenario" data-scenario-preset="stagflation">스태그플레이션</button>
+                <button type="button" class="ghost-btn" data-action="macro-scenario" data-scenario-preset="credit_stress">신용 스트레스</button>
+              </div>
+              <div id="macroScenarioResult" class="macro-scenario-result">
+                <div class="home-news-empty">시나리오를 선택하면 자산 영향과 sleeve 힌트를 자문용으로만 표시합니다.</div>
+              </div>
+            </div>
+          </section>
+          <section class="home-card macro-card macro-research-card macro-surface">
+            <div class="home-card-head"><h3>Research Context Preview</h3><span>ticker-aware macro context</span></div>
+            <div id="macroResearchPreviewSurface" class="decision-surface">
+              <div class="decision-form macro-research-form">
+                <label>
+                  <span>티커</span>
+                  <div class="input-action-row compact">
+                    <input id="macroResearchTicker" type="search" value="JPM" aria-label="Macro research context ticker" placeholder="JPM, SPY, 005930.KS" />
+                    <button type="button" id="macroResearchPreviewRun" class="ghost-btn" data-testid="macro-research-preview-run">미리보기</button>
+                  </div>
+                </label>
+              </div>
+              <div id="macroResearchPreviewResult">
+                <div class="home-news-empty">티커별 매크로 리서치 컨텍스트를 미리 확인합니다. 결과는 자문용입니다.</div>
+              </div>
+            </div>
           </section>
           <section class="home-card macro-card macro-hints-card macro-surface">
             <div class="home-card-head"><h3>Portfolio Policy Hints</h3><span>advisory only</span></div>
@@ -794,6 +866,7 @@
               <button type="button" id="forecastHydrateDataset" class="ghost-btn" data-testid="ml-forecast-hydrate">Hydrate Data</button>
               <button type="button" id="forecastBuildFeatures" class="ghost-btn" data-testid="ml-forecast-features">Build Features</button>
               <button type="button" id="forecastRunTrain" class="ghost-btn" data-testid="ml-forecast-train">Train / Forecast</button>
+              <button type="button" id="forecastQueueJob" class="ghost-btn" data-testid="ml-forecast-job-submit">Queue Job</button>
               <button type="button" id="forecastGenerateAi" class="ghost-btn" data-testid="ml-forecast-ai">AI Interpretation</button>
               <button type="button" id="forecastGenerateProviderAi" class="ghost-btn" data-testid="ml-forecast-provider-ai">Provider AI</button>
             </div>
@@ -865,6 +938,13 @@
             </div>
             <div id="forecastModelComparisonSurface" class="decision-surface"><div class="home-news-empty">저장된 실험의 confidence, signal quality, backtest metric을 비교합니다.</div></div>
           </section>
+          <section class="home-card forecast-card forecast-jobs-card forecast-surface">
+            <div class="home-card-head">
+              <h3>Forecast Jobs</h3>
+              <button type="button" id="forecastJobsRefresh" class="linkish" data-testid="ml-forecast-jobs-refresh">새로고침</button>
+            </div>
+            <div id="forecastJobsSurface" class="decision-surface"><div class="home-news-empty">비동기 forecast job 상태가 표시됩니다.</div></div>
+          </section>
           <section class="home-card forecast-card forecast-history-card forecast-surface">
             <div class="home-card-head">
               <h3>Experiment History</h3>
@@ -908,6 +988,12 @@
             </div>
             <div id="aiPortfolioOpsSurface" class="decision-surface compact-surface">
               <div class="home-news-empty">저장소, legacy JSON, 가격·재무 데이터 활성화 상태를 확인합니다.</div>
+            </div>
+            <div id="aiPortfolioCoverageSurface" class="decision-surface compact-surface">
+              <div class="home-news-empty">가격, 펀더멘털, SEC, provider 상태 커버리지를 불러오는 중입니다.</div>
+            </div>
+            <div id="aiPortfolioSnapshotTimelineSurface" class="decision-surface compact-surface">
+              <div class="home-news-empty">최근 성과 스냅샷 timeline을 불러오는 중입니다.</div>
             </div>
           </section>
 
@@ -1195,6 +1281,19 @@
     </section>
   </main>
 
+  <div id="forecastDetailModal" class="forecast-detail-modal hidden" role="dialog" aria-modal="true" aria-labelledby="forecastDetailTitle">
+    <div class="forecast-detail-panel">
+      <div class="forecast-detail-head">
+        <div>
+          <h2 id="forecastDetailTitle">Experiment Detail</h2>
+          <p>데이터, 설정, 검증, 아티팩트, registry audit를 한 번에 확인합니다.</p>
+        </div>
+        <button type="button" id="forecastDetailClose" class="symbol-picker-close" aria-label="Close experiment detail">×</button>
+      </div>
+      <div id="forecastDetailBody" class="forecast-detail-body"></div>
+    </div>
+  </div>
+
   <div id="symbolPickerModal" class="symbol-picker-modal hidden" role="dialog" aria-modal="true" aria-labelledby="symbolPickerTitle">
     <div class="symbol-picker-panel">
       <div class="symbol-picker-head">
@@ -1244,6 +1343,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260510-macro-explorer"></script>
+  <script src="app.js?v=20260511-market-dashboard-overview"></script>
 </body>
 </html>

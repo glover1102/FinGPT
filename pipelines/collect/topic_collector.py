@@ -6,7 +6,7 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
-from xml.etree import ElementTree as ET
+from defusedxml import ElementTree as ET
 
 import httpx
 
@@ -26,6 +26,26 @@ _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 _GOOGLE_NEWS_RSS = "https://news.google.com/rss/search"
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 _DEFAULT_FRED_SERIES = ["DGS10", "DGS2", "DGS30", "DFII10", "DFF", "CPIAUCSL", "UNRATE"]
+_KOREA_INVERSE_RELATED_TICKERS = ["114800.KS", "252670.KS", "251340.KS", "EWY"]
+_KOREA_MARKET_TERMS = [
+    "kospi",
+    "kosdaq",
+    "krx",
+    "\ucf54\uc2a4\ud53c",
+    "\ucf54\uc2a4\ub2e5",
+    "\ud55c\uad6d \uc99d\uc2dc",
+    "\uad6d\ub0b4 \uc99d\uc2dc",
+    "\ud55c\uad6d \uc2dc\uc7a5",
+]
+_KOREA_INVERSE_TERMS = [
+    "inverse",
+    "short kospi",
+    "short korea",
+    "\uc778\ubc84\uc2a4",
+    "\uace1\ubc84\uc2a4",
+    "\uc120\ubb3c\uc778\ubc84\uc2a4",
+    "\ud558\ub77d \ubca0\ud305",
+]
 _SECTOR_ETF_MAP = {
     "semiconductor": ["SOXX", "SMH", "NVDA", "AMD", "AVGO", "TSM"],
     "반도체": ["SOXX", "SMH", "NVDA", "AMD", "AVGO", "TSM"],
@@ -65,6 +85,11 @@ _SECTOR_ETF_MAP.update(
         "암호화폐": ["BTC-USD", "ETH-USD"],
     }
 )
+
+
+def _contains_korea_inverse_topic(text: str) -> bool:
+    lower = str(text or "").lower()
+    return any(term in lower for term in _KOREA_MARKET_TERMS) and any(term in lower for term in _KOREA_INVERSE_TERMS)
 
 
 def _strip_html(text: str) -> str:
@@ -262,6 +287,8 @@ def _infer_theme_tickers(theme: str, related_tickers: list[str]) -> list[str]:
     tickers = [t.upper() for t in related_tickers if t]
     text = theme or ""
     lower = text.lower()
+    if _contains_korea_inverse_topic(text):
+        tickers.extend(_KOREA_INVERSE_RELATED_TICKERS)
     for key, mapped in _SECTOR_ETF_MAP.items():
         key_lower = key.lower()
         if key_lower == "ai":

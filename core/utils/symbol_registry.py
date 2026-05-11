@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +61,9 @@ _SPECIAL_ALIASES: dict[str, tuple[str, ...]] = {
     "051910.KS": ("lg\ud654\ud559", "lg chem"),
     "068270.KS": ("\uc140\ud2b8\ub9ac\uc628", "celltrion"),
     "247540.KQ": ("\uc5d0\ucf54\ud504\ub85c\ube44\uc5e0", "ecopro bm", "ecoprobiem"),
+    "114800.KS": ("\ucf54\uc2a4\ud53c \uc778\ubc84\uc2a4", "kodex \uc778\ubc84\uc2a4", "kodex inverse", "kospi inverse"),
+    "252670.KS": ("\uace1\ubc84\uc2a4", "\ucf54\uc2a4\ud53c \uace1\ubc84\uc2a4", "kodex 200\uc120\ubb3c\uc778\ubc84\uc2a42x", "kospi inverse 2x"),
+    "251340.KS": ("\ucf54\uc2a4\ub2e5 \uc778\ubc84\uc2a4", "kodex \ucf54\uc2a4\ub2e5150\uc120\ubb3c\uc778\ubc84\uc2a4", "kosdaq inverse"),
     "BTC-USD": ("\ube44\ud2b8\ucf54\uc778", "bitcoin", "btc"),
     "ETH-USD": ("\uc774\ub354\ub9ac\uc6c0", "ethereum", "eth"),
 }
@@ -254,6 +256,7 @@ def symbol_identities() -> dict[str, SymbolIdentity]:
     us_names = _symbol_names(source, "US_SYMBOL_NAMES")
     etf_names = _symbol_names(source, "ETF_SYMBOL_NAMES")
     kr_names = _symbol_names(source, "KOREAN_SYMBOL_NAMES")
+    kr_etf_names = _symbol_names(source, "KOREAN_ETF_NAMES")
     overrides = _symbol_overrides(source)
 
     identities: dict[str, SymbolIdentity] = {}
@@ -296,6 +299,17 @@ def symbol_identities() -> dict[str, SymbolIdentity]:
             raw_name=name,
             market="KRX",
             asset_class="stock",
+        )
+    for code in _symbol_list_block(source, "KOREAN_ETF_SYMBOLS"):
+        ticker = f"{code}.KS"
+        name = kr_etf_names.get(code) or code
+        _add_identity(
+            identities,
+            ticker,
+            overrides.get(ticker) or f"{name} ({code} KRX ETF)",
+            raw_name=name,
+            market="KRX",
+            asset_class="etf",
         )
     for symbol in _array_symbols(source, "CRYPTO_SYMBOLS"):
         _add_identity(

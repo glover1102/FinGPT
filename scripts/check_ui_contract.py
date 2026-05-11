@@ -34,6 +34,9 @@ REQUIRED_UI_MARKERS: dict[str, str] = {
     "ai portfolio tab testid": 'data-testid="ai-portfolio-tab"',
     "run history": 'id="historyList"',
     "market snapshot": 'id="homeMarketList"',
+    "market overview meta": 'id="marketOverviewMeta"',
+    "market tape": 'id="marketTapeSurface"',
+    "market signals": 'id="marketSignalSurface"',
     "home news": 'id="homeNewsList"',
     "tradingview chart": 'id="tvOverviewWidget"',
     "intraday heatmap": 'id="homeHeatmap"',
@@ -49,13 +52,18 @@ REQUIRED_UI_MARKERS: dict[str, str] = {
     "macro brief generate testid": 'data-testid="macro-brief-generate"',
     "macro report export": 'id="macroReportExport"',
     "macro report export testid": 'data-testid="macro-report-export"',
+    "macro load status": 'id="macroLoadStatus"',
     "macro overview": 'id="macroOverviewSurface"',
     "macro coverage": 'id="macroCoverageSurface"',
+    "macro provider health": 'id="macroProviderHealthSurface"',
     "macro series search input": 'id="macroSeriesSearchInput"',
     "macro series search action": 'id="macroSeriesSearchRun"',
     "macro series search action testid": 'data-testid="macro-series-search-run"',
     "macro series search results": 'id="macroSeriesSearchResults"',
     "macro series detail": 'id="macroSeriesDetailSurface"',
+    "macro provider filter": 'id="macroProviderFilter"',
+    "macro category filter": 'id="macroCategoryFilter"',
+    "macro compare": 'id="macroCompareSurface"',
     "macro indicators": 'id="macroIndicatorTable"',
     "macro chart surface": 'id="macroChartSurface"',
     "macro interest rates": 'id="macroInterestRatesSurface"',
@@ -69,6 +77,13 @@ REQUIRED_UI_MARKERS: dict[str, str] = {
     "macro commodities": 'id="macroCommoditiesSurface"',
     "macro regime": 'id="macroRegimeSurface"',
     "macro asset impact": 'id="macroAssetImpactSurface"',
+    "macro scenario": 'id="macroScenarioSurface"',
+    "macro scenario action": 'data-action="macro-scenario"',
+    "macro research preview": 'id="macroResearchPreviewSurface"',
+    "macro research ticker": 'id="macroResearchTicker"',
+    "macro research preview action": 'id="macroResearchPreviewRun"',
+    "macro research preview action testid": 'data-testid="macro-research-preview-run"',
+    "macro research preview result": 'id="macroResearchPreviewResult"',
     "macro portfolio hints": 'id="macroPortfolioHintsSurface"',
     "macro brief": 'id="macroBriefSurface"',
     "macro data quality": 'id="macroDataQualitySurface"',
@@ -206,6 +221,21 @@ REQUIRED_UI_MARKERS: dict[str, str] = {
     "ai portfolio history": 'id="aiPortfolioHistorySurface"',
 }
 
+REQUIRED_APP_JS_MARKERS: dict[str, str] = {
+    "macro dashboard api": "macroDashboard",
+    "macro provider health api": "macroProviderHealth",
+    "macro scenario api": "macroScenario",
+    "macro research context api": "macroResearchContext",
+    "macro timeout fetch": "macroFetchJsonWithTimeout",
+    "macro load status renderer": "function renderMacroLoadStatus",
+    "macro panel failure renderer": "function renderMacroPanelFailure",
+    "macro action pane starter renderer": "function renderMacroActionPaneStarters",
+    "macro refresh preserves dashboard": "기존 대시보드 화면을 유지",
+    "macro provider health renderer": "function renderMacroProviderHealth",
+    "macro scenario runner": "function runMacroScenario",
+    "macro research preview runner": "function runMacroResearchPreview",
+}
+
 
 def run_check() -> dict[str, Any]:
     with TestClient(api_server.app) as client:
@@ -213,14 +243,19 @@ def run_check() -> dict[str, Any]:
         health_response = client.get("/api/v1/health")
 
     html = ui_response.text
+    app_js_path = Path(__file__).resolve().parents[1] / "app" / "web" / "app.js"
+    app_js = app_js_path.read_text(encoding="utf-8")
     missing = [name for name, marker in REQUIRED_UI_MARKERS.items() if marker not in html]
-    passed = ui_response.status_code == 200 and health_response.status_code == 200 and not missing
+    missing_js = [name for name, marker in REQUIRED_APP_JS_MARKERS.items() if marker not in app_js]
+    passed = ui_response.status_code == 200 and health_response.status_code == 200 and not missing and not missing_js
     return {
         "status": "passed" if passed else "failed",
         "ui_status": ui_response.status_code,
         "health_status": health_response.status_code,
         "missing_markers": missing,
+        "missing_js_markers": missing_js,
         "checked_markers": sorted(REQUIRED_UI_MARKERS),
+        "checked_js_markers": sorted(REQUIRED_APP_JS_MARKERS),
         "html_bytes": len(html.encode("utf-8", errors="ignore")),
     }
 

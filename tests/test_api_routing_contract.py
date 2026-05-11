@@ -83,6 +83,31 @@ class ApiRoutingContractTests(unittest.TestCase):
         self.assertEqual(body["summary"], "ok")
         run_pipeline.assert_awaited_once()
 
+    def test_direct_analyze_propagates_simulation_override(self):
+        response = AnalysisResponse(
+            ticker="MSFT",
+            question="AI capex risk",
+            status="success",
+            summary="ok",
+            sentiment="Neutral",
+            conclusion="ok",
+        )
+        client = TestClient(api_server.app)
+        with patch.object(research_router, "run_pipeline_async", new=AsyncMock(return_value=response)) as run_pipeline:
+            resp = client.post(
+                "/api/v1/research/analyze",
+                json={
+                    "ticker": "MSFT",
+                    "question": "AI capex risk",
+                    "model": "qwen",
+                    "scenario_simulation_enabled": True,
+                },
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        request = run_pipeline.await_args.args[0]
+        self.assertIs(request.scenario_simulation_enabled, True)
+
     def test_direct_stream_rejects_missing_ticker_before_pipeline(self):
         client = TestClient(api_server.app)
         with patch.object(research_router, "run_pipeline_async", new=AsyncMock()) as run_pipeline:
@@ -183,6 +208,61 @@ class ApiRoutingContractTests(unittest.TestCase):
         frames = _parse_sse(body_text)
         self.assertEqual(frames[-1]["event"], "result")
         self.assertEqual(frames[-1]["data"]["mode"], "sector_macro")
+
+    def test_universal_endpoint_propagates_simulation_override(self):
+        response = AnalysisResponse(
+            ticker="MSFT",
+            question="AI capex risk",
+            status="success",
+            summary="ok",
+            sentiment="Neutral",
+            conclusion="ok",
+        )
+        client = TestClient(api_server.app)
+        with patch.object(research_router, "dispatch_async", new=AsyncMock(return_value=response)) as dispatch:
+            resp = client.post(
+                "/api/v1/research/universal",
+                json={
+                    "ticker": "MSFT",
+                    "question": "AI capex risk",
+                    "mode_hint": "auto",
+                    "model": "qwen",
+                    "scenario_simulation_enabled": True,
+                },
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        request = dispatch.await_args.args[0]
+        self.assertIs(request.scenario_simulation_enabled, True)
+
+    def test_compare_endpoint_propagates_simulation_override_to_subrequests(self):
+        captured = []
+
+        async def fake_run_pipeline(request):
+            captured.append((request.ticker, request.scenario_simulation_enabled))
+            return AnalysisResponse(
+                ticker=request.ticker,
+                question=request.question,
+                status="success",
+                summary="ok",
+                sentiment="Neutral",
+                conclusion="ok",
+            )
+
+        client = TestClient(api_server.app)
+        with patch.object(research_router, "run_pipeline_async", new=fake_run_pipeline):
+            resp = client.post(
+                "/api/v1/research/compare",
+                json={
+                    "tickers": ["MSFT", "AAPL"],
+                    "question": "Compare AI capex risk",
+                    "model": "qwen",
+                    "scenario_simulation_enabled": True,
+                },
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(set(captured), {("MSFT", True), ("AAPL", True)})
 
 
 if __name__ == "__main__":

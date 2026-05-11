@@ -41,8 +41,8 @@ def test_fake_datasets_module_returns_limited_normalized_rows(monkeypatch: pytes
         def items(self) -> list[tuple[str, str]]:
             return [("input", self.value), ("output", "positive")]
 
-    def fake_load_dataset(hf_id: str, cache_dir: str | None = None) -> dict[str, list[Any]]:
-        calls.append({"hf_id": hf_id, "cache_dir": cache_dir})
+    def fake_load_dataset(hf_id: str, cache_dir: str | None = None, revision: str | None = None) -> dict[str, list[Any]]:
+        calls.append({"hf_id": hf_id, "cache_dir": cache_dir, "revision": revision})
         return {"train": [MappingLike("a"), {"input": "b", "output": "negative"}, {"input": "c"}]}
 
     module.load_dataset = fake_load_dataset  # type: ignore[attr-defined]
@@ -50,7 +50,7 @@ def test_fake_datasets_module_returns_limited_normalized_rows(monkeypatch: pytes
 
     rows = fingpt_datasets_module.load_dataset_rows("sentiment", enabled=True, max_rows=2, cache_dir="cache-path")
 
-    assert calls == [{"hf_id": "FinGPT/fingpt-sentiment-train", "cache_dir": "cache-path"}]
+    assert calls == [{"hf_id": "FinGPT/fingpt-sentiment-train", "cache_dir": "cache-path", "revision": "main"}]
     assert rows == [
         {"input": "a", "output": "positive"},
         {"input": "b", "output": "negative"},
@@ -60,7 +60,7 @@ def test_fake_datasets_module_returns_limited_normalized_rows(monkeypatch: pytes
 def test_load_dataset_failure_is_wrapped_with_task_and_hf_id(monkeypatch: pytest.MonkeyPatch) -> None:
     module = ModuleType("datasets")
 
-    def fake_load_dataset(hf_id: str, cache_dir: str | None = None) -> Any:
+    def fake_load_dataset(hf_id: str, cache_dir: str | None = None, revision: str | None = None) -> Any:
         raise RuntimeError("offline")
 
     module.load_dataset = fake_load_dataset  # type: ignore[attr-defined]
@@ -98,7 +98,11 @@ def test_invalid_task_raises_dataset_unavailable() -> None:
 def test_missing_split_error_lists_available_split_names(monkeypatch: pytest.MonkeyPatch) -> None:
     module = ModuleType("datasets")
 
-    def fake_load_dataset(hf_id: str, cache_dir: str | None = None) -> dict[str, list[dict[str, str]]]:
+    def fake_load_dataset(
+        hf_id: str,
+        cache_dir: str | None = None,
+        revision: str | None = None,
+    ) -> dict[str, list[dict[str, str]]]:
         return {
             "validation": [{"input": "a", "output": "positive"}],
             "test": [{"input": "b", "output": "negative"}],

@@ -1,5 +1,5 @@
 import warnings
-from typing import Any, List, Dict, Optional
+from typing import Any, List, Dict
 from urllib.parse import urlparse
 from core.config.settings import load_settings
 from core.utils.logger import get_logger

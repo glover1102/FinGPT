@@ -528,3 +528,31 @@ Operational notes:
 - `DATA_MART_AUTO_REFRESH_MACRO_LOOKBACK_DAYS` controls the historical window used when the scheduler refreshes Macro data.
 - FRED uses the configured API key when available. The Macro refresh job also supports a conservative public FRED CSV fallback when no key is configured, while the interactive Macro provider path still reports missing FRED credentials instead of fabricating observations.
 - The scheduler is process-local. It refreshes while the FastAPI app is running; external OS/CI scheduling can still call `scripts/daily_update.py` if a detached job is required.
+
+## 13. Macro Platform Advancement
+
+This section tracks the dashboard/provider-health/scenario expansion for the static `/ui/#macro` workbench.
+
+| ID | Task | Target Files | Status | Evidence |
+|---|---|---|---|---|
+| M13-1 | Add a dashboard-first Macro API that returns registry coverage, latest observations, heatmap/summary inputs, quality state, and advisory metadata. | `app/api/routers/macro.py`, `core/schemas/macro.py`, `pipelines/macro/dashboard.py` | DONE | `GET /api/v1/macro/dashboard` is covered by `tests/test_macro_platform.py`. |
+| M13-2 | Expose provider and scheduler health without hiding unavailable or unconfigured providers. | `app/api/routers/macro.py`, `pipelines/macro/provider_health.py` | DONE | `GET /api/v1/macro/provider-health` returns provider, enabled/configured flags, latest status, row counts, and errors. |
+| M13-3 | Add deterministic advisory-only scenario analysis. | `app/api/routers/macro.py`, `core/schemas/macro.py`, `pipelines/macro/scenario.py` | DONE | `POST /api/v1/macro/scenario` returns asset impacts, sleeve hints, data quality, explanation, and `advisory_only=true`; no orders or policy mutation are exposed. |
+| M13-4 | Convert the Macro tab to progressive dashboard loading with independent panel failures. | `app/web/index.html`, `app/web/app.js`, `app/web/styles.css` | DONE | Dashboard, provider health, filters, compare shell, scenario starter, and research preview render as separate surfaces. |
+| M13-5 | Keep static UI contracts and routing tests aligned with the new Macro DOM/API markers. | `scripts/check_ui_contract.py`, `tests/test_ui_routing_contract.py` | DONE | Contract checks include Macro dashboard/provider/scenario/research markers only within Macro scope. |
+| M13-6 | Add repeatable browser smoke for desktop and mobile Macro tab validation. | `scripts/macro_ui_smoke.py` | DONE | Script starts a disposable FastAPI server when no URL is provided, verifies progressive surfaces, search, advisory scenario, research preview, console errors, and mojibake tokens. |
+
+Recommended validation gate:
+
+- `python -m pytest tests\test_macro_platform.py tests\test_ui_routing_contract.py -q`
+- `node --check app\web\app.js`
+- `python scripts\check_ui_contract.py --output reports\macro_ui_contract.json`
+- `python -m ruff check core/schemas/macro.py app/api/routers/macro.py pipelines/macro/dashboard.py pipelines/macro/provider_health.py pipelines/macro/scenario.py tests/test_macro_platform.py scripts/macro_ui_smoke.py`
+- `python scripts\macro_ui_smoke.py --width 1440 --height 1200 --timeout-s 120`
+- `python scripts\macro_ui_smoke.py --width 390 --height 844 --timeout-s 120`
+
+Remaining extension backlog:
+
+- Multi-series chart overlays and correlation/regime-aware comparisons in `macroCompareSurface`.
+- Provider drill-down history from stored update runs rather than latest status only.
+- Custom user-entered shock scenarios after the preset API path has accumulated enough smoke evidence.

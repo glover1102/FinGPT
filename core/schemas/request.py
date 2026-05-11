@@ -43,6 +43,10 @@ class AnalysisRequest(BaseModel):
         ),
     )
     output_dir: Optional[str] = Field(default=None, description="Path to save outputs.")
+    scenario_simulation_enabled: Optional[bool] = Field(
+        default=None,
+        description="Optional per-request override for the default-off scenario simulation layer.",
+    )
 
     @field_validator("ticker", mode="before")
     @classmethod
@@ -72,6 +76,10 @@ class UniversalRequest(BaseModel):
     top_k: int = Field(default=15, ge=1, le=20)
     model: SupportedInferenceRoute = Field(default="qwen")
     output_dir: Optional[str] = Field(default=None)
+    scenario_simulation_enabled: Optional[bool] = Field(
+        default=None,
+        description="Optional per-request override for the default-off scenario simulation layer.",
+    )
 
     @field_validator("ticker", mode="before")
     @classmethod
@@ -130,6 +138,10 @@ class CompareRequest(BaseModel):
             "Maximum pipelines to run in parallel. Keep small on a single local "
             "machine to avoid starving Ollama/Qdrant/FMP quotas."
         ),
+    )
+    scenario_simulation_enabled: Optional[bool] = Field(
+        default=None,
+        description="Optional per-request override applied to each ticker analysis.",
     )
 
     @field_validator("tickers", mode="before")

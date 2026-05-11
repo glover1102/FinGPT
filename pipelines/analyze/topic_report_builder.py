@@ -3,6 +3,7 @@ from __future__ import annotations
 from html import escape
 
 from core.schemas.topic import DecisionSection, ExecutionStrategy, ScenarioAnalysis, TopicResponse
+from pipelines.analyze.scenario_report_renderer import scenario_simulation_html, scenario_simulation_md
 
 
 def _ko_labels() -> dict[str, str]:
@@ -437,6 +438,7 @@ def build_topic_report(response: TopicResponse, language: str = "ko") -> tuple[s
 ## {labels['citations']}
 {citations}
 
+{scenario_simulation_md(response)}
 ## {labels['evidence']}
 {evidence}
 """
@@ -499,6 +501,7 @@ def build_topic_report(response: TopicResponse, language: str = "ko") -> tuple[s
       <h3>{escape(labels['touchpoints'])}</h3>{ticker_html}
       <h3>{escape(labels['open_questions'])}</h3>{open_html}
       <h2>{escape(labels['conclusion'])}</h2>{_html_list(conclusion_lines, none)}
+      {scenario_simulation_html(response)}
       <h2>{escape(labels['citations'])}</h2>{citation_html}
       <h2>{escape(labels['evidence'])}</h2><ol>{evidence_html}</ol>
     </body>

@@ -17,6 +17,7 @@ from pipelines.orchestration.quant_lab_pipeline import (
     cleanup_backtest_exports,
     cleanup_cross_run_exports,
     compare_backtest_replay,
+    compare_backtest_runs,
     export_backtest_artifacts,
     export_storage_report,
     feature_preview,
@@ -234,6 +235,45 @@ def test_replay_report_flags_tolerance_failures(tmp_path, monkeypatch) -> None:
     assert compare["tolerance_passed"] is False
     assert compare["tolerance_failures"][0]["metric"] == "total_return"
     assert compare["report_path"]
+
+
+def test_compare_backtest_runs_is_read_only_and_reports_lineage(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "research_mart.db"
+    _seed_prices(db_path)
+    monkeypatch.setenv("DATA_MART_DB_PATH", str(db_path))
+    monkeypatch.setattr(quant_lab_pipeline, "ARTIFACT_ROOT", tmp_path / "artifacts")
+
+    primary = run_quant_backtest(
+        QuantBacktestRequest(
+            tickers=["SPY", "QQQ", "TLT"],
+            benchmark="SPY",
+            template="momentum_ranking",
+            lookback=21,
+            top_n=1,
+        )
+    )
+    comparison = run_quant_backtest(
+        QuantBacktestRequest(
+            tickers=["SPY", "QQQ", "TLT"],
+            benchmark="SPY",
+            template="momentum_ranking",
+            lookback=21,
+            top_n=2,
+        )
+    )
+    before_dirs = sorted(path.name for path in (tmp_path / "artifacts").iterdir() if path.is_dir())
+
+    report = compare_backtest_runs([primary.run_id, comparison.run_id])
+    after_dirs = sorted(path.name for path in (tmp_path / "artifacts").iterdir() if path.is_dir())
+
+    assert report["schema_version"] == "quant_lab_run_compare_v1"
+    assert report["primary_run_id"] == primary.run_id
+    assert report["comparison_run_id"] == comparison.run_id
+    assert report["lineage"]["config_hash_match"] is False
+    assert any(row["metric"] == "sharpe" for row in report["metrics"])
+    assert any(row["field"] == "top_n" for row in report["config_differences"])
+    assert report["diagnostics"]["lookahead_safe_all"] is True
+    assert before_dirs == after_dirs
 
 
 def test_export_cleanup_preview_is_non_destructive_and_apply_prunes(tmp_path, monkeypatch) -> None:

@@ -2,20 +2,21 @@
 fastapi
 uvicorn
 httpx
-python-multipart
+python-multipart>=0.0.27,<1.0.0
 pydantic
 pydantic-settings
 python-dotenv>=1.1.0,<2.0.0
+defusedxml>=0.7.1,<0.8.0
 
 # Retrieval Backend
-qdrant-client==1.8.2
+qdrant-client>=1.9.0,<2.0.0
 fastembed==0.8.0
 
 # Data Acquisition
 # OpenBB stays compatibility-gated; direct Yahoo/FRED/SEC providers are the
 # production baseline and FMP is optional/auxiliary.
 openbb==4.7.1
-openbb-core==1.6.8
+openbb-core==1.6.9
 openbb-news==1.6.1
 openbb-yfinance==1.6.2
 openbb-fred==1.6.0

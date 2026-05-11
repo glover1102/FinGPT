@@ -210,3 +210,69 @@ class MacroReportResponse(BaseModel):
     content: str
     data_quality: MacroDataQuality
     warnings: list[str] = Field(default_factory=list)
+
+
+class MacroDashboardCoverage(BaseModel):
+    registry_series: int = 0
+    enabled_series: int = 0
+    categories: dict[str, int] = Field(default_factory=dict)
+    providers: dict[str, int] = Field(default_factory=dict)
+    countries: dict[str, int] = Field(default_factory=dict)
+    missing_series_count: int = 0
+    stale_series_count: int = 0
+    unavailable_series_count: int = 0
+
+
+class MacroDashboardResponse(BaseModel):
+    status: MacroQualityStatus
+    generated_at: str
+    overview: dict[str, Any] = Field(default_factory=dict)
+    coverage: MacroDashboardCoverage
+    data_quality: MacroDataQuality
+    refresh: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class MacroProviderHealthItem(BaseModel):
+    provider: str
+    enabled: bool
+    configured: bool
+    latest_status: str = "unknown"
+    latest_rows: int | None = None
+    latest_error: str | None = None
+    detail: dict[str, Any] = Field(default_factory=dict)
+
+
+class MacroProviderHealthResponse(BaseModel):
+    status: MacroQualityStatus
+    generated_at: str
+    providers: list[MacroProviderHealthItem] = Field(default_factory=list)
+    scheduler: dict[str, Any] = Field(default_factory=dict)
+    stale_series: list[dict[str, Any]] = Field(default_factory=list)
+    unavailable_series: list[dict[str, Any]] = Field(default_factory=list)
+    partial_series: list[dict[str, Any]] = Field(default_factory=list)
+    data_quality: MacroDataQuality
+    warnings: list[str] = Field(default_factory=list)
+
+
+class MacroScenarioRequest(BaseModel):
+    name: str = "custom"
+    rate_shock_bp: float = Field(default=0.0, ge=-500.0, le=500.0)
+    credit_spread_shock_bp: float = Field(default=0.0, ge=-1000.0, le=2000.0)
+    inflation_shock_pct: float = Field(default=0.0, ge=-10.0, le=10.0)
+    oil_shock_pct: float = Field(default=0.0, ge=-100.0, le=300.0)
+    growth_shock_pct: float = Field(default=0.0, ge=-20.0, le=20.0)
+
+
+class MacroScenarioResponse(BaseModel):
+    status: str = "success"
+    generated_at: str
+    advisory_only: bool = True
+    scenario: dict[str, Any]
+    stress_score: float
+    risk_level: Literal["neutral", "watch", "reduce"]
+    explanation: str
+    asset_impacts: list[AssetImpact] = Field(default_factory=list)
+    sleeve_hints: list[PortfolioEtfCandidate] = Field(default_factory=list)
+    data_quality: MacroDataQuality
+    warnings: list[str] = Field(default_factory=list)

@@ -203,6 +203,7 @@ CLI examples:
 
 ```powershell
 python app/cli/main.py --ticker AAPL --question "recent catalysts?"
+python app/cli/main.py --ticker TLT --question "scenario risks?" --simulate
 python app/cli/main.py --question "Fed의 2026년 금리 경로가 성장주에 미치는 영향은?"
 python app/cli/main.py --topic "AI semiconductors" --question "short-term risks?"
 ```
@@ -213,6 +214,9 @@ API:
 - Universal auto-routing endpoint: `POST /api/v1/research/universal`.
 - Universal responses include a top-level `mode` so clients can distinguish
   ticker, compare, sector/macro, and concept reports.
+- Ticker, universal, compare, and topic request bodies can set
+  `scenario_simulation_enabled: true|false` to override the environment flag
+  for that request.
 
 Operational flags:
 
@@ -222,6 +226,7 @@ FUNDAMENTALS_CARD_ENABLED=true
 INGEST_CHUNKING_ENABLED=true
 HYBRID_SEARCH_ENABLED=true
 TOPIC_MODE_ENABLED=true
+SCENARIO_SIMULATION_ENABLED=false
 ```
 
 Rollback is flag-based for Phase 1, 2, 4, and 5:
@@ -231,6 +236,7 @@ RERANKER_ENABLED=false
 FUNDAMENTALS_CARD_ENABLED=false
 HYBRID_SEARCH_ENABLED=false
 TOPIC_MODE_ENABLED=false
+SCENARIO_SIMULATION_ENABLED=false
 ```
 
 Chunking can also be disabled with `INGEST_CHUNKING_ENABLED=false`, but data
@@ -245,6 +251,34 @@ python app/cli/main.py --ticker AAPL --question "smoke test"
 
 The new chunked payload stores `doc_id` as the chunk id and `parent_doc_id` as
 the source document id. Readers accept both fields for backward compatibility.
+
+## Scenario Simulation Layer
+
+This optional layer adds evidence-grounded base/bull/bear/tail scenarios,
+market participant personas, agent-style views, risk triggers, deterministic
+scenario scores, and a decision checklist.
+
+It is disabled by default:
+
+```env
+SCENARIO_SIMULATION_ENABLED=false
+```
+
+It does not replace the existing RAG/research pipeline and does not perform
+deterministic price prediction. Results are stored under:
+
+```text
+response.execution_meta.extras["scenario_simulation"]
+```
+
+Rollback is done by setting:
+
+```env
+SCENARIO_SIMULATION_ENABLED=false
+```
+
+For one-off CLI runs, `--simulate` enables the layer and `--no-simulate`
+disables it for that process only.
 
 ## 문서
 

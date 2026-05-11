@@ -25,7 +25,6 @@ used when one sub-query fails; if all fail the caller sees the original error.
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Dict, Iterable, List, Sequence
 
 from core.schemas.retrieval import RetrievalItem

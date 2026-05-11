@@ -229,6 +229,67 @@ class PortfolioSnapshot(BaseModel):
     audit: dict[str, Any] = Field(default_factory=dict)
 
 
+class PortfolioDashboardPolicySummary(BaseModel):
+    policy_id: str
+    portfolio_name: str
+    status: PolicyStatus
+    investment_type: str
+    universe_id: str
+    automation_level: AutomationLevel
+    latest_recommendation_id: str | None = None
+    latest_recommendation_at: str | None = None
+    latest_snapshot_at: str | None = None
+    data_quality_status: Literal["ok", "partial", "unavailable"] = "unavailable"
+
+
+class PortfolioCoverageRow(BaseModel):
+    id: str
+    label: str
+    status: Literal["ok", "partial", "unavailable", "warning"] = "unavailable"
+    available_count: int | None = None
+    total_count: int | None = None
+    pct: float | None = None
+    latest_at: str | None = None
+    detail: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class PortfolioSnapshotTimelinePoint(BaseModel):
+    snapshot_id: str
+    policy_id: str
+    policy_name: str | None = None
+    date: str
+    created_at: str
+    portfolio_value: float | None = None
+    period_return: float | None = None
+    benchmark_return: float | None = None
+    volatility: float | None = None
+    max_drawdown: float | None = None
+    sharpe: float | None = None
+    coverage_status: Literal["ok", "partial", "unavailable"] = "unavailable"
+    price_available_pct: float | None = None
+    audit: dict[str, Any] = Field(default_factory=dict)
+
+
+class PortfolioOperationSummary(BaseModel):
+    total_count: int = 0
+    by_type: dict[str, int] = Field(default_factory=dict)
+    by_status: dict[str, int] = Field(default_factory=dict)
+    recent_operations: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class PortfolioDashboardResponse(BaseModel):
+    status: Literal["success"] = "success"
+    generated_at: str
+    selected_policy: PortfolioDashboardPolicySummary | None = None
+    policy_counts: dict[str, int] = Field(default_factory=dict)
+    store_status: dict[str, Any] = Field(default_factory=dict)
+    data_health_summary: dict[str, Any] = Field(default_factory=dict)
+    coverage_rows: list[PortfolioCoverageRow] = Field(default_factory=list)
+    snapshot_timeline: list[PortfolioSnapshotTimelinePoint] = Field(default_factory=list)
+    operation_summary: PortfolioOperationSummary = Field(default_factory=PortfolioOperationSummary)
+
+
 class RecommendedChange(BaseModel):
     ticker: str
     current_weight: float

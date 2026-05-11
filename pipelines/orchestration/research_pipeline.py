@@ -353,6 +353,27 @@ async def _finalize_response(
     logger.info("Generating report...")
     settings = load_settings()
     language = getattr(settings, "output_language", "ko")
+    simulation_override = getattr(request, "scenario_simulation_enabled", None)
+    simulation_enabled = bool(simulation_override) if simulation_override is not None else bool(getattr(settings, "scenario_simulation_enabled", False))
+    if simulation_enabled:
+        try:
+            from pipelines.simulate.simulation_pipeline import run_scenario_simulation
+
+            simulation = await run_scenario_simulation(
+                analysis_response=response,
+                retrieved_documents=getattr(response, "raw_context", None),
+                quant_snapshot=None,
+                settings=settings,
+            )
+            response.execution_meta.extras["scenario_simulation"] = simulation.model_dump(mode="json")
+        except Exception as exc:
+            if getattr(settings, "scenario_simulation_fail_open", True):
+                response.execution_meta.extras["scenario_simulation"] = {
+                    "status": "failed",
+                    "diagnostics": {"errors": [str(exc)], "warnings": [], "fallback_used": False, "llm_used": False},
+                }
+            else:
+                raise
     _emit(event_sink, "stage_started", stage="report")
     report_started = time.time()
     report_md, report_html = build_report(request, response, language=language)

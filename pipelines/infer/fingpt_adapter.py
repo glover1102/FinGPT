@@ -27,10 +27,22 @@ class FinGPTAdapter(BaseModelRunner):
 
             def load_model_and_tokenizer(settings):
                 from transformers import AutoModelForCausalLM, AutoTokenizer
-                from peft import PeftModel
                 token = settings.hf_token or None
-                tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", trust_remote_code=True, token=token)
-                model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", trust_remote_code=True, low_cpu_mem_usage=True, token=token)
+                model_name = getattr(settings, "base_model_name", "meta-llama/Llama-2-7b-hf")
+                revision = getattr(settings, "hf_model_revision", "main") or "main"
+                tokenizer = AutoTokenizer.from_pretrained(
+                    model_name,
+                    trust_remote_code=True,
+                    token=token,
+                    revision=revision,
+                )
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    trust_remote_code=True,
+                    low_cpu_mem_usage=True,
+                    token=token,
+                    revision=revision,
+                )
                 return tokenizer, model
 
             

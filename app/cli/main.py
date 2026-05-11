@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -32,11 +33,27 @@ def parse_args():
         help="Inference route. Production baseline is qwen2.5; gemma4 is an explicit experimental option.",
     )
     parser.add_argument("--output-dir", type=str, default=None, help="Directory to save outputs")
+    simulation_group = parser.add_mutually_exclusive_group()
+    simulation_group.add_argument(
+        "--simulate",
+        action="store_true",
+        help="Enable the optional scenario simulation layer for this CLI run.",
+    )
+    simulation_group.add_argument(
+        "--no-simulate",
+        action="store_true",
+        help="Disable the optional scenario simulation layer for this CLI run.",
+    )
     
     return parser.parse_args()
 
 def main():
     args = parse_args()
+    scenario_override = True if args.simulate else False if args.no_simulate else None
+    if args.simulate:
+        os.environ["SCENARIO_SIMULATION_ENABLED"] = "true"
+    elif args.no_simulate:
+        os.environ["SCENARIO_SIMULATION_ENABLED"] = "false"
     logger.info("Starting research pipeline")
     
     try:
@@ -50,6 +67,7 @@ def main():
                     top_k=args.top_k,
                     model=args.model,
                     output_dir=args.output_dir,
+                    scenario_simulation_enabled=scenario_override,
                 ),
                 mode="sector_macro",
             )
@@ -62,7 +80,8 @@ def main():
                 lookback_days=args.lookback_days,
                 top_k=args.top_k,
                 model=args.model,
-                output_dir=args.output_dir
+                output_dir=args.output_dir,
+                scenario_simulation_enabled=scenario_override,
             )
             response = run_pipeline(request)
             logger.info(f"Pipeline completed successfully. Conclusion: {response.conclusion}")
@@ -76,6 +95,7 @@ def main():
                     top_k=args.top_k,
                     model=args.model,
                     output_dir=args.output_dir,
+                    scenario_simulation_enabled=scenario_override,
                 )
             )
             logger.info(f"Universal pipeline completed. Status: {response.status}")

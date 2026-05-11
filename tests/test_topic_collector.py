@@ -13,6 +13,16 @@ class TopicCollectorTests(unittest.TestCase):
         self.assertIn("SOXX", topic_collector._infer_theme_tickers("AI 반도체 공급망", []))
         self.assertIn("HYG", topic_collector._infer_theme_tickers("신용 리스크", []))
 
+    def test_kospi_inverse_theme_infers_korean_inverse_etf_proxies(self):
+        tickers = topic_collector._infer_theme_tickers(
+            "\uc9c0\uae08 \ucf54\uc2a4\ud53c \uc778\ubc84\uc2a4 \ub4e4\uc5b4\uac00\uae30\uc5d0 \uc801\uc808\ud55c\uac00?",
+            [],
+        )
+
+        self.assertEqual(tickers[:2], ["114800.KS", "252670.KS"])
+        self.assertIn("EWY", tickers)
+        self.assertNotIn("TLT", tickers)
+
     def test_related_bond_etf_uses_asset_macro_and_etf_profile_collectors(self):
         settings = SimpleNamespace(
             fred_api_key="fred-key",

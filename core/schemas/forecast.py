@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 ForecastStatus = Literal["success", "partial", "failed", "empty"]
+ForecastJobStatus = Literal["queued", "running", "succeeded", "failed", "cancelled"]
 DataQualityStatus = Literal["ok", "partial", "stale", "unavailable", "insufficient"]
 LeakageStatus = Literal["pass", "warning", "fail"]
 SignalValue = Literal[
@@ -283,6 +284,16 @@ class ForecastRunRequest(BaseModel):
     signal_config: SignalConfig = Field(default_factory=SignalConfig)
     backtest_config: BacktestConfig = Field(default_factory=BacktestConfig)
     visualization_config: VisualizationConfig = Field(default_factory=VisualizationConfig)
+
+
+class ForecastJobSubmitRequest(BaseModel):
+    request: ForecastRunRequest = Field(default_factory=ForecastRunRequest)
+    runtime_budget_s: int = Field(default=900, ge=30, le=7200)
+    notes: str = ""
+
+
+class ForecastJobCancelRequest(BaseModel):
+    reason: str = ""
 
 
 class ForecastDatasetPreviewRequest(BaseModel):

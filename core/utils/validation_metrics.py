@@ -529,24 +529,6 @@ def topic_bucket_coverage(payload: Any) -> dict[str, Any]:
     return {"counts": counts, "present": present, "substituted": substituted, "blocking_missing": blocking, "warning_missing": warning}
 
 
-def partial_reason_is_actionable(payload: Any) -> bool:
-    data = as_payload_dict(payload)
-    if str(data.get("status") or "").lower() != "partial":
-        return True
-    extras = (data.get("execution_meta") or {}).get("extras") or {}
-    haystack = " ".join(
-        [
-            str(data.get("error_metadata") or ""),
-            str(data.get("uncertainty") or ""),
-            str(extras.get("missing_evidence_reasons") or "") if isinstance(extras, dict) else "",
-            str(extras.get("blocking_evidence_buckets") or "") if isinstance(extras, dict) else "",
-            str(extras.get("warning_evidence_buckets") or "") if isinstance(extras, dict) else "",
-        ]
-    ).lower()
-    hints = ("bucket", "source", "fred", "fmp", "entitlement", "missing", "evidence", "data", "근거", "증거", "버킷", "부족", "누락", "확인", "불확실")
-    return bool(haystack.strip()) and any(hint in haystack for hint in hints)
-
-
 def has_warning_only_partial(payload: Any) -> bool:
     data = as_payload_dict(payload)
     if str(data.get("status") or "").lower() != "partial":

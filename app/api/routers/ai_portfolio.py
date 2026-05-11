@@ -56,6 +56,12 @@ async def get_store_status() -> dict[str, Any]:
     return service.storage_status()
 
 
+@router.get("/dashboard")
+async def get_dashboard(policy_id: str | None = Query(default=None), limit: int = Query(12, ge=1, le=50)) -> dict[str, Any]:
+    dashboard = service.portfolio_dashboard(policy_id=policy_id, limit=limit)
+    return dashboard.model_dump(mode="json")
+
+
 @router.get("/operations")
 async def list_operations(limit: int = Query(25, ge=1, le=200)) -> dict[str, Any]:
     items = service.list_operations(limit)

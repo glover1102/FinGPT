@@ -52,15 +52,15 @@ async def _start_data_mart_scheduler() -> None:
 async def _stop_watchlist_scheduler() -> None:
     try:
         await get_watchlist_scheduler().stop()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"Failed to stop watchlist scheduler cleanly: {exc}")
 
 
 async def _stop_data_mart_scheduler() -> None:
     try:
         await get_data_mart_scheduler().stop()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"Failed to stop data mart scheduler cleanly: {exc}")
 
 
 @asynccontextmanager

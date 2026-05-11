@@ -10,12 +10,15 @@ from core.schemas.forecast import (
     ForecastDriftCheckRequest,
     ForecastDatasetHydrateRequest,
     ForecastFeatureBuildRequest,
+    ForecastJobCancelRequest,
+    ForecastJobSubmitRequest,
     ForecastLeakageCheckRequest,
     ForecastRegistryActionRequest,
     ForecastRunRequest,
     ForecastSignalGenerateRequest,
     ForecastTargetBuildRequest,
 )
+from pipelines.forecast import jobs
 from pipelines.forecast import service
 
 
@@ -132,6 +135,40 @@ async def get_ai_provider_health() -> dict[str, Any]:
 @router.get("/experiments")
 async def get_experiments(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
     return service.experiments(limit=limit)
+
+
+@router.post("/jobs")
+async def post_forecast_job(request: ForecastJobSubmitRequest) -> dict[str, Any]:
+    return jobs.submit_forecast_job(request)
+
+
+@router.get("/jobs")
+async def get_forecast_jobs(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
+    return jobs.list_forecast_jobs(limit=limit)
+
+
+@router.get("/jobs/{job_id}")
+async def get_forecast_job(job_id: str) -> dict[str, Any]:
+    payload = jobs.get_forecast_job(job_id)
+    if payload.get("status") == "failed":
+        raise HTTPException(status_code=404, detail=payload.get("errors", ["forecast_job_not_found"])[0])
+    return payload
+
+
+@router.post("/jobs/{job_id}/cancel")
+async def post_forecast_job_cancel(job_id: str, request: ForecastJobCancelRequest | None = None) -> dict[str, Any]:
+    payload = jobs.cancel_forecast_job(job_id, reason=(request.reason if request else ""))
+    if payload.get("status") == "failed":
+        raise HTTPException(status_code=404, detail=payload.get("errors", ["forecast_job_not_found"])[0])
+    return payload
+
+
+@router.post("/jobs/{job_id}/retry")
+async def post_forecast_job_retry(job_id: str) -> dict[str, Any]:
+    payload = jobs.retry_forecast_job(job_id)
+    if payload.get("status") == "failed":
+        raise HTTPException(status_code=404, detail=payload.get("errors", ["forecast_job_not_found"])[0])
+    return payload
 
 
 @router.get("/experiments/{experiment_id}")

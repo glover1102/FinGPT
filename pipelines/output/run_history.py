@@ -175,6 +175,7 @@ def list_runs(
         if ticker:
             where = "WHERE ticker = ?"
             params.append(_safe_segment(ticker.upper()))
+        # Optional WHERE clause is selected from a fixed template.
         sql = (
             "SELECT id, ticker, question, status, sentiment, confidence, model, "
             "lookback_days, top_k, sources, created_at, run_dir, error_metadata "

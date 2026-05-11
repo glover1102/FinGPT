@@ -4,6 +4,7 @@ import hashlib
 import json
 import sqlite3
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -366,7 +367,7 @@ def _sec_fact_id(item: dict[str, Any]) -> str:
             str(item.get("frame") or ""),
         ]
     )
-    return hashlib.sha1(seed.encode("utf-8")).hexdigest()[:32]
+    return hashlib.sha1(seed.encode("utf-8"), usedforsecurity=False).hexdigest()[:32]
 
 
 def upsert_sec_financial_facts(
@@ -744,6 +745,7 @@ def price_availability(
     if end_date:
         where.append("date <= ?")
         params.append(str(end_date))
+    # WHERE fragments are fixed templates and values are parameterized.
     query = f"""
         SELECT
             ticker,
@@ -890,7 +892,7 @@ def upsert_news_articles(articles: Iterable[NewsArticle], *, db_path: str | Path
             if not ticker or not article.title:
                 continue
             seed = "|".join([ticker, article.title, article.url, article.published_at])
-            article_id = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:20]
+            article_id = hashlib.sha1(seed.encode("utf-8"), usedforsecurity=False).hexdigest()[:20]
             existing = conn.execute("SELECT 1 FROM news_articles WHERE article_id=?", (article_id,)).fetchone()
             conn.execute(
                 """
@@ -1016,7 +1018,7 @@ def upsert_filings(filings: Iterable[Filing], *, db_path: str | Path | None = No
             if not ticker or not form_type:
                 continue
             seed = filing.filing_id or "|".join([ticker, form_type, filing.filed_at, filing.url])
-            filing_id = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:24]
+            filing_id = hashlib.sha1(seed.encode("utf-8"), usedforsecurity=False).hexdigest()[:24]
             existing = conn.execute("SELECT 1 FROM filings WHERE filing_id=?", (filing_id,)).fetchone()
             conn.execute(
                 """
@@ -1390,6 +1392,205 @@ def record_quality_check(
         conn.commit()
 
 
+def _parse_utc_iso(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def upsert_dashboard_snapshot(
+    snapshot_key: str,
+    payload: dict[str, Any],
+    *,
+    source: str = "dashboard",
+    ttl_seconds: int = 60,
+    db_path: str | Path | None = None,
+) -> dict[str, str]:
+    key = str(snapshot_key or "").strip()
+    if not key:
+        raise ValueError("snapshot_key is required")
+    ttl = max(1, int(ttl_seconds or 60))
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.isoformat(timespec="seconds").replace("+00:00", "Z")
+    expires_at = (now_dt + timedelta(seconds=ttl)).isoformat(timespec="seconds").replace("+00:00", "Z")
+    generated_at = str(payload.get("generated_at") or now)
+    encoded = json.dumps(payload or {}, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    with _conn(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO dashboard_snapshots(snapshot_key, source, payload_json, generated_at, expires_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(snapshot_key) DO UPDATE SET
+                source=excluded.source,
+                payload_json=excluded.payload_json,
+                generated_at=excluded.generated_at,
+                expires_at=excluded.expires_at,
+                updated_at=excluded.updated_at
+            """,
+            (key, source or "dashboard", encoded, generated_at, expires_at, now),
+        )
+        conn.commit()
+    return {"snapshot_key": key, "generated_at": generated_at, "expires_at": expires_at, "updated_at": now}
+
+
+def get_dashboard_snapshot(
+    snapshot_key: str,
+    *,
+    include_expired: bool = False,
+    db_path: str | Path | None = None,
+) -> dict[str, Any] | None:
+    key = str(snapshot_key or "").strip()
+    if not key:
+        return None
+    with _conn(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT snapshot_key, source, payload_json, generated_at, expires_at, updated_at
+            FROM dashboard_snapshots
+            WHERE snapshot_key=?
+            """,
+            (key,),
+        ).fetchone()
+    if row is None:
+        return None
+    expires_at = _parse_utc_iso(str(row["expires_at"] or ""))
+    is_expired = expires_at is not None and expires_at <= datetime.now(timezone.utc)
+    if is_expired and not include_expired:
+        return None
+    try:
+        payload = json.loads(row["payload_json"] or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {"raw": payload}
+    return {
+        "snapshot_key": row["snapshot_key"],
+        "source": row["source"],
+        "payload": payload,
+        "generated_at": row["generated_at"],
+        "expires_at": row["expires_at"],
+        "updated_at": row["updated_at"],
+        "is_expired": is_expired,
+    }
+
+
+def clear_dashboard_snapshot(
+    snapshot_key: str | None = None,
+    *,
+    db_path: str | Path | None = None,
+) -> int:
+    with _conn(db_path) as conn:
+        if snapshot_key:
+            cursor = conn.execute("DELETE FROM dashboard_snapshots WHERE snapshot_key=?", (str(snapshot_key).strip(),))
+        else:
+            cursor = conn.execute("DELETE FROM dashboard_snapshots")
+        conn.commit()
+        return int(cursor.rowcount or 0)
+
+
+def acquire_dashboard_refresh_lock(
+    lock_key: str,
+    *,
+    owner_token: str | None = None,
+    ttl_seconds: int = 30,
+    db_path: str | Path | None = None,
+) -> dict[str, Any]:
+    key = str(lock_key or "").strip()
+    if not key:
+        raise ValueError("lock_key is required")
+    token = str(owner_token or uuid.uuid4().hex)
+    ttl = max(1, int(ttl_seconds or 30))
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.isoformat(timespec="seconds").replace("+00:00", "Z")
+    expires_at = (now_dt + timedelta(seconds=ttl)).isoformat(timespec="seconds").replace("+00:00", "Z")
+    with _conn(db_path) as conn:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                """
+                SELECT owner_token, acquired_at, expires_at
+                FROM dashboard_refresh_locks
+                WHERE lock_key=?
+                """,
+                (key,),
+            ).fetchone()
+            if row is not None:
+                current_expires = _parse_utc_iso(str(row["expires_at"] or ""))
+                if current_expires is not None and current_expires > now_dt:
+                    conn.execute("COMMIT")
+                    return {
+                        "acquired": False,
+                        "lock_key": key,
+                        "owner_token": token,
+                        "current_owner_token": row["owner_token"],
+                        "current_acquired_at": row["acquired_at"],
+                        "current_expires_at": row["expires_at"],
+                    }
+            conn.execute(
+                """
+                INSERT INTO dashboard_refresh_locks(lock_key, owner_token, acquired_at, expires_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(lock_key) DO UPDATE SET
+                    owner_token=excluded.owner_token,
+                    acquired_at=excluded.acquired_at,
+                    expires_at=excluded.expires_at
+                """,
+                (key, token, now, expires_at),
+            )
+            conn.execute("COMMIT")
+        except Exception:
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
+            raise
+    return {
+        "acquired": True,
+        "lock_key": key,
+        "owner_token": token,
+        "acquired_at": now,
+        "expires_at": expires_at,
+    }
+
+
+def release_dashboard_refresh_lock(
+    lock_key: str,
+    owner_token: str,
+    *,
+    db_path: str | Path | None = None,
+) -> bool:
+    key = str(lock_key or "").strip()
+    token = str(owner_token or "").strip()
+    if not key or not token:
+        return False
+    with _conn(db_path) as conn:
+        cursor = conn.execute(
+            """
+            DELETE FROM dashboard_refresh_locks
+            WHERE lock_key=? AND owner_token=?
+            """,
+            (key, token),
+        )
+        conn.commit()
+        return int(cursor.rowcount or 0) > 0
+
+
+def clear_dashboard_refresh_locks(
+    lock_key: str | None = None,
+    *,
+    db_path: str | Path | None = None,
+) -> int:
+    with _conn(db_path) as conn:
+        if lock_key:
+            cursor = conn.execute("DELETE FROM dashboard_refresh_locks WHERE lock_key=?", (str(lock_key).strip(),))
+        else:
+            cursor = conn.execute("DELETE FROM dashboard_refresh_locks")
+        conn.commit()
+        return int(cursor.rowcount or 0)
+
+
 def data_health(*, db_path: str | Path | None = None) -> dict[str, Any]:
     with _conn(db_path) as conn:
         table_counts = {
@@ -1414,6 +1615,8 @@ def data_health(*, db_path: str | Path | None = None) -> dict[str, Any]:
                 "data_update_runs",
                 "provider_status",
                 "data_quality_checks",
+                "dashboard_snapshots",
+                "dashboard_refresh_locks",
             )
         }
         latest_fundamental = conn.execute(
