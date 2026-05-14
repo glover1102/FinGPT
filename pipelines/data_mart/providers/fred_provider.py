@@ -147,6 +147,9 @@ def fetch_macro_series(
 
     records: list[MacroObservation] = []
     failed: dict[str, str] = {}
+    fallback_recovered: set[str] = set()
+    fallback_provider: str | None = None
+    external_http_get = http_get is not None
     client: httpx.Client | None = None
     try:
         if http_get is None:
@@ -208,6 +211,28 @@ def fetch_macro_series(
         if client is not None:
             client.close()
 
+    if failed and allow_csv_fallback:
+        fallback_result = _fetch_macro_series_csv(
+            failed.keys(),
+            start_date=start_date,
+            end_date=end_date,
+            http_get=http_get if external_http_get else None,
+        )
+        fallback_provider = fallback_result.provider
+        fallback_recovered = {record.series_id.upper() for record in fallback_result.records if isinstance(record, MacroObservation)}
+        if fallback_result.records:
+            records.extend(fallback_result.records)
+        for series_id in fallback_recovered:
+            failed.pop(series_id, None)
+        fallback_detail = fallback_result.detail if isinstance(fallback_result.detail, dict) else {}
+        fallback_failed = fallback_detail.get("failed_series")
+        if isinstance(fallback_failed, dict):
+            for series_id, message in fallback_failed.items():
+                failed[str(series_id).upper()] = f"csv_fallback:{message}"
+        elif fallback_result.error:
+            for series_id in failed:
+                failed[series_id] = f"{failed[series_id]}; csv_fallback:{fallback_result.error}"
+
     if records:
         status = "partial" if failed else "ok"
     else:
@@ -218,7 +243,12 @@ def fetch_macro_series(
         rows=len(records),
         records=records,
         error="; ".join(f"{sid}: {msg}" for sid, msg in sorted(failed.items())) or None,
-        detail={"failed_series": failed, "requested_series": [str(s).upper().strip() for s in series_ids if str(s).strip()]},
+        detail={
+            "failed_series": failed,
+            "requested_series": [str(s).upper().strip() for s in series_ids if str(s).strip()],
+            "fallback_recovered_series": sorted(fallback_recovered),
+            "fallback_provider": fallback_provider,
+        },
         started_at=started,
         finished_at=utc_now_iso(),
     )

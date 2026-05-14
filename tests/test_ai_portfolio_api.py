@@ -481,6 +481,20 @@ def test_ai_portfolio_dashboard_summarizes_coverage_operations_and_snapshots(tmp
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "success"
+    assert body["cache"]["hit"] is False
+    assert body["cache"]["elapsed_seconds"] >= 0
+    assert body["debug_timing"]["total"] >= 0
+    for timing_key in [
+        "list_policies",
+        "latest_recommendation",
+        "snapshot_timeline",
+        "data_health",
+        "operations",
+        "storage_status",
+        "coverage_rows",
+        "operation_summary",
+    ]:
+        assert timing_key in body["debug_timing"]
     assert body["selected_policy"]["policy_id"] == policy_id
     assert body["policy_counts"]["active"] >= 1
     coverage_ids = {row["id"] for row in body["coverage_rows"]}
@@ -492,6 +506,21 @@ def test_ai_portfolio_dashboard_summarizes_coverage_operations_and_snapshots(tmp
     assert body["operation_summary"]["by_type"]["snapshot_job"] >= 1
     assert body["data_health_summary"]["table_counts"]["prices_daily"] > 0
     assert "details_json" not in str(body)
+
+    cached = client.get(f"/api/v1/ai-portfolio/dashboard?policy_id={policy_id}")
+    assert cached.status_code == 200
+    cached_body = cached.json()
+    assert cached_body["cache"]["hit"] is True
+    assert cached_body["cache"]["age_seconds"] >= 0
+    assert cached_body["generated_at"] == body["generated_at"]
+    assert cached_body["debug_timing"] == body["debug_timing"]
+
+    assert client.post("/api/v1/ai-portfolio/operations/snapshots", json={"active_only": True}).status_code == 200
+    refreshed = client.get(f"/api/v1/ai-portfolio/dashboard?policy_id={policy_id}")
+    assert refreshed.status_code == 200
+    refreshed_body = refreshed.json()
+    assert refreshed_body["cache"]["hit"] is False
+    assert refreshed_body["operation_summary"]["by_type"]["snapshot_job"] >= body["operation_summary"]["by_type"]["snapshot_job"]
 
 
 def test_rebalance_action_body_records_reason_actor_and_audit(tmp_path, monkeypatch) -> None:

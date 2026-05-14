@@ -369,6 +369,7 @@ DDL_STATEMENTS: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_etf_exposure_ticker ON etf_exposure(ticker)",
     "CREATE INDEX IF NOT EXISTS idx_kr_equity_profile_market ON kr_equity_profile(market)",
     "CREATE INDEX IF NOT EXISTS idx_provider_status_run ON provider_status(run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_provider_status_finished ON provider_status(finished_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_quality_entity ON data_quality_checks(entity_type, entity_id, checked_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_dashboard_snapshots_expires ON dashboard_snapshots(expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_dashboard_refresh_locks_expires ON dashboard_refresh_locks(expires_at)",

@@ -35,7 +35,7 @@ class _FakeTicker:
         self.symbol = symbol
 
     def history(self, period: str, interval: str, auto_adjust: bool = False, **kwargs):
-        if interval == "5m":
+        if interval in {"5m", "15m", "60m"}:
             ny_tz = ZoneInfo("America/New_York")
             now_ny = datetime.now(ny_tz)
             latest = now_ny.replace(second=0, microsecond=0)
@@ -46,7 +46,17 @@ class _FakeTicker:
                 latest,
             ])
             base = 100 + (sum(ord(ch) for ch in self.symbol) % 17)
-            return pd.DataFrame({"Close": [base, base + 0.25, base + 0.5]}, index=idx)
+            closes = [base, base + 0.25, base + 0.5]
+            return pd.DataFrame(
+                {
+                    "Open": [close - 0.1 for close in closes],
+                    "High": [close + 0.2 for close in closes],
+                    "Low": [close - 0.3 for close in closes],
+                    "Close": closes,
+                    "Volume": [1000, 1500, 2000],
+                },
+                index=idx,
+            )
         idx = pd.date_range("2026-01-01", periods=90, freq="B")
         base = 100 + (sum(ord(ch) for ch in self.symbol) % 17)
         closes = [base + i * 0.25 for i in range(len(idx))]
@@ -142,6 +152,78 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn(first["freshness_status"], {"fresh", "delayed", "closed"})
         self.assertIn("1d", first["returns"])
         self.assertIsInstance(first["returns"]["1d"], float)
+
+    def test_dashboard_market_intraday_returns_ohlc_rows(self):
+        fake_yf = types.SimpleNamespace(Ticker=lambda symbol: _FakeTicker(symbol))
+        client = TestClient(api_server.app)
+
+        with patch.dict(sys.modules, {"yfinance": fake_yf}):
+            resp = client.get("/api/v1/dashboard/market/intraday/SPY?interval=15m&limit=2")
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["status"], "ok")
+        self.assertEqual(body["ticker"], "SPY")
+        self.assertEqual(body["interval"], "15m")
+        self.assertEqual(body["period"], "30d")
+        self.assertEqual(body["count"], 2)
+        self.assertEqual(body["provider"], "yfinance")
+        self.assertEqual(body["source"], "yfinance_intraday_15m")
+        self.assertEqual(body["cache_layer"], "provider")
+        self.assertFalse(body["cache_hit"])
+        self.assertEqual(len(body["items"]), 2)
+        first = body["items"][0]
+        for key in ["date", "open", "high", "low", "close", "adjusted_close", "volume", "source"]:
+            self.assertIn(key, first)
+        self.assertGreaterEqual(first["high"], first["close"])
+        self.assertLessEqual(first["low"], first["close"])
+
+    def test_dashboard_market_intraday_reuses_persisted_snapshot(self):
+        stored: dict[str, dict] = {}
+
+        def fake_get(snapshot_key: str, *args, **kwargs):
+            payload = stored.get(snapshot_key)
+            if not payload:
+                return None
+            return {
+                "payload": payload,
+                "updated_at": "2026-05-12T00:00:00Z",
+                "expires_at": "2026-05-12T00:01:30Z",
+                "is_expired": bool(kwargs.get("include_expired")),
+            }
+
+        def fake_upsert(snapshot_key: str, payload: dict, **kwargs):
+            stored[snapshot_key] = payload
+            return {"snapshot_key": snapshot_key}
+
+        client = TestClient(api_server.app)
+        fake_yf = types.SimpleNamespace(Ticker=lambda symbol: _FakeTicker(symbol))
+
+        with patch.dict(sys.modules, {"yfinance": fake_yf}), patch.object(dashboard_router, "get_dashboard_snapshot", side_effect=fake_get), patch.object(dashboard_router, "upsert_dashboard_snapshot", side_effect=fake_upsert):
+            first = client.get("/api/v1/dashboard/market/intraday/SPY?interval=5m&limit=2&force=true")
+            second = client.get("/api/v1/dashboard/market/intraday/SPY?interval=5m&limit=2")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.json()["cache_layer"], "provider")
+        body = second.json()
+        self.assertEqual(body["cache_layer"], "persisted")
+        self.assertTrue(body["cache_hit"])
+        self.assertEqual(body["count"], 2)
+
+    def test_dashboard_market_intraday_rejects_unknown_interval(self):
+        fake_yf = types.SimpleNamespace(Ticker=lambda symbol: _FakeTicker(symbol))
+        client = TestClient(api_server.app)
+
+        with patch.dict(sys.modules, {"yfinance": fake_yf}):
+            resp = client.get("/api/v1/dashboard/market/intraday/SPY?interval=2m")
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["status"], "error")
+        self.assertEqual(body["ticker"], "SPY")
+        self.assertEqual(body["count"], 0)
+        self.assertIn("interval must be one of", body["message"])
 
     def test_dashboard_market_overview_returns_tape_signals_and_heatmap_summary(self):
         fake_yf = types.SimpleNamespace(Ticker=lambda symbol: _FakeTicker(symbol))

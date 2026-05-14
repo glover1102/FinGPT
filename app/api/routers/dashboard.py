@@ -16,6 +16,7 @@ from pipelines.dashboard.market_service import (
     market_freshness_is_decision_usable as _dashboard_freshness_is_decision_usable,
     us_market_freshness as _us_market_freshness,
 )
+from pipelines.data_mart.storage.repository import get_dashboard_snapshot, upsert_dashboard_snapshot
 
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
@@ -25,6 +26,121 @@ _DASHBOARD_EQUITY_HEATMAP_CACHE_TTL_SEC = 60
 _dashboard_equity_heatmap_cache: dict[str, Any] = {"ts": 0.0, "payload": None}
 _EQUITY_HEATMAP_UNIVERSE = US_EQUITY_HEATMAP_UNIVERSE
 _EQUITY_HEATMAP_BATCH_SIZE = 60
+_INTRADAY_INTERVALS = {"5": "5m", "5m": "5m", "15": "15m", "15m": "15m", "60": "60m", "60m": "60m", "1h": "60m"}
+_INTRADAY_PERIOD_BY_INTERVAL = {"5m": "5d", "15m": "30d", "60m": "60d"}
+_INTRADAY_CACHE_TTL_SEC = 90
+
+
+def _clean_intraday_interval(value: Any) -> str:
+    key = str(value or "5m").strip().lower()
+    if key not in _INTRADAY_INTERVALS:
+        raise ValueError("interval must be one of 5m, 15m, 60m")
+    return _INTRADAY_INTERVALS[key]
+
+
+def _frame_value(row: Any, name: str, fallback: float | None = None) -> float | int | None:
+    try:
+        value = row.get(name)
+    except Exception:
+        value = None
+    if value is None:
+        return fallback
+    try:
+        if value != value:
+            return fallback
+    except Exception:
+        pass
+    try:
+        if name == "Volume":
+            return int(value)
+        return round(float(value), 6)
+    except Exception:
+        return fallback
+
+
+def _intraday_rows_from_frame(frame: Any, *, limit: int) -> list[dict[str, Any]]:
+    if frame is None or getattr(frame, "empty", False):
+        return []
+    rows: list[dict[str, Any]] = []
+    tail = frame.tail(max(1, int(limit or 500)))
+    for idx, row in tail.iterrows():
+        close = _frame_value(row, "Close")
+        if close is None:
+            continue
+        open_price = _frame_value(row, "Open", close)
+        high = _frame_value(row, "High", max(float(open_price or close), float(close)))
+        low = _frame_value(row, "Low", min(float(open_price or close), float(close)))
+        rows.append({
+            "date": idx.isoformat() if hasattr(idx, "isoformat") else str(idx),
+            "open": open_price,
+            "high": high,
+            "low": low,
+            "close": close,
+            "adjusted_close": close,
+            "volume": _frame_value(row, "Volume"),
+            "source": "yfinance_intraday",
+        })
+    return rows
+
+
+def _intraday_snapshot_key(ticker: str, interval: str, period: str, limit: int) -> str:
+    safe_ticker = str(ticker or "").strip().upper().replace("/", "_")
+    return f"market_dashboard_intraday_v1:{safe_ticker}:{interval}:{period}:{int(limit)}"
+
+
+def _intraday_cache_response(
+    payload: dict[str, Any],
+    *,
+    cache_hit: bool,
+    cache_layer: str,
+    cache_stale: bool = False,
+) -> dict[str, Any]:
+    response = dict(payload)
+    response["cache_hit"] = cache_hit
+    response["cache_layer"] = cache_layer
+    response["cache_ttl_seconds"] = _INTRADAY_CACHE_TTL_SEC
+    if cache_stale:
+        response["cache_stale"] = True
+    return response
+
+
+def _load_intraday_snapshot(
+    snapshot_key: str,
+    *,
+    include_expired: bool = False,
+) -> dict[str, Any] | None:
+    try:
+        snapshot = get_dashboard_snapshot(snapshot_key, include_expired=include_expired)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[DASHBOARD_INTRADAY] persisted snapshot load failed: %s", exc)
+        return None
+    if not snapshot:
+        return None
+    payload = snapshot.get("payload")
+    if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
+        return None
+    layer = "persisted_stale" if snapshot.get("is_expired") else "persisted"
+    response = _intraday_cache_response(
+        payload,
+        cache_hit=True,
+        cache_layer=layer,
+        cache_stale=bool(snapshot.get("is_expired")),
+    )
+    response["persisted_at"] = snapshot.get("updated_at")
+    response["expires_at"] = snapshot.get("expires_at")
+    return response
+
+
+def _persist_intraday_snapshot(snapshot_key: str, payload: dict[str, Any]) -> None:
+    try:
+        upsert_dashboard_snapshot(
+            snapshot_key,
+            payload,
+            source="dashboard_intraday",
+            ttl_seconds=_INTRADAY_CACHE_TTL_SEC,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[DASHBOARD_INTRADAY] persisted snapshot write failed: %s", exc)
 
 
 @router.get("/news")
@@ -257,6 +373,101 @@ async def dashboard_market_overview(force: bool = False) -> dict[str, Any]:
     market = await get_market_snapshot(force=force)
     overview = build_market_dashboard_overview(market, _dashboard_equity_heatmap_cache.get("payload"))
     return overview.model_dump(mode="json")
+
+
+@router.get("/market/intraday/{ticker}")
+async def dashboard_market_intraday(
+    ticker: str,
+    interval: str = "5m",
+    period: str | None = None,
+    limit: int = 500,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Return internal intraday OHLC rows for the market chart."""
+
+    clean_ticker = str(ticker or "").strip().upper()
+    if not clean_ticker:
+        return {
+            "status": "empty",
+            "ticker": "",
+            "items": [],
+            "count": 0,
+            "message": "ticker is required",
+        }
+    try:
+        clean_interval = _clean_intraday_interval(interval)
+    except ValueError as exc:
+        return {
+            "status": "error",
+            "ticker": clean_ticker,
+            "items": [],
+            "count": 0,
+            "message": str(exc),
+        }
+    clean_period = str(period or _INTRADAY_PERIOD_BY_INTERVAL[clean_interval]).strip()
+    bounded_limit = max(1, min(int(limit or 500), 1000))
+    snapshot_key = _intraday_snapshot_key(clean_ticker, clean_interval, clean_period, bounded_limit)
+    if not force:
+        cached = _load_intraday_snapshot(snapshot_key)
+        if cached:
+            return cached
+
+    def collect() -> dict[str, Any]:
+        import yfinance as yf
+
+        frame = yf.Ticker(clean_ticker).history(
+            period=clean_period,
+            interval=clean_interval,
+            auto_adjust=False,
+            prepost=False,
+        )
+        rows = _intraday_rows_from_frame(frame, limit=bounded_limit)
+        latest = rows[-1] if rows else None
+        return {
+            "status": "ok" if rows else "empty",
+            "ticker": clean_ticker,
+            "interval": clean_interval,
+            "period": clean_period,
+            "count": len(rows),
+            "latest": latest,
+            "items": rows,
+            "provider": "yfinance",
+            "source": f"yfinance_intraday_{clean_interval}",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    try:
+        payload = await asyncio.to_thread(collect)
+        if payload.get("items"):
+            _persist_intraday_snapshot(snapshot_key, payload)
+        elif not force:
+            stale = _load_intraday_snapshot(snapshot_key, include_expired=True)
+            if stale:
+                stale["provider_error"] = "empty intraday response"
+                return stale
+        return _intraday_cache_response(payload, cache_hit=False, cache_layer="provider")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[DASHBOARD_INTRADAY] %s %s failed: %s", clean_ticker, clean_interval, exc)
+        stale = _load_intraday_snapshot(snapshot_key, include_expired=True)
+        if stale:
+            stale["provider_error"] = str(exc)
+            return stale
+        return {
+            "status": "error",
+            "ticker": clean_ticker,
+            "interval": clean_interval,
+            "period": clean_period,
+            "count": 0,
+            "latest": None,
+            "items": [],
+            "provider": "yfinance",
+            "source": f"yfinance_intraday_{clean_interval}",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "message": str(exc),
+            "cache_hit": False,
+            "cache_layer": "provider",
+            "cache_ttl_seconds": _INTRADAY_CACHE_TTL_SEC,
+        }
 
 
 def _tile_span(weight: float) -> dict[str, int]:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 from pipelines.data_mart.models import Filing, MacroObservation, NewsArticle, PriceBar
 from pipelines.data_mart.storage import repository
 
@@ -209,3 +211,16 @@ def test_update_run_provider_status_and_health(tmp_path) -> None:
     assert health["table_counts"]["provider_status"] == 1
     assert health["recent_provider_status"][0]["provider"] == "yfinance"
     assert health["recent_quality_checks"][0]["check_name"] == "coverage"
+
+
+def test_provider_status_finished_index_supports_health_latest_rows(tmp_path) -> None:
+    db_path = tmp_path / "research_mart.db"
+    repository.data_health(db_path=db_path)
+
+    with sqlite3.connect(db_path) as conn:
+        indexes = {
+            row[1]
+            for row in conn.execute("PRAGMA index_list(provider_status)").fetchall()
+        }
+
+    assert "idx_provider_status_finished" in indexes

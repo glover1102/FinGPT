@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.api import server as api_server
 from app.api.routers import research as research_router
+from app.api.routers import system as system_router
 from core.schemas.response import AnalysisResponse
 from core.schemas.topic import TopicResponse
 
@@ -33,6 +34,23 @@ def _parse_sse(raw: str) -> list[dict]:
 
 
 class ApiRoutingContractTests(unittest.TestCase):
+    def test_preflight_status_uses_cache_for_polling_tabs(self):
+        client = TestClient(api_server.app)
+        system_router._preflight_cache["ts"] = 0.0
+        system_router._preflight_cache["report"] = None
+        try:
+            with patch.object(system_router, "_run_preflight_sync", return_value={"passed": True, "checks": []}) as run_preflight:
+                first = client.get("/api/v1/preflight")
+                second = client.get("/api/v1/preflight")
+
+            self.assertEqual(first.status_code, 200)
+            self.assertEqual(second.status_code, 200)
+            self.assertGreaterEqual(first.json()["ttl_seconds"], 120)
+            self.assertEqual(run_preflight.call_count, 1)
+        finally:
+            system_router._preflight_cache["ts"] = 0.0
+            system_router._preflight_cache["report"] = None
+
     def test_config_exposes_fingpt_integration_status(self):
         client = TestClient(api_server.app)
         resp = client.get("/api/v1/config")

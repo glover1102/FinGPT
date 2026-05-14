@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from time import perf_counter
 from typing import Any
 
 from core.schemas.ai_portfolio import (
@@ -603,7 +604,22 @@ def _compact_operation(operation: dict[str, Any]) -> dict[str, Any]:
         "created_count": operation.get("created_count"),
         "failure_count": operation.get("failure_count"),
         "asset_count": operation.get("asset_count"),
+        "processed_asset_count": operation.get("processed_asset_count"),
+        "ticker_count": operation.get("ticker_count"),
     }
+    request = operation.get("request")
+    if isinstance(request, dict):
+        compact["request"] = {
+            key: value
+            for key, value in request.items()
+            if key in {"policy_id", "universe_id", "active_only", "dry_run", "max_assets", "min_price_rows", "forms", "lookback_days"}
+        }
+    if isinstance(operation.get("source"), dict):
+        compact["source"] = {
+            key: operation["source"].get(key)
+            for key in ("type", "policy_id", "universe_id", "label", "asset_count", "processed_asset_count")
+            if operation["source"].get(key) is not None
+        }
     if isinstance(operation.get("sec_result"), dict):
         result = operation["sec_result"]
         compact["sec_result"] = {
@@ -611,10 +627,45 @@ def _compact_operation(operation: dict[str, Any]) -> dict[str, Any]:
             "status": result.get("status"),
             "rows_inserted": result.get("rows_inserted"),
             "rows_updated": result.get("rows_updated"),
+            "error_message": result.get("error_message"),
+            "available_after_count": result.get("available_after_count"),
+            "missing_after": result.get("missing_after", [])[:20],
             "provider_status_counts": result.get("provider_status_counts", {}),
         }
     if isinstance(operation.get("metadata_result"), dict):
         compact["metadata_result"] = operation["metadata_result"]
+    if isinstance(operation.get("price_result"), dict):
+        result = operation["price_result"]
+        compact["price_result"] = {
+            key: result.get(key)
+            for key in ("status", "candidate_count", "hydrated_count", "still_unavailable_count", "requested_count", "error")
+            if result.get(key) is not None
+        }
+        for key in ("missing_assets", "still_unavailable"):
+            if isinstance(result.get(key), list):
+                compact["price_result"][key] = result[key][:20]
+    if isinstance(operation.get("fundamentals_result"), dict):
+        result = operation["fundamentals_result"]
+        compact["fundamentals_result"] = {
+            key: result.get(key)
+            for key in ("status", "attempted_count", "hydrated_count", "failed_count", "candidate_count")
+            if result.get(key) is not None
+        }
+        for key in ("hydrated", "failed", "still_missing", "missing_assets"):
+            if isinstance(result.get(key), list):
+                compact["fundamentals_result"][key] = result[key][:20]
+    if isinstance(operation.get("failures"), list):
+        compact["failures"] = operation["failures"][:10]
+    if isinstance(operation.get("snapshots"), list):
+        compact["snapshots"] = [
+            {
+                key: item.get(key)
+                for key in ("snapshot_id", "policy_id", "date", "created_at", "portfolio_value")
+                if isinstance(item, dict) and item.get(key) is not None
+            }
+            for item in operation["snapshots"][:10]
+            if isinstance(item, dict)
+        ]
     return {key: value for key, value in compact.items() if value is not None}
 
 
@@ -744,12 +795,27 @@ def _coverage_rows(recommendation: PortfolioRecommendation | None, data_health: 
 
 
 def portfolio_dashboard(policy_id: str | None = None, *, limit: int = 12) -> PortfolioDashboardResponse:
+    timing_started = perf_counter()
+    timing_last = timing_started
+    debug_timing: dict[str, float] = {}
+
+    def mark(name: str) -> None:
+        nonlocal timing_last
+        now = perf_counter()
+        debug_timing[name] = round(now - timing_last, 6)
+        timing_last = now
+
     policies = list_policies()
+    mark("list_policies")
     policy = _selected_policy(policies, policy_id)
     latest = latest_recommendation(policy.policy_id) if policy else None
+    mark("latest_recommendation")
     snapshots = _snapshot_points(policy if policy_id else None, policies, limit)
+    mark("snapshot_timeline")
     data_health = data_repository.data_health()
+    mark("data_health")
     operations = list_operations(50)
+    mark("operations")
     policy_counts = _count_by([policy.model_dump(mode="json") for policy in policies], "status")
     if policies:
         policy_counts["total"] = len(policies)
@@ -771,20 +837,31 @@ def portfolio_dashboard(policy_id: str | None = None, *, limit: int = 12) -> Por
             latest_snapshot_at=selected_snapshots[0].created_at if selected_snapshots else None,
             data_quality_status=data_status,
         )
+    mark("selected_policy_summary")
+    store = storage_status()
+    mark("storage_status")
+    data_health_summary = _compact_data_health(data_health)
+    mark("compact_data_health")
+    coverage_rows = _coverage_rows(latest, data_health)
+    mark("coverage_rows")
+    operation_summary = PortfolioOperationSummary(
+        total_count=len(operations),
+        by_type=_count_by(operations, "operation_type"),
+        by_status=_count_by(operations, "status"),
+        recent_operations=[_compact_operation(item) for item in operations[:10]],
+    )
+    mark("operation_summary")
+    debug_timing["total"] = round(perf_counter() - timing_started, 6)
     return PortfolioDashboardResponse(
         generated_at=now_iso(),
         selected_policy=selected_summary,
         policy_counts=policy_counts,
-        store_status=storage_status(),
-        data_health_summary=_compact_data_health(data_health),
-        coverage_rows=_coverage_rows(latest, data_health),
+        store_status=store,
+        data_health_summary=data_health_summary,
+        coverage_rows=coverage_rows,
         snapshot_timeline=snapshots,
-        operation_summary=PortfolioOperationSummary(
-            total_count=len(operations),
-            by_type=_count_by(operations, "operation_type"),
-            by_status=_count_by(operations, "status"),
-            recent_operations=[_compact_operation(item) for item in operations[:10]],
-        ),
+        operation_summary=operation_summary,
+        debug_timing=debug_timing,
     )
 
 

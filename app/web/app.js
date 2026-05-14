@@ -26,6 +26,10 @@ const API = {
   dashboardNews: "/api/v1/dashboard/news?limit=20",
   dashboardMarket: "/api/v1/dashboard/market",
   dashboardMarketOverview: "/api/v1/dashboard/market/overview",
+  dashboardIntraday: (ticker, interval = "5m", limit = 500) => {
+    const params = new URLSearchParams({ interval: String(interval), limit: String(limit) });
+    return `/api/v1/dashboard/market/intraday/${encodeURIComponent(ticker)}?${params.toString()}`;
+  },
   dashboardEquityHeatmap: "/api/v1/dashboard/equity-heatmap",
   macroSeriesList: "/api/v1/macro/series",
   macroSeriesSearch: (query, limit = 12) => `/api/v1/macro/series/search?q=${encodeURIComponent(query || "")}&limit=${encodeURIComponent(limit)}`,
@@ -132,9 +136,67 @@ const API = {
 const STORAGE = {
   history: "fingpt.history.v1",
   form: "fingpt.form.v1",
+  controlPanel: "fingpt.controlPanel.v1",
+  dashboardLayout: "fingpt.dashboardLayout.v1",
+  tvChart: "fingpt.tvChart.v1",
+  theme: "fingpt.theme.v1",
 };
 
 const STAGES = ["collect", "ingest", "retrieve", "infer", "analyze", "report", "output"];
+
+const TV_ADVANCED_CHART_SCRIPT = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+const TV_CHART_DEFAULTS = { source: "tradingview", symbolKey: "SPY", interval: "D", compareKey: "" };
+const TV_CHART_SYMBOLS = {
+  SPY: { label: "SPY · S&P 500", symbol: "AMEX:SPY", dataTicker: "SPY" },
+  QQQ: { label: "QQQ · Nasdaq 100", symbol: "NASDAQ:QQQ", dataTicker: "QQQ" },
+  TLT: { label: "TLT · 20Y Treasury", symbol: "NASDAQ:TLT", dataTicker: "TLT" },
+  HYG: { label: "HYG · High Yield", symbol: "AMEX:HYG", dataTicker: "HYG" },
+  LQD: { label: "LQD · IG Credit", symbol: "AMEX:LQD", dataTicker: "LQD" },
+  GLD: { label: "GLD · Gold", symbol: "AMEX:GLD", dataTicker: "GLD" },
+  "BTC-USD": { label: "BTC-USD · Bitcoin", symbol: "COINBASE:BTCUSD", dataTicker: "BTC-USD" },
+  DXY: { label: "DXY · Dollar Index", symbol: "TVC:DXY", dataTicker: "DX-Y.NYB" },
+  US10Y: { label: "US10Y · 10Y Yield", symbol: "TVC:US10Y", dataTicker: "^TNX" },
+};
+const TV_CHART_INTERVALS = {
+  5: "5m",
+  15: "15m",
+  60: "1h",
+  D: "Daily",
+  W: "Weekly",
+  M: "Monthly",
+};
+const TV_INTERNAL_INTRADAY_INTERVALS = new Set(["5", "15", "60"]);
+const AI_PORTFOLIO_DASHBOARD_CACHE_TTL_MS = 15000;
+
+function safeReadStoredJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return { ...fallback, ...JSON.parse(raw) };
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function safeWriteStoredJson(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (_) {}
+}
+
+function safeReadStoredValue(key, fallback = "") {
+  try {
+    return localStorage.getItem(key) || fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function safeWriteStoredValue(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (_) {}
+}
 
 const els = {
   homeBtn: document.getElementById("homeBtn"),
@@ -187,6 +249,7 @@ const els = {
   qdrantPurgeResult: document.getElementById("qdrantPurgeResult"),
 
   qualityDashBtn: document.getElementById("qualityDashBtn"),
+  themeToggleBtn: document.getElementById("themeToggleBtn"),
   qualityPanel: document.getElementById("qualityPanel"),
   qualitySubtitle: document.getElementById("qualitySubtitle"),
   qualitySummary: document.getElementById("qualitySummary"),
@@ -491,8 +554,14 @@ const els = {
   aiPortfolioReportRebalance: document.getElementById("aiPortfolioReportRebalance"),
   aiPortfolioReportsSurface: document.getElementById("aiPortfolioReportsSurface"),
   aiPortfolioHistorySurface: document.getElementById("aiPortfolioHistorySurface"),
+  tvOverviewMeta: document.getElementById("tvOverviewMeta"),
   tvOverviewWidget: document.getElementById("tvOverviewWidget"),
   tvOverviewFallback: document.getElementById("tvOverviewFallback"),
+  tvChartSource: document.getElementById("tvChartSource"),
+  tvChartSymbol: document.getElementById("tvChartSymbol"),
+  tvChartInterval: document.getElementById("tvChartInterval"),
+  tvChartCompare: document.getElementById("tvChartCompare"),
+  tvChartApply: document.getElementById("tvChartApply"),
   tvHeatmapWidget: document.getElementById("tvHeatmapWidget"),
   tvHeatmapFallback: document.getElementById("tvHeatmapFallback"),
   symbolPickerModal: document.getElementById("symbolPickerModal"),
@@ -522,6 +591,10 @@ const state = {
   evidenceRaw: [],
   preflight: null,
   preflightTimer: null,
+  preflightRequest: null,
+  watchlistTimer: null,
+  watchlistRequest: null,
+  watchlistItems: [],
   pendingTimer: null,
   stageTimer: null,
   stageIndex: 0,
@@ -538,14 +611,16 @@ const state = {
   dashboardNewsItems: [],
   dashboardNewsCategory: "all",
   marketOverview: null,
+  dashboardMarketItems: [],
   activeDashboardTab: "market",
-  dashboardPanelViewByTab: {
+  tvChartSettings: safeReadStoredJson(STORAGE.tvChart, TV_CHART_DEFAULTS),
+  dashboardPanelViewByTab: safeReadStoredJson(STORAGE.dashboardLayout, {
     market: "all",
     macro: "overview",
     quant: "overview",
     forecast: "overview",
     "ai-portfolio": "overview",
-  },
+  }),
   macroLoaded: false,
   macroLoading: false,
   macroOverview: null,
@@ -585,6 +660,11 @@ const state = {
   aiPortfolioLoaded: false,
   aiPortfolioOpsLoaded: false,
   aiPortfolioDashboard: null,
+  aiPortfolioDashboardFetchedAt: 0,
+  aiPortfolioDashboardUrl: "",
+  aiPortfolioDashboardRequest: null,
+  aiPortfolioDashboardRequestUrl: "",
+  aiPortfolioDashboardCacheVersion: 0,
   aiPortfolioInvestmentTypes: [],
   aiPortfolioUniverses: [],
   aiPortfolioPolicies: [],
@@ -2123,6 +2203,10 @@ async function checkHealth() {
 }
 
 // ---------- Preflight ----------
+function shouldRunBackgroundPoll(force = false) {
+  return !!force || !document.hidden;
+}
+
 const PREFLIGHT_WARNING_ONLY = new Set([
   "HF_TOKEN", "FMP_API_KEY", "FMP_STOCK_NEWS",
   "SEC_FILINGS", "FRED_MACRO", "TRANSCRIPT_PROVIDER", "ALPHA_VANTAGE_NEWS",
@@ -2186,23 +2270,31 @@ function renderPreflightPanel(report) {
   els.preflightSubtitle.textContent = `마지막 점검: ${ts} · ${overall}`;
 }
 
-async function loadPreflight(force = false) {
-  try {
-    const res = await fetch(force ? API.preflightForce : API.preflight);
-    if (!res.ok) throw new Error(`bad status ${res.status}`);
-    const report = await res.json();
-    state.preflight = report;
-    renderPreflightPill(report);
-    if (!els.preflightPanel.classList.contains("hidden")) {
-      renderPreflightPanel(report);
+async function loadPreflight(force = false, options = {}) {
+  const allowHidden = !!options.allowHidden || force;
+  if (!shouldRunBackgroundPoll(allowHidden)) return state.preflight;
+  if (state.preflightRequest) return state.preflightRequest;
+  state.preflightRequest = (async () => {
+    try {
+      const res = await fetch(force ? API.preflightForce : API.preflight);
+      if (!res.ok) throw new Error(`bad status ${res.status}`);
+      const report = await res.json();
+      state.preflight = report;
+      renderPreflightPill(report);
+      if (!els.preflightPanel.classList.contains("hidden")) {
+        renderPreflightPanel(report);
+      }
+      return report;
+    } catch (e) {
+      els.preflightPill.classList.remove("ok", "warn");
+      els.preflightPill.classList.add("err");
+      els.preflightLabel.textContent = "사전 점검: 오프라인";
+      return null;
+    } finally {
+      state.preflightRequest = null;
     }
-    return report;
-  } catch (e) {
-    els.preflightPill.classList.remove("ok", "warn");
-    els.preflightPill.classList.add("err");
-    els.preflightLabel.textContent = "사전 점검: 오프라인";
-    return null;
-  }
+  })();
+  return state.preflightRequest;
 }
 
 async function loadRunbook() {
@@ -2864,6 +2956,7 @@ function setDashboardPanelView(view = "overview", options = {}) {
   const normalized = DASHBOARD_PANEL_VIEWS.has(view) ? view : fallback;
   if (state.dashboardPanelViewByTab) {
     state.dashboardPanelViewByTab[activeTab] = normalized;
+    safeWriteStoredJson(STORAGE.dashboardLayout, state.dashboardPanelViewByTab);
   }
   if (els.homeSurfaceGrid) {
     els.homeSurfaceGrid.dataset.panelView = activeTab === "market" ? "all" : normalized;
@@ -2871,17 +2964,21 @@ function setDashboardPanelView(view = "overview", options = {}) {
   updateDashboardViewControls();
 }
 
-function setCommandPanelCollapsed(collapsed) {
+function setCommandPanelCollapsed(collapsed, options = {}) {
   if (!els.controlPanel || !els.commandPanelToggle) return;
   els.controlPanel.classList.toggle("is-collapsed", collapsed);
   els.commandPanelToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
   const stateLabel = els.commandPanelToggle.querySelector(".command-panel-state");
   if (stateLabel) stateLabel.textContent = collapsed ? "컨트롤 열기" : "컨트롤 숨기기";
+  if (options.persist) {
+    safeWriteStoredValue(STORAGE.controlPanel, collapsed ? "collapsed" : "expanded");
+  }
 }
 
 function syncCommandPanelForViewport() {
   if (!els.commandPanelToggle) return;
-  const shouldCollapse = window.matchMedia?.("(max-width: 760px)")?.matches;
+  const stored = safeReadStoredValue(STORAGE.controlPanel, "");
+  const shouldCollapse = stored ? stored === "collapsed" : true;
   setCommandPanelCollapsed(Boolean(shouldCollapse));
 }
 
@@ -2889,10 +2986,36 @@ function bindCommandPanelToggle() {
   if (!els.commandPanelToggle) return;
   els.commandPanelToggle.addEventListener("click", () => {
     const nextCollapsed = !els.controlPanel?.classList.contains("is-collapsed");
-    setCommandPanelCollapsed(nextCollapsed);
+    setCommandPanelCollapsed(nextCollapsed, { persist: true });
   });
   syncCommandPanelForViewport();
   window.addEventListener("resize", syncCommandPanelForViewport);
+}
+
+function applyTheme(theme = "dark", options = {}) {
+  const normalized = theme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = normalized;
+  if (els.themeToggleBtn) {
+    const nextLabel = normalized === "light" ? "다크" : "라이트";
+    els.themeToggleBtn.textContent = nextLabel;
+    els.themeToggleBtn.setAttribute("aria-pressed", normalized === "light" ? "true" : "false");
+    els.themeToggleBtn.setAttribute("title", `${nextLabel} 테마로 전환`);
+  }
+  if (options.persist) {
+    safeWriteStoredValue(STORAGE.theme, normalized);
+  }
+  if (state.tradingViewInitialized && els.tvOverviewWidget) {
+    mountMarketOverviewChart(state.tvChartSettings);
+  }
+}
+
+function bindThemeToggle() {
+  applyTheme(safeReadStoredValue(STORAGE.theme, "dark"));
+  if (!els.themeToggleBtn) return;
+  els.themeToggleBtn.addEventListener("click", () => {
+    const nextTheme = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    applyTheme(nextTheme, { persist: true });
+  });
 }
 
 function dashboardTabFromLocation() {
@@ -2993,9 +3116,10 @@ function normalizeStaticLabels() {
   const homeStatus = document.querySelectorAll(".home-status span");
   if (homeStatus[0]) homeStatus[0].textContent = "OpenBB/Yahoo/FRED/SEC 중심";
   if (homeStatus[1]) homeStatus[1].textContent = "qwen2.5:7b 로컬 추론";
+  setText(".market-overview-card .home-card-head h3", "시장 테이프 / 내부 스냅샷");
   setText(".home-chart-card .home-card-head h3", "TradingView 단일 차트");
   setText(".home-heatmap-card .home-card-head h3", "미국 주식 5분봉 히트맵");
-  setText(".home-market-panel .home-card-head h3", "내부 시장 스냅샷");
+  setText(".home-market-panel .home-card-head h3", "내부 시장 스냅샷 (시장 테이프에 통합)");
   setText(".data-mart-card .home-card-head h3", "데이터 마트 상태");
   if (els.marketDashboardTab) els.marketDashboardTab.textContent = "Market Dashboard";
   if (els.macroDashboardTab) els.macroDashboardTab.textContent = "Macro";
@@ -3151,33 +3275,361 @@ function mountTradingViewWidget(container, fallback, scriptSrc, config, label) {
   window.setTimeout(verify, 1200);
 }
 
-function initializeTradingViewDashboard(force = false) {
-  if (state.tradingViewInitialized && !force) return;
-  state.tradingViewInitialized = true;
+function normalizeTvChartSettings(raw = {}) {
+  const source = raw.source === "internal" ? "internal" : TV_CHART_DEFAULTS.source;
+  const symbolKey = TV_CHART_SYMBOLS[raw.symbolKey] ? raw.symbolKey : TV_CHART_DEFAULTS.symbolKey;
+  const interval = TV_CHART_INTERVALS[raw.interval] ? raw.interval : TV_CHART_DEFAULTS.interval;
+  let compareKey = TV_CHART_SYMBOLS[raw.compareKey] ? raw.compareKey : "";
+  if (compareKey === symbolKey) compareKey = "";
+  return { source, symbolKey, interval, compareKey };
+}
+
+function tvChartMeta(settings = state.tvChartSettings) {
+  const safe = normalizeTvChartSettings(settings);
+  const symbolLabel = TV_CHART_SYMBOLS[safe.symbolKey]?.label || safe.symbolKey;
+  const intervalLabel = TV_CHART_INTERVALS[safe.interval] || safe.interval;
+  const sourceLabel = safe.source === "internal" ? `Internal ${intervalLabel} data` : intervalLabel;
+  const compareLabel = safe.compareKey ? ` · vs ${safe.compareKey}` : "";
+  return `${symbolLabel} · ${sourceLabel}${compareLabel}`;
+}
+
+function syncTvChartControls(settings = state.tvChartSettings) {
+  const safe = normalizeTvChartSettings(settings);
+  if (els.tvChartSource) els.tvChartSource.value = safe.source;
+  if (els.tvChartSymbol) els.tvChartSymbol.value = safe.symbolKey;
+  if (els.tvChartInterval) els.tvChartInterval.value = safe.interval;
+  if (els.tvChartCompare) els.tvChartCompare.value = safe.compareKey;
+  if (els.tvOverviewMeta) els.tvOverviewMeta.textContent = tvChartMeta(safe);
+}
+
+function tvChartSettingsFromControls() {
+  return normalizeTvChartSettings({
+    source: els.tvChartSource?.value || state.tvChartSettings?.source,
+    symbolKey: els.tvChartSymbol?.value || state.tvChartSettings?.symbolKey,
+    interval: els.tvChartInterval?.value || state.tvChartSettings?.interval,
+    compareKey: els.tvChartCompare?.value || "",
+  });
+}
+
+function tradingViewVisualTheme() {
+  return document.documentElement.dataset.theme === "light"
+    ? {
+      theme: "light",
+      backgroundColor: "rgba(248, 250, 252, 1)",
+      gridColor: "rgba(148, 163, 184, 0.22)",
+    }
+    : {
+      theme: "dark",
+      backgroundColor: "rgba(15, 23, 42, 1)",
+      gridColor: "rgba(51, 65, 85, 0.35)",
+    };
+}
+
+function tradingViewOverviewConfig(settings = state.tvChartSettings) {
+  const safe = normalizeTvChartSettings(settings);
+  const visual = tradingViewVisualTheme();
+  const config = {
+    autosize: true,
+    symbol: TV_CHART_SYMBOLS[safe.symbolKey].symbol,
+    interval: safe.interval,
+    timezone: "Etc/UTC",
+    theme: visual.theme,
+    style: "1",
+    locale: "kr",
+    backgroundColor: visual.backgroundColor,
+    gridColor: visual.gridColor,
+    hide_top_toolbar: false,
+    allow_symbol_change: true,
+    save_image: false,
+    calendar: false,
+    height: "420",
+    width: "100%",
+    support_host: "https://www.tradingview.com",
+  };
+  if (safe.compareKey) {
+    config.compareSymbols = [{ symbol: TV_CHART_SYMBOLS[safe.compareKey].symbol, position: "SameScale" }];
+  }
+  return config;
+}
+
+function normalizeInternalChartRows(payload) {
+  return (Array.isArray(payload?.items) ? payload.items : [])
+    .map((row) => {
+      const close = priceValue(row);
+      const open = numericOrFallback(row.open, close);
+      const high = numericOrFallback(row.high, Math.max(open, close));
+      const low = numericOrFallback(row.low, Math.min(open, close));
+      return {
+        date: row.date || "",
+        open,
+        high,
+        low,
+        close,
+        volume: numericOrFallback(row.volume, null),
+        source: row.source || "",
+      };
+    })
+    .filter((row) => row.date && Number.isFinite(row.close));
+}
+
+function internalChartReturnRows(rows) {
+  const values = (Array.isArray(rows) ? rows : [])
+    .map((row) => ({ date: row.date || "", value: Number(row.close) }))
+    .filter((row) => row.date && Number.isFinite(row.value) && row.value > 0);
+  if (values.length < 2) return [];
+  const base = values[0].value || 1;
+  return values.map((row) => ({ date: row.date, value: row.value / base }));
+}
+
+function internalIntradayApiInterval(interval) {
+  if (interval === "15") return "15m";
+  if (interval === "60") return "60m";
+  return "5m";
+}
+
+function internalOhlcBucketKey(dateValue, interval) {
+  const raw = String(dateValue || "");
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw.slice(0, interval === "M" ? 7 : 10);
+  if (interval === "M") {
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+  }
+  if (interval === "W") {
+    const day = date.getUTCDay() || 7;
+    const monday = new Date(date);
+    monday.setUTCDate(date.getUTCDate() - day + 1);
+    return monday.toISOString().slice(0, 10);
+  }
+  return raw;
+}
+
+function aggregateInternalOhlcRows(rows, interval) {
+  if (!["W", "M"].includes(interval)) return rows;
+  const buckets = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const close = priceValue(row);
+    if (close === null) return;
+    const key = internalOhlcBucketKey(row.date, interval);
+    const open = numericOrFallback(row.open, close);
+    const high = numericOrFallback(row.high, Math.max(open, close));
+    const low = numericOrFallback(row.low, Math.min(open, close));
+    const volume = numericOrFallback(row.volume, 0);
+    const existing = buckets.get(key);
+    if (!existing) {
+      buckets.set(key, {
+        date: row.date || key,
+        open,
+        high,
+        low,
+        close,
+        adjusted_close: close,
+        volume: Number.isFinite(volume) ? volume : null,
+        source: row.source || "data_mart:prices_daily",
+      });
+      return;
+    }
+    existing.date = row.date || existing.date;
+    existing.high = Math.max(Number(existing.high), high);
+    existing.low = Math.min(Number(existing.low), low);
+    existing.close = close;
+    existing.adjusted_close = close;
+    if (Number.isFinite(volume) && existing.volume !== null) existing.volume += volume;
+  });
+  return Array.from(buckets.values());
+}
+
+async function fetchInternalChartPayload(symbolKey, interval) {
+  const symbolInfo = TV_CHART_SYMBOLS[symbolKey];
+  const ticker = symbolInfo?.dataTicker || symbolKey;
+  const useIntraday = TV_INTERNAL_INTRADAY_INTERVALS.has(interval);
+  const res = await fetch(useIntraday
+    ? API.dashboardIntraday(ticker, internalIntradayApiInterval(interval), 500)
+    : API.dataPrices(ticker, 520));
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const payload = await res.json();
+  if (!useIntraday && ["W", "M"].includes(interval)) {
+    return {
+      ...payload,
+      interval,
+      source: `${payload.source || "data_mart:prices_daily"}_${interval.toLowerCase()}_aggregate`,
+      items: aggregateInternalOhlcRows(payload.items || [], interval),
+    };
+  }
+  return payload;
+}
+
+function renderInternalOhlcChart(primaryPayload, comparePayload, settings = state.tvChartSettings) {
+  const safe = normalizeTvChartSettings(settings);
+  const primaryRows = normalizeInternalChartRows(primaryPayload).slice(-160);
+  if (primaryRows.length < 2) {
+    return decisionEmpty(`내부 가격 데이터가 부족합니다: ${TV_CHART_SYMBOLS[safe.symbolKey]?.dataTicker || safe.symbolKey}`);
+  }
+  const hasOhlc = primaryRows.some((row) => Number.isFinite(row.open) && Number.isFinite(row.high) && Number.isFinite(row.low));
+  const width = 920;
+  const height = 390;
+  const padLeft = 72;
+  const padRight = 22;
+  const padTop = 24;
+  const padBottom = 44;
+  const domainValues = primaryRows.flatMap((row) => [
+    Number.isFinite(row.high) ? row.high : row.close,
+    Number.isFinite(row.low) ? row.low : row.close,
+    row.close,
+  ]);
+  const { min, max } = paddedChartDomain(domainValues);
+  const points = primaryRows.map((row, index) => {
+    const x = padLeft + (index / Math.max(1, primaryRows.length - 1)) * (width - padLeft - padRight);
+    return {
+      ...row,
+      x,
+      openY: chartY(min, max, row.open, height, padTop, padBottom),
+      highY: chartY(min, max, row.high, height, padTop, padBottom),
+      lowY: chartY(min, max, row.low, height, padTop, padBottom),
+      closeY: chartY(min, max, row.close, height, padTop, padBottom),
+    };
+  });
+  const candleWidth = Math.max(2.8, Math.min(7, (width - padLeft - padRight) / Math.max(points.length, 1) * 0.42));
+  const candles = points.map((point) => {
+    const up = point.close >= point.open;
+    const bodyTop = Math.min(point.openY, point.closeY);
+    const bodyHeight = Math.max(1.4, Math.abs(point.closeY - point.openY));
+    const tooltip = `${point.date} · O ${fmtDecimal(point.open, 2)} · H ${fmtDecimal(point.high, 2)} · L ${fmtDecimal(point.low, 2)} · C ${fmtDecimal(point.close, 2)}`;
+    return hasOhlc ? `
+      <g class="internal-candle ${up ? "up" : "down"}" data-chart-tooltip="${escapeHtml(tooltip)}">
+        <line x1="${point.x.toFixed(2)}" x2="${point.x.toFixed(2)}" y1="${point.highY.toFixed(2)}" y2="${point.lowY.toFixed(2)}"></line>
+        <rect x="${(point.x - candleWidth / 2).toFixed(2)}" y="${bodyTop.toFixed(2)}" width="${candleWidth.toFixed(2)}" height="${bodyHeight.toFixed(2)}" rx="1.4"></rect>
+        <title>${escapeHtml(tooltip)}</title>
+      </g>
+    ` : "";
+  }).join("");
+  const closePoints = svgPolylinePoints(points.map((point) => ({ ...point, y: point.closeY })));
+  const first = primaryRows[0];
+  const last = primaryRows[primaryRows.length - 1];
+  const returnPct = first.close ? (last.close / first.close - 1) * 100 : null;
+  const returnClass = Number(returnPct) >= 0 ? "ok" : "warn";
+  const compareRows = normalizeInternalChartRows(comparePayload).slice(-160);
+  const compareChart = safe.compareKey && compareRows.length >= 2
+    ? renderNormalizedComparisonChart({
+      primary: internalChartReturnRows(primaryRows),
+      benchmark: internalChartReturnRows(compareRows),
+      primaryLabel: safe.symbolKey,
+      benchmarkLabel: safe.compareKey,
+      title: "내부 데이터 상대 수익률 비교",
+      status: "ok",
+    })
+    : "";
+  return `
+    <div class="internal-chart-shell" data-testid="internal-market-chart">
+      <div class="internal-chart-head">
+        <div>
+          <strong>${escapeHtml(TV_CHART_SYMBOLS[safe.symbolKey]?.label || safe.symbolKey)}</strong>
+          <span>${escapeHtml(first.date)} -> ${escapeHtml(last.date)} · ${escapeHtml(String(primaryRows.length))} rows · ${escapeHtml(last.source || primaryPayload?.latest?.source || "data mart")}</span>
+        </div>
+        <b class="${escapeHtml(returnClass)}">${escapeHtml(returnPct === null ? "-" : fmtPct(returnPct))}</b>
+      </div>
+      <svg class="internal-ohlc-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(safe.symbolKey)} internal OHLC chart">
+        ${renderChartYAxis({
+          width,
+          height,
+          padLeft,
+          padRight,
+          padTop,
+          padBottom,
+          min,
+          max,
+          formatter: (value) => fmtDecimal(value, Math.abs(value) >= 100 ? 0 : 2),
+        })}
+        ${candles}
+        <polyline points="${closePoints}" class="internal-close-line"></polyline>
+        ${renderChartHoverTargets(points.map((point) => ({ ...point, y: point.closeY, value: point.close })), (point) => `${point.date || "-"} · Close ${fmtDecimal(point.value, 2)}`)}
+      </svg>
+      <div class="internal-chart-foot">
+        <span>Open ${escapeHtml(fmtDecimal(last.open, 2))}</span>
+        <span>High ${escapeHtml(fmtDecimal(Math.max(...primaryRows.map((row) => row.high)), 2))}</span>
+        <span>Low ${escapeHtml(fmtDecimal(Math.min(...primaryRows.map((row) => row.low)), 2))}</span>
+        <span>Close ${escapeHtml(fmtDecimal(last.close, 2))}</span>
+      </div>
+      ${compareChart}
+    </div>
+  `;
+}
+
+async function mountInternalMarketChart(settings = state.tvChartSettings) {
+  const safe = normalizeTvChartSettings(settings);
+  const symbolInfo = TV_CHART_SYMBOLS[safe.symbolKey];
+  if (!els.tvOverviewWidget || !symbolInfo) return;
+  state.tvChartSettings = safe;
+  syncTvChartControls(safe);
+  hideTvFallback(els.tvOverviewFallback);
+  els.tvOverviewWidget.dataset.tvStatus = "internal-loading";
+  els.tvOverviewWidget.innerHTML = '<div class="home-news-empty">내부 가격 차트를 불러오는 중입니다.</div>';
+  try {
+    const primaryPromise = fetchInternalChartPayload(safe.symbolKey, safe.interval);
+    const comparePromise = safe.compareKey ? fetchInternalChartPayload(safe.compareKey, safe.interval) : Promise.resolve(null);
+    const [primaryPayload, comparePayload] = await Promise.all([primaryPromise, comparePromise]);
+    els.tvOverviewWidget.innerHTML = renderInternalOhlcChart(primaryPayload, comparePayload, safe);
+    els.tvOverviewWidget.dataset.tvStatus = normalizeInternalChartRows(primaryPayload).length >= 2 ? "internal-ready" : "internal-empty";
+  } catch (err) {
+    els.tvOverviewWidget.dataset.tvStatus = "internal-failed";
+    els.tvOverviewWidget.innerHTML = `<div class="home-news-empty">내부 가격 차트 로드 실패: ${escapeHtml(err.message || err)}</div>`;
+  }
+}
+
+function mountMarketOverviewChart(settings = state.tvChartSettings) {
+  const safe = normalizeTvChartSettings(settings);
+  if (safe.source === "internal") {
+    mountInternalMarketChart(safe);
+    return;
+  }
+  mountTradingViewOverview(safe);
+}
+
+function mountTradingViewOverview(settings = state.tvChartSettings) {
+  const safe = normalizeTvChartSettings(settings);
+  state.tvChartSettings = safe;
+  syncTvChartControls(safe);
   mountTradingViewWidget(
     els.tvOverviewWidget,
     els.tvOverviewFallback,
-    "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js",
-    {
-      autosize: true,
-      symbol: "AMEX:SPY",
-      interval: "D",
-      timezone: "Etc/UTC",
-      theme: "dark",
-      style: "1",
-      locale: "kr",
-      backgroundColor: "rgba(15, 23, 42, 1)",
-      gridColor: "rgba(51, 65, 85, 0.35)",
-      hide_top_toolbar: false,
-      allow_symbol_change: true,
-      save_image: false,
-      calendar: false,
-      height: "420",
-      width: "100%",
-      support_host: "https://www.tradingview.com",
-    },
+    TV_ADVANCED_CHART_SCRIPT,
+    tradingViewOverviewConfig(safe),
     "TradingView 단일 차트"
   );
+}
+
+function applyTvChartSettings(settings = tvChartSettingsFromControls(), options = {}) {
+  const safe = normalizeTvChartSettings(settings);
+  state.tvChartSettings = safe;
+  if (options.persist !== false) {
+    safeWriteStoredJson(STORAGE.tvChart, safe);
+  }
+  state.tradingViewInitialized = true;
+  mountMarketOverviewChart(safe);
+}
+
+function bindTvChartControls() {
+  syncTvChartControls(state.tvChartSettings);
+  if (els.tvChartApply) {
+    els.tvChartApply.addEventListener("click", () => applyTvChartSettings(tvChartSettingsFromControls()));
+  }
+  [els.tvChartSource, els.tvChartSymbol, els.tvChartInterval, els.tvChartCompare].forEach((control) => {
+    if (!control) return;
+    if (control === els.tvChartSource) {
+      control.addEventListener("change", () => syncTvChartControls(tvChartSettingsFromControls()));
+    }
+    control.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        applyTvChartSettings(tvChartSettingsFromControls());
+      }
+    });
+  });
+}
+
+function initializeTradingViewDashboard(force = false) {
+  if (state.tradingViewInitialized && !force) return;
+  state.tradingViewInitialized = true;
+  mountMarketOverviewChart(state.tvChartSettings);
   mountTradingViewWidget(
     els.tvHeatmapWidget,
     els.tvHeatmapFallback,
@@ -3662,6 +4114,7 @@ async function loadDashboardMarket(force = false) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const items = Array.isArray(data.items) ? data.items : [];
+    state.dashboardMarketItems = items;
     if (!items.length) {
       els.homeMarketList.innerHTML = '<div class="home-news-empty">표시할 시장 데이터가 없습니다.</div>';
       state.marketLoaded = true;
@@ -3700,95 +4153,26 @@ async function loadDashboardMarket(force = false) {
     }).join("");
     state.marketLoaded = true;
   } catch (err) {
+    state.dashboardMarketItems = [];
     els.homeMarketList.innerHTML = `<div class="home-news-empty">시장 데이터 로드 실패: ${escapeHtml(err.message || err)}</div>`;
   }
 }
 
-function marketTapeSortKey(item) {
-  const order = ["SPY", "QQQ", "TLT", "HYG", "LQD", "GLD", "BTC-USD", "DX-Y.NYB", "^TNX"];
-  const idx = order.indexOf(String(item?.symbol || "").toUpperCase());
-  return idx >= 0 ? idx : order.length;
-}
-
-function marketReturnClass(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "muted";
-  if (n > 0) return "ok";
-  if (n < 0) return "fail";
-  return "muted";
-}
-
 function renderMarketTape(overview) {
-  const tape = Array.isArray(overview?.market_tape) ? overview.market_tape.slice().sort((a, b) => marketTapeSortKey(a) - marketTapeSortKey(b)) : [];
-  const freshness = overview?.freshness_summary || {};
-  const heatmap = overview?.heatmap_summary || {};
-  if (els.marketOverviewMeta) {
-    const asOf = overview?.raw_market_meta?.generated_at ? fmtDate(overview.raw_market_meta.generated_at) : "기준시각 미확인";
-    els.marketOverviewMeta.textContent = `${freshness.decision_usable_count || 0}/${freshness.item_count || 0} usable · ${heatmap.status || "heatmap"} · ${asOf}`;
-  }
-  if (!els.marketTapeSurface) return;
-  if (!tape.length) {
-    els.marketTapeSurface.innerHTML = decisionEmpty("표시할 시장 테이프 데이터가 없습니다.");
+  const rendered = window.FinGPTMarketUi?.marketTape?.(overview, { freshnessLabels: FRESHNESS_LABELS });
+  if (!rendered) {
+    if (els.marketOverviewMeta) els.marketOverviewMeta.textContent = "market module unavailable";
+    if (els.marketTapeSurface) els.marketTapeSurface.innerHTML = decisionEmpty("Market UI module is unavailable.");
     return;
   }
-  const metrics = [
-    decisionMetric("Market freshness", `${freshness.decision_usable_count || 0}/${freshness.item_count || 0}`, freshness.status || "unavailable"),
-    decisionMetric("Heatmap universe", heatmap.universe_size ? `${heatmap.decision_usable_count || 0}/${heatmap.universe_size}` : "not loaded", heatmap.status || "unavailable"),
-    decisionMetric("Latest heatmap", heatmap.latest_as_of ? fmtDate(heatmap.latest_as_of) : "미확인", heatmap.status || "unavailable"),
-    decisionMetric("Advisory", overview?.advisory_only ? "자문 전용" : "점검 필요", overview?.advisory_only ? "ok" : "warn"),
-  ].join("");
-  const rows = tape.map((item) => {
-    const cls = item.is_decision_usable ? marketReturnClass(item.return_1d) : "warn";
-    const freshnessLabel = FRESHNESS_LABELS[item.freshness_status] || item.freshness_status || "unknown";
-    return `
-      <article class="market-tape-item ${escapeHtml(cls)} ${item.is_decision_usable ? "" : "stale"}">
-        <div class="market-tape-symbol-row">
-          <strong>${escapeHtml(item.symbol || "")}</strong>
-          <span>${escapeHtml(item.asset_class || "")}</span>
-        </div>
-        <div class="market-tape-label">${escapeHtml(item.label || "")}</div>
-        <div class="market-tape-price">${item.price === null || item.price === undefined ? "-" : escapeHtml(String(item.price))}</div>
-        <div class="market-tape-return ${escapeHtml(cls)}">1D ${escapeHtml(fmtPct(item.return_1d))}</div>
-        <div class="market-tape-meta">
-          <span>${escapeHtml(freshnessLabel)}</span>
-          <span>${escapeHtml(item.source || "unknown")}</span>
-        </div>
-      </article>
-    `;
-  }).join("");
-  const warning = [freshness.warning, heatmap.warning].filter(Boolean).join(" ");
-  els.marketTapeSurface.innerHTML = `
-    <div class="decision-metric-grid dense">${metrics}</div>
-    ${warning ? `<div class="decision-summary warn">${escapeHtml(warning)}</div>` : ""}
-    <div class="market-tape-grid">${rows}</div>
-  `;
+  if (els.marketOverviewMeta) els.marketOverviewMeta.textContent = rendered.meta || "";
+  if (els.marketTapeSurface) els.marketTapeSurface.innerHTML = rendered.html;
 }
 
 function renderMarketSignals(overview) {
   if (!els.marketSignalSurface) return;
-  const signals = Array.isArray(overview?.signals) ? overview.signals : [];
-  if (!signals.length) {
-    els.marketSignalSurface.innerHTML = decisionEmpty("표시할 시장 신호가 없습니다.");
-    return;
-  }
-  els.marketSignalSurface.innerHTML = signals.map((signal) => {
-    const cls = decisionStatusClass(signal.status);
-    const evidence = Array.isArray(signal.evidence) ? signal.evidence.slice(0, 6) : [];
-    return `
-      <article class="market-signal-item ${escapeHtml(cls)}">
-        <div class="decision-status-row">
-          <span class="decision-badge ${escapeHtml(cls)}">${escapeHtml(decisionStatusLabel(signal.status))}</span>
-          <span>${escapeHtml(signal.signal_id || "")}</span>
-        </div>
-        <h4>${escapeHtml(signal.title || "")}</h4>
-        <p>${escapeHtml(signal.summary || "")}</p>
-        <div class="market-signal-evidence">
-          ${evidence.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
-        </div>
-        <div class="market-signal-note">${escapeHtml(signal.interpretation || "")}</div>
-      </article>
-    `;
-  }).join("");
+  const rendered = window.FinGPTMarketUi?.marketSignals?.(overview);
+  els.marketSignalSurface.innerHTML = rendered || decisionEmpty("Market UI module is unavailable.");
 }
 
 async function loadDashboardMarketOverview(force = false) {
@@ -3886,6 +4270,11 @@ function priceValue(row) {
   const value = row?.adjusted_close ?? row?.close;
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function numericOrFallback(value, fallback = null) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 function pctReturnFromRows(rows, periods) {
@@ -4937,6 +5326,7 @@ async function searchMacroSeries() {
   const query = els.macroSeriesSearchInput.value.trim();
   if (!query) {
     renderMacroSearchStarter(state.macroSeriesList || {});
+    await loadMacroDefaultSeriesDetail(state.macroSeriesList || {});
     return;
   }
   setButtonBusy(els.macroSeriesSearchRun, true, "검색 중");
@@ -4966,6 +5356,22 @@ async function searchMacroSeries() {
   } finally {
     setButtonBusy(els.macroSeriesSearchRun, false);
   }
+}
+
+async function loadMacroDefaultSeriesDetail(seriesList = {}) {
+  if (!els.macroSeriesDetailSurface) return;
+  const existingId = state.macroSeriesDetail?.series?.series_id || state.macroSeriesDetail?.definition?.series_id;
+  const detailText = els.macroSeriesDetailSurface.innerText || "";
+  if (existingId && !/시계열을 선택하면|Macro series detail|상세 데이터를 불러오는 중/.test(detailText)) return;
+  const query = els.macroSeriesSearchInput?.value?.trim?.() || "";
+  const cached = macroCachedSeriesSearch(query, 12);
+  const candidates = macroFilterSeriesItems(cached.items?.length ? cached.items : (seriesList.items || []));
+  const first = candidates[0]?.series_id;
+  if (!first) {
+    els.macroSeriesDetailSurface.innerHTML = decisionEmpty("로드 가능한 매크로 시계열 상세가 없습니다.");
+    return;
+  }
+  await loadMacroSeriesDetail(first);
 }
 
 function renderMacroRegime(regime = {}, signals = []) {
@@ -5291,43 +5697,8 @@ function renderMacroActionPaneStarters() {
 
 function renderMacroProviderHealth(data = {}) {
   if (!els.macroProviderHealthSurface) return;
-  const providers = Array.isArray(data.providers) ? data.providers : [];
-  const stale = Array.isArray(data.stale_series) ? data.stale_series : [];
-  const staleLabels = stale
-    .map((item) => (typeof item === "string" ? item : (item?.series_id || item?.display_name || item?.status || "")))
-    .filter(Boolean);
-  const scheduler = data.scheduler || {};
-  els.macroProviderHealthSurface.innerHTML = `
-    <div class="decision-status-row">
-      <span class="decision-badge ${escapeHtml(decisionStatusClass(data.status))}">${escapeHtml(data.status || "unknown")}</span>
-      <span>생성 ${escapeHtml(data.generated_at ? fmtDate(data.generated_at) : "미확인")} · 지연 ${escapeHtml(_fmtNumber(staleLabels.length))}개</span>
-    </div>
-    <div class="decision-metric-grid dense">
-      ${decisionMetric("공급자", _fmtNumber(providers.length), providers.length ? "ok" : "warn")}
-      ${decisionMetric("활성", _fmtNumber(providers.filter((item) => item.enabled).length), "ok")}
-      ${decisionMetric("설정됨", _fmtNumber(providers.filter((item) => item.configured).length), "ok")}
-      ${decisionMetric("스케줄러", scheduler.enabled ? "켜짐" : "꺼짐", scheduler.enabled ? "ok" : "warn")}
-    </div>
-    ${(data.warnings || []).length ? `<div class="macro-warning">${escapeHtml(data.warnings.join(" "))}</div>` : ""}
-    <div class="decision-table-wrap">
-      <table class="decision-table">
-        <thead><tr><th>공급자</th><th>활성</th><th>설정</th><th>최근 상태</th><th>최근 행</th><th>오류</th></tr></thead>
-        <tbody>
-          ${providers.map((item) => `
-            <tr>
-              <td>${escapeHtml(item.provider || "")}</td>
-              <td>${escapeHtml(item.enabled ? "yes" : "no")}</td>
-              <td>${escapeHtml(item.configured ? "yes" : "no")}</td>
-              <td><span class="table-status ${escapeHtml(decisionStatusClass(item.latest_status))}">${escapeHtml(item.latest_status || "unknown")}</span></td>
-              <td>${escapeHtml(_fmtNumber(item.latest_rows || 0))}</td>
-              <td>${escapeHtml(item.latest_error || "-")}</td>
-            </tr>
-          `).join("") || `<tr><td colspan="6">공급자 상태가 없습니다.</td></tr>`}
-        </tbody>
-      </table>
-    </div>
-    ${staleLabels.length ? `<div class="macro-warning">지연 시계열: ${escapeHtml(staleLabels.slice(0, 12).join(", "))}${staleLabels.length > 12 ? " ..." : ""}</div>` : ""}
-  `;
+  const rendered = window.FinGPTMacroUi?.providerHealth?.(data);
+  els.macroProviderHealthSurface.innerHTML = rendered || decisionEmpty("Macro UI module is unavailable.");
 }
 
 function renderMacroScenarioResult(data = {}, startedAt = Date.now()) {
@@ -5561,6 +5932,7 @@ async function loadMacroProgressive(force = false) {
       state.macroSeriesList = results.seriesList;
       renderMacroCoverage(results.seriesList);
       renderMacroSearchStarter(results.seriesList);
+      await loadMacroDefaultSeriesDetail(results.seriesList);
     } else {
       renderMacroSearchStarter({ items: [] });
     }
@@ -7657,78 +8029,8 @@ async function loadQuantBacktestArtifact(runId) {
 }
 
 function renderQuantExportStorageReport(data) {
-  const topRuns = Array.isArray(data.top_runs) ? data.top_runs : [];
-  const staleExports = Array.isArray(data.stale_exports) ? data.stale_exports : [];
-  const formatCounts = data.format_counts || {};
-  const manifestStatuses = data.manifest_status_counts || {};
-  const formatText = Object.keys(formatCounts).length
-    ? Object.entries(formatCounts).map(([key, value]) => `${key}:${_fmtNumber(value)}`).join(", ")
-    : "none";
-  const manifestText = Object.keys(manifestStatuses).length
-    ? Object.entries(manifestStatuses).map(([key, value]) => `${key}:${_fmtNumber(value)}`).join(", ")
-    : "none";
-  return `
-    <div class="decision-status-row">
-      <span class="decision-badge ${escapeHtml(decisionStatusClass(data.status || "success"))}">${escapeHtml(data.status || "success")}</span>
-      <span>cross-run export storage report</span>
-    </div>
-    <div class="decision-chip-row">
-      <span>runs ${escapeHtml(_fmtNumber(data.run_count || 0))}</span>
-      <span>with exports ${escapeHtml(_fmtNumber(data.runs_with_exports || 0))}</span>
-      <span>export dirs ${escapeHtml(_fmtNumber(data.export_directory_count || 0))}</span>
-      <span>bytes ${escapeHtml(_fmtNumber(data.total_bytes || 0))}</span>
-      <span>stale ${escapeHtml(_fmtNumber(data.stale_export_count || 0))}</span>
-      <button type="button" class="linkish decision-inline-action" data-action="cross-run-cleanup-preview" data-keep-last="1" data-stale-after-days="0">cleanup preview</button>
-    </div>
-    <div class="decision-list compact">
-      <div class="decision-list-row"><span>Formats</span><strong>${escapeHtml(formatText)}</strong></div>
-      <div class="decision-list-row"><span>Manifest status</span><strong>${escapeHtml(manifestText)}</strong></div>
-      <div class="decision-list-row"><span>Oldest export</span><strong>${escapeHtml(data.oldest_export_generated_at || "-")}</strong></div>
-      <div class="decision-list-row"><span>Newest export</span><strong>${escapeHtml(data.newest_export_generated_at || "-")}</strong></div>
-      <div class="decision-list-row"><span>Root</span><strong>${escapeHtml(compactArtifactPath(data.artifact_root || ""))}</strong></div>
-    </div>
-    <div class="decision-section-title">Largest runs by generated export storage</div>
-    ${topRuns.length ? `
-      <div class="decision-table-wrap">
-        <table class="decision-table">
-          <thead><tr><th>Run</th><th>Exports</th><th>Bytes</th><th>Rows</th><th>Formats</th><th>Newest</th><th>Open</th></tr></thead>
-          <tbody>
-            ${topRuns.map((item) => `
-              <tr>
-                <td>${escapeHtml(item.run_id || "")}</td>
-                <td>${escapeHtml(_fmtNumber(item.export_count || 0))}</td>
-                <td>${escapeHtml(_fmtNumber(item.total_bytes || 0))}</td>
-                <td>${escapeHtml(_fmtNumber(item.total_rows || 0))}</td>
-                <td>${escapeHtml(Object.keys(item.formats || {}).join(", ") || "-")}</td>
-                <td>${escapeHtml(fmtDate(item.newest_export_generated_at || ""))}</td>
-                <td><button type="button" class="linkish" data-testid="quant-run-open" aria-label="Open quant run ${escapeHtml(item.run_id || "")}" data-quant-run-id="${escapeHtml(item.run_id || "")}">open</button></td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      </div>
-    ` : decisionEmpty("No generated artifact exports are present yet.")}
-    <div class="decision-section-title">Old export candidates</div>
-    ${staleExports.length ? `
-      <div class="decision-table-wrap">
-        <table class="decision-table">
-          <thead><tr><th>Run</th><th>Format</th><th>Age</th><th>Bytes</th><th>Status</th><th>Manifest</th></tr></thead>
-          <tbody>
-            ${staleExports.map((item) => `
-              <tr>
-                <td>${escapeHtml(item.run_id || "")}</td>
-                <td>${escapeHtml(item.format || "")}</td>
-                <td>${escapeHtml(_fmtNumber(item.age_days || 0))}d</td>
-                <td>${escapeHtml(_fmtNumber(item.total_bytes || 0))}</td>
-                <td><span class="table-status ${escapeHtml(decisionStatusClass(item.status || "unknown"))}">${escapeHtml(item.status || "unknown")}</span></td>
-                <td>${escapeHtml(compactArtifactPath(item.manifest_path || ""))}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      </div>
-    ` : decisionEmpty("No export directories exceed the stale-age threshold.")}
-  `;
+  const rendered = window.FinGPTQuantUi?.exportStorageReport?.(data);
+  return rendered || decisionEmpty("Quant UI module is unavailable.");
 }
 
 function renderCrossRunExportCleanupPlan(data) {
@@ -8152,436 +8454,6 @@ async function runPortfolioOptimize() {
   }
 }
 
-function aiNum(el, fallback = 0, options = {}) {
-  return numberInputValue(el, fallback, options);
-}
-
-function aiRangeFromInput(el, fallbackMin, fallbackMax) {
-  const parts = String(el?.value || "").split(/[,\s/]+/).map((item) => Number(item)).filter(Number.isFinite);
-  const min = parts.length ? parts[0] : fallbackMin;
-  const max = parts.length > 1 ? parts[1] : fallbackMax;
-  return [Math.max(0, Math.min(min, 100)), Math.max(0, Math.min(max, 100))].sort((a, b) => a - b);
-}
-
-function aiSetRangeInput(el, range) {
-  if (!el || !range) return;
-  const min = range.min ?? (Array.isArray(range) ? range[0] : 0);
-  const max = range.max ?? (Array.isArray(range) ? range[1] : 0);
-  el.value = `${min},${max}`;
-}
-
-function aiSelectedUniverseId() {
-  const value = els.aiPortfolioUniverse?.value || "default_multi_asset";
-  if (value === "custom") {
-    return `custom:${els.aiPortfolioCustomUniverse?.value || "SPY,TLT,GLD,SGOV"}`;
-  }
-  return value;
-}
-
-function aiPolicyPayload() {
-  return {
-    portfolio_name: els.aiPortfolioName?.value || "AI Portfolio",
-    investment_type: state.aiPortfolioSelectedType || "balanced_growth",
-    universe_id: aiSelectedUniverseId(),
-    initial_capital: aiNum(els.aiPortfolioInitialCapital, 10000000, { min: 0 }),
-    monthly_contribution: aiNum(els.aiPortfolioMonthlyContribution, 0, { min: 0 }),
-    target_return: aiNum(els.aiPortfolioTargetReturn, 0),
-    benchmark: normalizeTickerToken(els.aiPortfolioBenchmark?.value || "SPY") || "SPY",
-    automation_level: els.aiPortfolioAutomation?.value || "alert_only",
-    policy_overrides: {
-      target_volatility: aiNum(els.aiPortfolioTargetVolatility, 12, { min: 0, max: 100 }),
-      max_drawdown_alert: aiNum(els.aiPortfolioMaxDrawdown, -15, { max: 0 }),
-      min_cash_weight: aiNum(els.aiPortfolioMinCash, 5, { min: 0, max: 100 }),
-      max_single_asset_weight: aiNum(els.aiPortfolioMaxSingle, 30, { min: 1, max: 100 }),
-      max_sector_weight: aiNum(els.aiPortfolioMaxSector, 40, { min: 1, max: 100 }),
-      rebalance_frequency: els.aiPortfolioRebalanceFrequency?.value || "monthly",
-      weight_drift_threshold: aiNum(els.aiPortfolioDriftThreshold, 5, { min: 0, max: 100 }),
-      max_turnover: aiNum(els.aiPortfolioMaxTurnover, 20, { min: 0, max: 100 }),
-      optimization_method: els.aiPortfolioOptimization?.value || "risk_parity_max_sharpe_blend",
-      lookback_window_months: aiNum(els.aiPortfolioLookbackMonths, 12, { min: 1, max: 120 }),
-      risk_model: els.aiPortfolioRiskModel?.value || "diagonal_shrinkage",
-      expected_return_model: els.aiPortfolioExpectedReturn?.value || "momentum_adjusted_historical",
-      asset_allocation_ranges: {
-        equity: aiRangeFromInput(els.aiPortfolioEquityRange, 50, 75),
-        bond: aiRangeFromInput(els.aiPortfolioBondRange, 15, 35),
-        cash: aiRangeFromInput(els.aiPortfolioCashRange, 0, 15),
-        alternative: aiRangeFromInput(els.aiPortfolioAlternativeRange, 0, 15),
-      },
-    },
-  };
-}
-
-function renderAiInvestmentTypes() {
-  if (!els.aiPortfolioInvestmentTypes) return;
-  const items = state.aiPortfolioInvestmentTypes || [];
-  if (!items.length) {
-    els.aiPortfolioInvestmentTypes.innerHTML = decisionEmpty("투자형 템플릿을 불러오지 못했습니다.");
-    return;
-  }
-  els.aiPortfolioInvestmentTypes.innerHTML = items.map((item) => {
-    const ranges = item.asset_allocation_ranges || {};
-    const allocation = ["equity", "bond", "cash", "alternative"]
-      .map((key) => `${key} ${ranges[key]?.min ?? "-"}-${ranges[key]?.max ?? "-"}%`)
-      .join(" · ");
-    return `
-      <button type="button" class="ai-investment-card ${state.aiPortfolioSelectedType === item.id ? "active" : ""}" data-ai-investment-type="${escapeHtml(item.id)}">
-        <strong>${escapeHtml(item.display_name || item.id)}</strong>
-        <span>${escapeHtml(item.description || "")}</span>
-        <small>${escapeHtml(item.risk_level || "-")} · ${escapeHtml(item.suitable_horizon || "-")}</small>
-        <small>${escapeHtml(allocation)}</small>
-      </button>
-    `;
-  }).join("");
-  els.aiPortfolioInvestmentTypes.querySelectorAll("[data-ai-investment-type]").forEach((button) => {
-    button.addEventListener("click", () => selectAiInvestmentType(button.dataset.aiInvestmentType || "balanced_growth"));
-  });
-}
-
-function selectAiInvestmentType(typeId) {
-  const item = (state.aiPortfolioInvestmentTypes || []).find((candidate) => candidate.id === typeId);
-  if (!item) return;
-  state.aiPortfolioSelectedType = item.id;
-  const risk = item.risk_limits || {};
-  const rebalance = item.rebalance_policy || {};
-  const quant = item.quant_settings || {};
-  if (els.aiPortfolioTargetVolatility) els.aiPortfolioTargetVolatility.value = String(risk.target_volatility ?? 12);
-  if (els.aiPortfolioMaxDrawdown) els.aiPortfolioMaxDrawdown.value = String(risk.max_drawdown_alert ?? -15);
-  if (els.aiPortfolioMinCash) els.aiPortfolioMinCash.value = String(risk.min_cash_weight ?? 5);
-  if (els.aiPortfolioMaxSingle) els.aiPortfolioMaxSingle.value = String(risk.max_single_asset_weight ?? 30);
-  if (els.aiPortfolioMaxSector) els.aiPortfolioMaxSector.value = String(risk.max_sector_weight ?? 40);
-  if (els.aiPortfolioRebalanceFrequency) els.aiPortfolioRebalanceFrequency.value = rebalance.frequency || "monthly";
-  if (els.aiPortfolioDriftThreshold) els.aiPortfolioDriftThreshold.value = String(rebalance.weight_drift_threshold ?? 5);
-  if (els.aiPortfolioMaxTurnover) els.aiPortfolioMaxTurnover.value = String(rebalance.max_turnover ?? 20);
-  if (els.aiPortfolioOptimization) els.aiPortfolioOptimization.value = quant.optimization_method || "risk_parity";
-  if (els.aiPortfolioLookbackMonths) els.aiPortfolioLookbackMonths.value = String(quant.lookback_window_months ?? 12);
-  if (els.aiPortfolioRiskModel) els.aiPortfolioRiskModel.value = quant.risk_model || "diagonal_shrinkage";
-  if (els.aiPortfolioExpectedReturn) els.aiPortfolioExpectedReturn.value = quant.expected_return_model || "historical";
-  const ranges = item.asset_allocation_ranges || {};
-  aiSetRangeInput(els.aiPortfolioEquityRange, ranges.equity);
-  aiSetRangeInput(els.aiPortfolioBondRange, ranges.bond);
-  aiSetRangeInput(els.aiPortfolioCashRange, ranges.cash);
-  aiSetRangeInput(els.aiPortfolioAlternativeRange, ranges.alternative);
-  renderAiInvestmentTypes();
-}
-
-async function loadAiPortfolio(force = false) {
-  if (!els.aiPortfolioInvestmentTypes || (state.aiPortfolioLoaded && !force)) return;
-  els.aiPortfolioInvestmentTypes.innerHTML = decisionEmpty("투자형 템플릿을 불러오는 중입니다.");
-  try {
-    const res = await fetch(API.aiPortfolioInvestmentTypes);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-    state.aiPortfolioInvestmentTypes = Array.isArray(data.items) ? data.items : [];
-    state.aiPortfolioLoaded = true;
-    if (!state.aiPortfolioInvestmentTypes.find((item) => item.id === state.aiPortfolioSelectedType)) {
-      state.aiPortfolioSelectedType = state.aiPortfolioInvestmentTypes[0]?.id || "balanced_growth";
-    }
-    renderAiInvestmentTypes();
-    selectAiInvestmentType(state.aiPortfolioSelectedType);
-  } catch (err) {
-    els.aiPortfolioInvestmentTypes.innerHTML = decisionEmpty(`AI Portfolio 템플릿 로드 실패: ${err.message || err}`);
-  }
-}
-
-function aiStatusRow(status, text) {
-  const normalized = String(status || "").toLowerCase();
-  const uiStatus = normalized === "pass" || normalized === "active" || normalized === "generated" ? "ok" : (normalized === "warning" ? "warn" : normalized);
-  return `
-    <div class="decision-status-row">
-      <span class="decision-badge ${escapeHtml(decisionStatusClass(uiStatus))}">${escapeHtml(decisionStatusLabel(uiStatus))}</span>
-      <span>${escapeHtml(text || "")}</span>
-    </div>
-  `;
-}
-
-function renderAiOverview(policy, recommendation) {
-  if (!els.aiPortfolioOverviewSurface) return;
-  if (!policy) {
-    els.aiPortfolioOverviewSurface.innerHTML = decisionEmpty("활성 또는 생성된 AI Portfolio가 없습니다. 투자형과 정책을 선택한 뒤 생성하세요.");
-    return;
-  }
-  const metrics = recommendation?.backtest_metrics || {};
-  const dataQuality = recommendation?.data_quality || {};
-  const check = recommendation?.constraint_check || {};
-  els.aiPortfolioOverviewSurface.innerHTML = `
-    ${aiStatusRow(policy.status || "draft", `${policy.portfolio_name} · ${policy.investment_type} · ${policy.automation_level}`)}
-    <div class="decision-metric-grid dense">
-      ${decisionMetric("현재 가치", _fmtNumber(policy.initial_capital), "ok")}
-      ${decisionMetric("총수익률", metrics.status === "available" ? `${fmtDecimal(metrics.total_return_pct, 2)}%` : "unavailable", metrics.status === "available" ? "ok" : "warn")}
-      ${decisionMetric("벤치마크", metrics.benchmark_return_pct !== null && metrics.benchmark_return_pct !== undefined ? `${fmtDecimal(metrics.benchmark_return_pct, 2)}%` : "unavailable", metrics.benchmark_return_pct !== null && metrics.benchmark_return_pct !== undefined ? "ok" : "warn")}
-      ${decisionMetric("리스크 상태", check.status || "unchecked", check.status || "warn")}
-      ${decisionMetric("리밸런싱", state.aiPortfolioSignal?.rebalance_required ? "필요" : "대기", state.aiPortfolioSignal?.rebalance_required ? "warn" : "ok")}
-      ${decisionMetric("마지막 업데이트", recommendation?.created_at || policy.updated_at || "-", "ok")}
-      ${decisionMetric("다음 점검", policy.rebalance_frequency || "manual", "ok")}
-      ${decisionMetric("누락 데이터", _fmtNumber((dataQuality.missing_assets || []).length), (dataQuality.missing_assets || []).length ? "warn" : "ok")}
-    </div>
-  `;
-}
-
-function renderAiAllocation(weights) {
-  const rows = Array.isArray(weights) ? weights : [];
-  if (!rows.length) return decisionEmpty("표시할 추천 비중이 없습니다.");
-  return `
-    <div class="ai-allocation-layout">
-      <div class="ai-allocation-bars">
-        ${rows.map((item) => `
-          <div class="ai-allocation-row">
-            <span>${escapeHtml(item.ticker)}</span>
-            <div><i style="width:${Math.max(1, Math.min(100, Number(item.weight || 0)))}%"></i></div>
-            <strong>${escapeHtml(fmtDecimal(item.weight, 2))}%</strong>
-          </div>
-        `).join("")}
-      </div>
-      <div class="decision-table-wrap">
-        <table class="decision-table">
-          <thead><tr><th>Ticker</th><th>Name</th><th>Asset Class</th><th>Weight</th><th>Role</th><th>Key Risk</th><th>Status</th></tr></thead>
-          <tbody>
-            ${rows.map((item) => `
-              <tr>
-                <td>${escapeHtml(item.ticker)}</td>
-                <td>${escapeHtml(item.name || "-")}</td>
-                <td>${escapeHtml(item.asset_class || "-")}</td>
-                <td>${escapeHtml(fmtDecimal(item.weight, 2))}%</td>
-                <td>${escapeHtml(item.role || "-")}</td>
-                <td>${escapeHtml(item.key_risk || "-")}</td>
-                <td><span class="table-status ${escapeHtml(decisionStatusClass(item.constraint_status || "ok"))}">${escapeHtml(item.constraint_status || "-")}</span></td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-function renderAiRecommendation(policy, recommendation) {
-  if (!els.aiPortfolioRecommendationSurface) return;
-  if (!recommendation) {
-    els.aiPortfolioRecommendationSurface.innerHTML = decisionEmpty("아직 추천 결과가 없습니다.");
-    return;
-  }
-  const dq = recommendation.data_quality || {};
-  const warnings = [...(dq.warnings || []), ...((recommendation.constraint_check?.violations || []).map((item) => item.message))];
-  els.aiPortfolioRecommendationSurface.innerHTML = `
-    ${aiStatusRow(recommendation.status || "unknown", `${recommendation.method || "-"} · ${recommendation.universe_id || "-"} · ${recommendation.created_at || "-"}`)}
-    ${(warnings || []).length ? `<div class="decision-warning">${escapeHtml(warnings.slice(0, 6).join(" "))}</div>` : ""}
-    ${renderAiAllocation(recommendation.weights || [])}
-    <div class="decision-section-title">AI 설명</div>
-    <div class="ai-explanation-box">${escapeHtml(recommendation.ai_explanation || "AI explanation unavailable")}</div>
-  `;
-}
-
-function renderAiPerformance(recommendation) {
-  if (!els.aiPortfolioPerformanceSurface) return;
-  const metrics = recommendation?.backtest_metrics || {};
-  if (metrics.status !== "available") {
-    els.aiPortfolioPerformanceSurface.innerHTML = decisionEmpty(`성과 지표 unavailable: ${metrics.reason || "insufficient data"}`);
-    return;
-  }
-  els.aiPortfolioPerformanceSurface.innerHTML = `
-    <div class="decision-metric-grid dense">
-      ${decisionMetric("총수익률", `${fmtDecimal(metrics.total_return_pct, 2)}%`, "ok")}
-      ${decisionMetric("연환산", `${fmtDecimal(metrics.annualized_return_pct, 2)}%`, "ok")}
-      ${decisionMetric("변동성", `${fmtDecimal(metrics.annualized_volatility_pct, 2)}%`, "ok")}
-      ${decisionMetric("MDD", `${fmtDecimal(metrics.max_drawdown_pct, 2)}%`, metrics.max_drawdown_pct < -15 ? "warn" : "ok")}
-      ${decisionMetric("Sharpe", fmtDecimal(metrics.sharpe, 2), "ok")}
-      ${decisionMetric("Sortino", fmtDecimal(metrics.sortino, 2), "ok")}
-      ${decisionMetric("벤치마크", metrics.benchmark_return_pct === null || metrics.benchmark_return_pct === undefined ? "unavailable" : `${fmtDecimal(metrics.benchmark_return_pct, 2)}%`, metrics.benchmark_return_pct === null || metrics.benchmark_return_pct === undefined ? "warn" : "ok")}
-      ${decisionMetric("샘플", _fmtNumber(metrics.sample_count), "ok")}
-    </div>
-    ${renderDecisionLineChart((metrics.equity_curve || []).map((row) => ({ date: row.date, value: row.equity - 1 })), "return", "AI Portfolio 수익 곡선", "ok")}
-  `;
-}
-
-function renderAiCompliance(recommendation) {
-  if (!els.aiPortfolioComplianceSurface) return;
-  const check = recommendation?.constraint_check;
-  if (!check) {
-    els.aiPortfolioComplianceSurface.innerHTML = decisionEmpty("제약조건 검사 결과가 없습니다.");
-    return;
-  }
-  const allocations = check.allocation_by_asset_class || {};
-  els.aiPortfolioComplianceSurface.innerHTML = `
-    ${aiStatusRow(check.status, `제약조건 ${check.status}`)}
-    <div class="decision-metric-grid dense">
-      ${decisionMetric("Equity", `${fmtDecimal(allocations.equity, 2)}%`, "ok")}
-      ${decisionMetric("Bond", `${fmtDecimal(allocations.bond, 2)}%`, "ok")}
-      ${decisionMetric("Cash", `${fmtDecimal(allocations.cash, 2)}%`, "ok")}
-      ${decisionMetric("Alternative", `${fmtDecimal(allocations.alternative, 2)}%`, "ok")}
-      ${decisionMetric("위반 수", _fmtNumber((check.violations || []).length), (check.violations || []).length ? check.status : "ok")}
-    </div>
-    <div class="decision-list compact">
-      ${(check.violations || []).length ? check.violations.map((item) => `
-        <div class="decision-list-row">
-          <span>${escapeHtml(item.rule)}</span>
-          <strong class="${escapeHtml(item.severity === "fail" ? "fail" : "warn")}">${escapeHtml(item.message)}</strong>
-        </div>
-      `).join("") : '<div class="muted small">정책 위반이 없습니다.</div>'}
-    </div>
-  `;
-}
-
-function parseAiCurrentWeights() {
-  const text = String(els.aiPortfolioCurrentWeights?.value || "").trim();
-  if (!text) {
-    const rec = state.aiPortfolioRecommendation;
-    return Object.fromEntries((rec?.weights || []).map((item) => [item.ticker, item.weight]));
-  }
-  try {
-    const parsed = JSON.parse(text);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return Object.fromEntries(Object.entries(parsed).map(([key, value]) => [normalizeTickerToken(key), Number(value)]).filter(([key, value]) => key && Number.isFinite(value)));
-    }
-  } catch { /* fall through */ }
-  const out = {};
-  text.split(/[,;\n]+/).forEach((part) => {
-    const match = part.trim().match(/^([A-Za-z0-9.-]+)\s+(-?\d+(?:\.\d+)?)$/);
-    if (match) out[normalizeTickerToken(match[1])] = Number(match[2]);
-  });
-  return out;
-}
-
-function renderAiRebalance(signal) {
-  if (!els.aiPortfolioRebalanceSurface) return;
-  if (!signal) {
-    els.aiPortfolioRebalanceSurface.innerHTML = decisionEmpty("리밸런싱 신호가 없습니다.");
-    return;
-  }
-  els.aiPortfolioRebalanceSurface.innerHTML = `
-    ${aiStatusRow(signal.rebalance_required ? "warn" : "success", signal.rebalance_required ? "리밸런싱 필요" : "리밸런싱 불필요")}
-    <div class="decision-chip-row">
-      ${(signal.trigger_type || []).map((item) => `<span>${escapeHtml(item)}</span>`).join("") || "<span>trigger 없음</span>"}
-      <span>${escapeHtml(signal.status || "-")}</span>
-    </div>
-    <div class="decision-table-wrap">
-      <table class="decision-table">
-        <thead><tr><th>Ticker</th><th>Current</th><th>Target</th><th>Change</th><th>Action</th></tr></thead>
-        <tbody>
-          ${(signal.recommended_changes || []).map((item) => `
-            <tr><td>${escapeHtml(item.ticker)}</td><td>${escapeHtml(fmtDecimal(item.current_weight, 2))}%</td><td>${escapeHtml(fmtDecimal(item.target_weight, 2))}%</td><td>${escapeHtml(fmtDecimal(item.change, 2))}%</td><td>${escapeHtml(item.action)}</td></tr>
-          `).join("") || '<tr><td colspan="5">변경 제안이 없습니다.</td></tr>'}
-        </tbody>
-      </table>
-    </div>
-    <div class="ai-explanation-box">${escapeHtml(signal.ai_explanation || "")}</div>
-  `;
-  [els.aiPortfolioApproveRebalance, els.aiPortfolioRejectRebalance, els.aiPortfolioDeferRebalance].forEach((button) => {
-    if (button) button.disabled = !signal.signal_id || !signal.rebalance_required;
-  });
-}
-
-async function renderAiHistory(policyId) {
-  if (!els.aiPortfolioHistorySurface || !policyId) return;
-  try {
-    const res = await fetch(API.aiPortfolioHistory(policyId));
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-    const items = Array.isArray(data.items) ? data.items.slice(-12).reverse() : [];
-    els.aiPortfolioHistorySurface.innerHTML = items.length ? `
-      <div class="ai-history-list">
-        ${items.map((item) => `
-          <div class="ai-history-event">
-            <strong>${escapeHtml(item.event_type || "-")}</strong>
-            <span>${escapeHtml(item.event_time || "-")} · ${escapeHtml(item.summary || "")}</span>
-          </div>
-        `).join("")}
-      </div>
-    ` : decisionEmpty("아직 AI Portfolio 이력이 없습니다.");
-  } catch (err) {
-    els.aiPortfolioHistorySurface.innerHTML = decisionEmpty(`이력 로드 실패: ${err.message || err}`);
-  }
-}
-
-function renderAiPortfolioResponse(data) {
-  state.aiPortfolioPolicy = data.policy || null;
-  state.aiPortfolioRecommendation = data.recommendation || null;
-  renderAiOverview(state.aiPortfolioPolicy, state.aiPortfolioRecommendation);
-  renderAiRecommendation(state.aiPortfolioPolicy, state.aiPortfolioRecommendation);
-  renderAiPerformance(state.aiPortfolioRecommendation);
-  renderAiCompliance(state.aiPortfolioRecommendation);
-  if (els.aiPortfolioCurrentWeights && state.aiPortfolioRecommendation?.weights?.length) {
-    els.aiPortfolioCurrentWeights.placeholder = JSON.stringify(Object.fromEntries(state.aiPortfolioRecommendation.weights.map((item) => [item.ticker, item.weight])), null, 2);
-  }
-  renderAiHistory(state.aiPortfolioPolicy?.policy_id);
-}
-
-async function runAiPortfolioGenerate() {
-  await loadAiPortfolio(false);
-  if (!els.aiPortfolioRecommendationSurface) return;
-  els.aiPortfolioRecommendationSurface.innerHTML = decisionEmpty("정량 엔진이 정책 기반 비중을 계산하는 중입니다.");
-  try {
-    const res = await fetch(API.aiPortfolioGenerate, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(aiPolicyPayload()),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-    renderAiPortfolioResponse(data);
-  } catch (err) {
-    els.aiPortfolioRecommendationSurface.innerHTML = decisionEmpty(`AI Portfolio 생성 실패: ${err.message || err}`);
-  }
-}
-
-async function checkAiPortfolioRebalance() {
-  if (!state.aiPortfolioPolicy?.policy_id) {
-    if (els.aiPortfolioRebalanceSurface) els.aiPortfolioRebalanceSurface.innerHTML = decisionEmpty("먼저 AI Portfolio를 생성해야 합니다.");
-    return;
-  }
-  if (els.aiPortfolioRebalanceSurface) els.aiPortfolioRebalanceSurface.innerHTML = decisionEmpty("현재 비중과 목표 비중의 정책 이탈을 점검하는 중입니다.");
-  try {
-    const res = await fetch(API.aiPortfolioRebalanceCheck, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ policy_id: state.aiPortfolioPolicy.policy_id, current_weights: parseAiCurrentWeights() }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-    state.aiPortfolioSignal = data.signal || null;
-    renderAiRebalance(state.aiPortfolioSignal);
-    renderAiOverview(state.aiPortfolioPolicy, state.aiPortfolioRecommendation);
-    renderAiHistory(state.aiPortfolioPolicy.policy_id);
-  } catch (err) {
-    if (els.aiPortfolioRebalanceSurface) els.aiPortfolioRebalanceSurface.innerHTML = decisionEmpty(`리밸런싱 점검 실패: ${err.message || err}`);
-  }
-}
-
-async function updateAiPortfolioRebalance(action) {
-  const signalId = state.aiPortfolioSignal?.signal_id;
-  if (!signalId) return;
-  try {
-    const res = await fetch(API.aiPortfolioRebalanceAction(signalId, action), { method: "POST" });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-    state.aiPortfolioSignal = data;
-    renderAiRebalance(state.aiPortfolioSignal);
-    renderAiHistory(state.aiPortfolioPolicy?.policy_id);
-  } catch (err) {
-    if (els.aiPortfolioRebalanceSurface) els.aiPortfolioRebalanceSurface.innerHTML += `<div class="decision-warning">리밸런싱 ${escapeHtml(action)} 실패: ${escapeHtml(err.message || err)}</div>`;
-  }
-}
-
-async function generateAiPortfolioReport(reportType = "weekly") {
-  if (!state.aiPortfolioPolicy?.policy_id) {
-    if (els.aiPortfolioReportsSurface) els.aiPortfolioReportsSurface.innerHTML = decisionEmpty("먼저 AI Portfolio를 생성해야 리포트를 만들 수 있습니다.");
-    return;
-  }
-  if (els.aiPortfolioReportsSurface) els.aiPortfolioReportsSurface.innerHTML = decisionEmpty(`${reportType} 리포트를 생성하는 중입니다.`);
-  try {
-    const res = await fetch(API.aiPortfolioReportsGenerate, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ policy_id: state.aiPortfolioPolicy.policy_id, report_type: reportType }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-    els.aiPortfolioReportsSurface.innerHTML = `<div class="ai-report-box">${escapeHtml(data.markdown || "report unavailable")}</div>`;
-    renderAiHistory(state.aiPortfolioPolicy.policy_id);
-  } catch (err) {
-    if (els.aiPortfolioReportsSurface) els.aiPortfolioReportsSurface.innerHTML = decisionEmpty(`리포트 생성 실패: ${err.message || err}`);
-  }
-}
-
 function aiNumberInput(el, fallback, { min = -Infinity, max = Infinity } = {}) {
   const value = Number(el?.value);
   if (!Number.isFinite(value)) return fallback;
@@ -8761,7 +8633,6 @@ async function loadAiPortfolio(force = false) {
   }
   loadAiPortfolioOps(force);
   loadAiPortfolioPolicies(force);
-  loadAiPortfolioOperations(force);
 }
 
 function aiPortfolioDashboardUrl() {
@@ -8769,6 +8640,60 @@ function aiPortfolioDashboardUrl() {
   const policyId = aiActivePolicyId();
   if (policyId) params.set("policy_id", policyId);
   return `${API.aiPortfolioDashboard}?${params.toString()}`;
+}
+
+function aiPortfolioDashboardCacheFresh(url = aiPortfolioDashboardUrl()) {
+  return !!(
+    state.aiPortfolioDashboard &&
+    state.aiPortfolioDashboardUrl === url &&
+    Date.now() - state.aiPortfolioDashboardFetchedAt < AI_PORTFOLIO_DASHBOARD_CACHE_TTL_MS
+  );
+}
+
+function clearAiPortfolioDashboardCache() {
+  state.aiPortfolioOpsLoaded = false;
+  state.aiPortfolioDashboard = null;
+  state.aiPortfolioDashboardFetchedAt = 0;
+  state.aiPortfolioDashboardUrl = "";
+  state.aiPortfolioDashboardRequest = null;
+  state.aiPortfolioDashboardRequestUrl = "";
+  state.aiPortfolioDashboardCacheVersion += 1;
+  state.aiPortfolioOperations = [];
+}
+
+async function fetchAiPortfolioDashboard(force = false) {
+  const url = aiPortfolioDashboardUrl();
+  if (!force && aiPortfolioDashboardCacheFresh(url)) return state.aiPortfolioDashboard;
+  if (state.aiPortfolioDashboardRequest && state.aiPortfolioDashboardRequestUrl === url) {
+    return state.aiPortfolioDashboardRequest;
+  }
+  const cacheVersion = state.aiPortfolioDashboardCacheVersion;
+  state.aiPortfolioDashboardRequestUrl = url;
+  const request = (async () => {
+    const res = await fetch(url);
+    const dashboard = await res.json();
+    if (!res.ok) throw new Error(dashboard.detail || `dashboard HTTP ${res.status}`);
+    if (cacheVersion !== state.aiPortfolioDashboardCacheVersion) {
+      const err = new Error("AI Portfolio dashboard request was superseded");
+      err.superseded = true;
+      throw err;
+    }
+    state.aiPortfolioDashboard = dashboard;
+    state.aiPortfolioDashboardUrl = url;
+    state.aiPortfolioDashboardFetchedAt = Date.now();
+    state.aiPortfolioOperations = dashboard.operation_summary?.recent_operations || [];
+    state.aiPortfolioOpsLoaded = true;
+    return dashboard;
+  })();
+  state.aiPortfolioDashboardRequest = request;
+  try {
+    return await request;
+  } finally {
+    if (state.aiPortfolioDashboardRequest === request) {
+      state.aiPortfolioDashboardRequest = null;
+      state.aiPortfolioDashboardRequestUrl = "";
+    }
+  }
 }
 
 function renderAiPortfolioCoverage(rows) {
@@ -8828,6 +8753,7 @@ function renderAiPortfolioSnapshotTimeline(items) {
 
 function renderAiPortfolioOpsDashboard(dashboard) {
   if (!els.aiPortfolioOpsSurface) return;
+  const aiPortfolioUi = window.FinGPTAiPortfolioUi || {};
   const store = dashboard?.store_status || {};
   const collections = store.collections || {};
   const health = dashboard?.data_health_summary || {};
@@ -8847,6 +8773,7 @@ function renderAiPortfolioOpsDashboard(dashboard) {
       <span class="decision-badge ok">${escapeHtml(store.primary_store || "sqlite")}</span>
       <span>${escapeHtml(selected ? `${selected.portfolio_name} · ${selected.data_quality_status}` : "선택된 정책 없음")}</span>
     </div>
+    ${typeof aiPortfolioUi.dashboardMeta === "function" ? aiPortfolioUi.dashboardMeta(dashboard) : ""}
     <div class="decision-metric-grid dense">
       ${decisionMetric("정책", String(collections.policies?.item_count || dashboard?.policy_counts?.total || 0), "ok")}
       ${decisionMetric("활성 정책", String(dashboard?.policy_counts?.active || 0), dashboard?.policy_counts?.active ? "ok" : "warn")}
@@ -8871,25 +8798,25 @@ function renderAiPortfolioOpsDashboard(dashboard) {
 }
 
 async function loadAiPortfolioOps(force = false) {
-  if (!els.aiPortfolioOpsSurface || (!force && state.aiPortfolioOpsLoaded)) {
+  const dashboardUrl = aiPortfolioDashboardUrl();
+  if (!els.aiPortfolioOpsSurface || (!force && state.aiPortfolioOpsLoaded && aiPortfolioDashboardCacheFresh(dashboardUrl))) {
     if (state.aiPortfolioDashboard) {
       renderAiPortfolioOpsDashboard(state.aiPortfolioDashboard);
+      renderAiPortfolioOperations(state.aiPortfolioOperations);
     }
     return;
   }
-  els.aiPortfolioOpsSurface.innerHTML = decisionEmpty("AI Portfolio 운영 대시보드를 확인하는 중입니다.");
-  if (els.aiPortfolioCoverageSurface) els.aiPortfolioCoverageSurface.innerHTML = decisionEmpty("데이터 coverage를 불러오는 중입니다.");
-  if (els.aiPortfolioSnapshotTimelineSurface) els.aiPortfolioSnapshotTimelineSurface.innerHTML = decisionEmpty("스냅샷 timeline을 불러오는 중입니다.");
+  if (force || !state.aiPortfolioDashboard) {
+    els.aiPortfolioOpsSurface.innerHTML = decisionEmpty("AI Portfolio 운영 대시보드를 확인하는 중입니다.");
+    if (els.aiPortfolioCoverageSurface) els.aiPortfolioCoverageSurface.innerHTML = decisionEmpty("데이터 coverage를 불러오는 중입니다.");
+    if (els.aiPortfolioSnapshotTimelineSurface) els.aiPortfolioSnapshotTimelineSurface.innerHTML = decisionEmpty("스냅샷 timeline을 불러오는 중입니다.");
+  }
   try {
-    const res = await fetch(aiPortfolioDashboardUrl());
-    const dashboard = await res.json();
-    if (!res.ok) throw new Error(dashboard.detail || `dashboard HTTP ${res.status}`);
-    state.aiPortfolioDashboard = dashboard;
-    state.aiPortfolioOperations = dashboard.operation_summary?.recent_operations || [];
+    const dashboard = await fetchAiPortfolioDashboard(force);
     renderAiPortfolioOpsDashboard(dashboard);
     renderAiPortfolioOperations(state.aiPortfolioOperations);
-    state.aiPortfolioOpsLoaded = true;
   } catch (err) {
+    if (err?.superseded) return;
     els.aiPortfolioOpsSurface.innerHTML = decisionEmpty(`운영 상태 조회 실패: ${err.message || err}`);
     if (els.aiPortfolioCoverageSurface) els.aiPortfolioCoverageSurface.innerHTML = decisionEmpty("coverage 조회 실패");
     if (els.aiPortfolioSnapshotTimelineSurface) els.aiPortfolioSnapshotTimelineSurface.innerHTML = decisionEmpty("snapshot timeline 조회 실패");
@@ -8924,6 +8851,11 @@ function renderAiPortfolioOperations(items) {
     els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty("아직 실행된 운영 작업이 없습니다.");
     return;
   }
+  const operationList = window.FinGPTAiPortfolioUi?.operationList?.(items);
+  if (operationList) {
+    els.aiPortfolioOperationsSurface.innerHTML = operationList;
+    return;
+  }
   els.aiPortfolioOperationsSurface.innerHTML = `
     <div class="decision-list compact">
       ${items.slice(0, 8).map((item) => `
@@ -8951,27 +8883,6 @@ async function loadAiPortfolioPolicies(force = false) {
     renderAiPortfolioPolicies(state.aiPortfolioPolicies);
   } catch (err) {
     els.aiPortfolioPolicyListSurface.innerHTML = decisionEmpty(`정책 목록 로드 실패: ${err.message || err}`);
-  }
-}
-
-async function loadAiPortfolioOperations(force = false) {
-  if (!els.aiPortfolioOperationsSurface) return;
-  if (!force && state.aiPortfolioOperations.length) {
-    renderAiPortfolioOperations(state.aiPortfolioOperations);
-    return;
-  }
-  els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty("운영 작업 이력을 불러오는 중입니다.");
-  try {
-    const res = await fetch(aiPortfolioDashboardUrl());
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-    state.aiPortfolioDashboard = data;
-    state.aiPortfolioOperations = Array.isArray(data.operation_summary?.recent_operations) ? data.operation_summary.recent_operations : [];
-    renderAiPortfolioCoverage(data.coverage_rows || []);
-    renderAiPortfolioSnapshotTimeline(data.snapshot_timeline || []);
-    renderAiPortfolioOperations(state.aiPortfolioOperations);
-  } catch (err) {
-    els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty(`운영 작업 로드 실패: ${err.message || err}`);
   }
 }
 
@@ -9013,6 +8924,8 @@ async function loadAiRecommendationDiff(policyId = aiActivePolicyId()) {
 }
 
 async function runAiPortfolioHydrateData({ missingOnly = false } = {}) {
+  const actionButton = missingOnly ? els.aiPortfolioRetryMissing : els.aiPortfolioHydrateData;
+  setButtonBusy(actionButton, true, missingOnly ? "재시도 중" : "보강 중");
   if (els.aiPortfolioOperationsSurface) {
     els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty("가격/재무 데이터 보강 작업을 실행하는 중입니다. 네트워크 상태에 따라 시간이 걸릴 수 있습니다.");
   }
@@ -9039,18 +8952,18 @@ async function runAiPortfolioHydrateData({ missingOnly = false } = {}) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-    state.aiPortfolioOperations = [];
-    state.aiPortfolioDashboard = null;
     renderAiPortfolioOperations([data]);
-    state.aiPortfolioOpsLoaded = false;
+    clearAiPortfolioDashboardCache();
     loadAiPortfolioOps(true);
-    loadAiPortfolioOperations(true);
   } catch (err) {
     if (els.aiPortfolioOperationsSurface) els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty(`데이터 보강 실패: ${err.message || err}`);
+  } finally {
+    setButtonBusy(actionButton, false);
   }
 }
 
 async function runAiPortfolioSnapshotJob() {
+  setButtonBusy(els.aiPortfolioSnapshotJob, true, "스냅샷 중");
   if (els.aiPortfolioOperationsSurface) els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty("성과 스냅샷 작업을 실행하는 중입니다.");
   const payload = aiActivePolicyId() ? { policy_id: aiActivePolicyId(), active_only: false } : { active_only: true };
   try {
@@ -9061,19 +8974,19 @@ async function runAiPortfolioSnapshotJob() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-    state.aiPortfolioOperations = [];
-    state.aiPortfolioDashboard = null;
     renderAiPortfolioOperations([data]);
-    state.aiPortfolioOpsLoaded = false;
+    clearAiPortfolioDashboardCache();
     loadAiPortfolioOps(true);
-    loadAiPortfolioOperations(true);
     loadAiPortfolioHistory();
   } catch (err) {
     if (els.aiPortfolioOperationsSurface) els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty(`성과 스냅샷 실패: ${err.message || err}`);
+  } finally {
+    setButtonBusy(els.aiPortfolioSnapshotJob, false);
   }
 }
 
 async function runAiPortfolioSecRefresh() {
+  setButtonBusy(els.aiPortfolioSecRefresh, true, "SEC 갱신 중");
   if (els.aiPortfolioOperationsSurface) {
     els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty("SEC 10-K/10-Q/8-K와 companyfacts 재무 데이터를 갱신하는 중입니다.");
   }
@@ -9096,14 +9009,13 @@ async function runAiPortfolioSecRefresh() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-    state.aiPortfolioOperations = [];
-    state.aiPortfolioDashboard = null;
     renderAiPortfolioOperations([data]);
-    state.aiPortfolioOpsLoaded = false;
+    clearAiPortfolioDashboardCache();
     loadAiPortfolioOps(true);
-    loadAiPortfolioOperations(true);
   } catch (err) {
     if (els.aiPortfolioOperationsSurface) els.aiPortfolioOperationsSurface.innerHTML = decisionEmpty(`SEC 데이터 갱신 실패: ${err.message || err}`);
+  } finally {
+    setButtonBusy(els.aiPortfolioSecRefresh, false);
   }
 }
 
@@ -9205,8 +9117,7 @@ async function runAiPortfolioGenerate() {
     const data = await res.json();
     if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data));
     renderAiPortfolioResult(data);
-    state.aiPortfolioDashboard = null;
-    state.aiPortfolioOpsLoaded = false;
+    clearAiPortfolioDashboardCache();
     loadAiPortfolioOps(true);
   } catch (err) {
     if (els.aiPortfolioOverviewSurface) els.aiPortfolioOverviewSurface.innerHTML = decisionEmpty(`AI Portfolio 생성 실패: ${err.message || err}`);
@@ -10020,36 +9931,8 @@ async function loadForecastJobs(force = false) {
 
 function renderForecastJobs(items) {
   if (!els.forecastJobsSurface) return;
-  els.forecastJobsSurface.innerHTML = items.length ? `
-    <div class="decision-table-wrap"><table class="decision-table"><thead><tr><th>Job</th><th>Status</th><th>Ticker</th><th>Model</th><th>Stage</th><th>Result</th><th>Action</th></tr></thead><tbody>
-      ${items.map((item) => {
-        const summary = item.result_summary || {};
-        const experimentId = summary.experiment_id || "";
-        const canCancel = item.can_cancel && !["succeeded", "failed", "cancelled"].includes(item.job_status);
-        const canRetry = item.can_retry || ["failed", "cancelled"].includes(item.job_status);
-        return `<tr>
-          <td>${escapeHtml(item.job_id || "")}</td>
-          <td><span class="decision-badge ${escapeHtml(forecastJobStatusClass(item.job_status))}">${escapeHtml(item.job_status || "")}</span></td>
-          <td>${escapeHtml(item.ticker || "")}</td>
-          <td>${escapeHtml(item.model_name || "")}</td>
-          <td>${escapeHtml(item.progress_stage || "")}<br><span class="muted">${escapeHtml(item.progress_message || "")}</span></td>
-          <td>${experimentId ? `<button type="button" class="linkish" data-action="forecast-experiment-detail" data-experiment-id="${escapeHtml(experimentId)}">${escapeHtml(experimentId)}</button>` : escapeHtml(summary.status || "")}</td>
-          <td>
-            <button type="button" class="linkish" data-action="forecast-job-refresh" data-job-id="${escapeHtml(item.job_id || "")}">refresh</button>
-            ${canCancel ? `<button type="button" class="linkish" data-action="forecast-job-cancel" data-job-id="${escapeHtml(item.job_id || "")}">cancel</button>` : ""}
-            ${canRetry ? `<button type="button" class="linkish" data-action="forecast-job-retry" data-job-id="${escapeHtml(item.job_id || "")}">retry</button>` : ""}
-          </td>
-        </tr>`;
-      }).join("")}
-    </tbody></table></div>
-  ` : decisionEmpty("아직 제출된 Forecast job이 없습니다.");
-}
-
-function forecastJobStatusClass(status) {
-  if (status === "succeeded") return "ok";
-  if (status === "failed" || status === "cancelled") return "fail";
-  if (status === "running") return "warn";
-  return "neutral";
+  const rendered = window.FinGPTForecastUi?.jobs?.(items);
+  els.forecastJobsSurface.innerHTML = rendered || decisionEmpty("Forecast UI module is unavailable.");
 }
 
 function scheduleForecastJobPoll(jobId) {
@@ -10671,74 +10554,85 @@ async function loadRun(runId) {
 }
 
 // ---------- Watchlist ----------
-async function renderWatchlist() {
+async function renderWatchlist(options = {}) {
   if (!els.watchlistList) return;
-  try {
-    const res = await fetch(API.watchlist);
-    if (!res.ok) return;
-    const data = await res.json();
-    const items = data.items || [];
+  const force = !!options.force;
+  if (!shouldRunBackgroundPoll(force)) return state.watchlistItems;
+  if (state.watchlistRequest) return state.watchlistRequest;
+  state.watchlistRequest = (async () => {
+    try {
+      const res = await fetch(API.watchlist);
+      if (!res.ok) return state.watchlistItems;
+      const data = await res.json();
+      const items = data.items || [];
 
-    if (els.watchlistSchedStatus) {
-      const sched = data.scheduler || {};
-      const running = sched.running ? "on" : "off";
-      els.watchlistSchedStatus.textContent = `sched · ${running} · ${sched.runs_triggered ?? 0} runs`;
-      els.watchlistSchedStatus.classList.toggle("on", !!sched.running);
-    }
+      if (els.watchlistSchedStatus) {
+        const sched = data.scheduler || {};
+        const running = sched.running ? "on" : "off";
+        els.watchlistSchedStatus.textContent = `sched · ${running} · ${sched.runs_triggered ?? 0} runs`;
+        els.watchlistSchedStatus.classList.toggle("on", !!sched.running);
+      }
 
-    if (items.length === 0) {
-      els.watchlistList.innerHTML = `<li class="watchlist-empty">저장된 Watchlist 항목이 없습니다.</li>`;
-      return;
-    }
+      if (items.length === 0) {
+        els.watchlistList.innerHTML = `<li class="watchlist-empty">저장된 Watchlist 항목이 없습니다.</li>`;
+        state.watchlistItems = [];
+        return state.watchlistItems;
+      }
 
-    els.watchlistList.innerHTML = items
-      .map((it) => {
-        const last = it.last_run_at ? timeAgo(it.last_run_at) : "—";
-        const status = it.last_run_status
-          ? `<span class="status-badge ${statusClass(it.last_run_status)}">${escapeHtml(decisionStatusLabel(it.last_run_status))}</span>`
-          : `<span class="status-badge neutral">신규</span>`;
-        const interval = it.interval_hours
-          ? `<span class="wl-interval">${it.interval_hours}시간마다</span>`
-          : `<span class="wl-interval muted">수동</span>`;
-        const enabled = it.enabled ? "" : `<span class="wl-paused">일시정지</span>`;
-        const err = it.last_run_error
-          ? `<div class="wl-error" title="${escapeHtml(it.last_run_error)}">${escapeHtml(it.last_run_error.slice(0, 80))}</div>`
-          : "";
-        return `
-          <li class="watchlist-item" data-id="${escapeHtml(it.id)}">
-            <div class="wl-top">
-              <div class="wl-ticker">${escapeHtml(it.ticker)}</div>
-              ${status}
-              ${enabled}
-            </div>
-            <div class="wl-question" title="${escapeHtml(it.question)}">${escapeHtml(it.question.length > 80 ? it.question.slice(0, 80) + "…" : it.question)}</div>
-            <div class="wl-meta">
-              ${interval}
-              <span class="wl-last">최근: ${last}</span>
-              <span class="wl-count">· ${it.run_count || 0}회</span>
-            </div>
-            ${err}
-            <div class="wl-actions">
-              <button type="button" class="linkish wl-run" data-id="${escapeHtml(it.id)}" title="지금 실행">실행</button>
-              <button type="button" class="linkish wl-load" data-id="${escapeHtml(it.id)}" title="폼에 불러오기">불러오기</button>
-              <button type="button" class="linkish wl-toggle" data-id="${escapeHtml(it.id)}" data-enabled="${it.enabled}" title="일시정지/재개">${it.enabled ? "정지" : "재개"}</button>
-              <button type="button" class="linkish danger wl-delete" data-id="${escapeHtml(it.id)}" title="삭제">삭제</button>
-            </div>
-          </li>`;
-      })
-      .join("");
+      els.watchlistList.innerHTML = items
+        .map((it) => {
+          const last = it.last_run_at ? timeAgo(it.last_run_at) : "—";
+          const status = it.last_run_status
+            ? `<span class="status-badge ${statusClass(it.last_run_status)}">${escapeHtml(decisionStatusLabel(it.last_run_status))}</span>`
+            : `<span class="status-badge neutral">신규</span>`;
+          const interval = it.interval_hours
+            ? `<span class="wl-interval">${it.interval_hours}시간마다</span>`
+            : `<span class="wl-interval muted">수동</span>`;
+          const enabled = it.enabled ? "" : `<span class="wl-paused">일시정지</span>`;
+          const err = it.last_run_error
+            ? `<div class="wl-error" title="${escapeHtml(it.last_run_error)}">${escapeHtml(it.last_run_error.slice(0, 80))}</div>`
+            : "";
+          return `
+            <li class="watchlist-item" data-id="${escapeHtml(it.id)}">
+              <div class="wl-top">
+                <div class="wl-ticker">${escapeHtml(it.ticker)}</div>
+                ${status}
+                ${enabled}
+              </div>
+              <div class="wl-question" title="${escapeHtml(it.question)}">${escapeHtml(it.question.length > 80 ? it.question.slice(0, 80) + "…" : it.question)}</div>
+              <div class="wl-meta">
+                ${interval}
+                <span class="wl-last">최근: ${last}</span>
+                <span class="wl-count">· ${it.run_count || 0}회</span>
+              </div>
+              ${err}
+              <div class="wl-actions">
+                <button type="button" class="linkish wl-run" data-id="${escapeHtml(it.id)}" title="지금 실행">실행</button>
+                <button type="button" class="linkish wl-load" data-id="${escapeHtml(it.id)}" title="폼에 불러오기">불러오기</button>
+                <button type="button" class="linkish wl-toggle" data-id="${escapeHtml(it.id)}" data-enabled="${it.enabled}" title="일시정지/재개">${it.enabled ? "정지" : "재개"}</button>
+                <button type="button" class="linkish danger wl-delete" data-id="${escapeHtml(it.id)}" title="삭제">삭제</button>
+              </div>
+            </li>`;
+        })
+        .join("");
 
-    state.watchlistItems = items;
-    wireWatchlistActions();
-  } catch (err) {
-    if (els.watchlistList) {
-      els.watchlistList.innerHTML = `<li class="watchlist-empty">Watchlist를 불러오지 못했습니다.</li>`;
+      state.watchlistItems = items;
+      wireWatchlistActions();
+      return state.watchlistItems;
+    } catch (err) {
+      if (els.watchlistList) {
+        els.watchlistList.innerHTML = `<li class="watchlist-empty">Watchlist를 불러오지 못했습니다.</li>`;
+      }
+      if (els.watchlistSchedStatus) {
+        els.watchlistSchedStatus.textContent = "sched · 연결 실패";
+        els.watchlistSchedStatus.classList.remove("on");
+      }
+      return state.watchlistItems;
+    } finally {
+      state.watchlistRequest = null;
     }
-    if (els.watchlistSchedStatus) {
-      els.watchlistSchedStatus.textContent = "sched · 연결 실패";
-      els.watchlistSchedStatus.classList.remove("on");
-    }
-  }
+  })();
+  return state.watchlistRequest;
 }
 
 function wireWatchlistActions() {
@@ -13847,9 +13741,8 @@ function bindInputs() {
   if (els.aiPortfolioGenerate) els.aiPortfolioGenerate.addEventListener("click", runAiPortfolioGenerate);
   if (els.aiPortfolioOpsRefresh) {
     els.aiPortfolioOpsRefresh.addEventListener("click", () => {
-      state.aiPortfolioOpsLoaded = false;
+      clearAiPortfolioDashboardCache();
       loadAiPortfolioOps(true);
-      loadAiPortfolioOperations(true);
     });
   }
   if (els.aiPortfolioRefreshPolicies) els.aiPortfolioRefreshPolicies.addEventListener("click", () => loadAiPortfolioPolicies(true));
@@ -13966,12 +13859,14 @@ function bindInputs() {
 
 // ---------- Init ----------
 (async function init() {
+  bindThemeToggle();
   normalizeStaticLabels();
   await loadConfig();
   bindTabs();
   bindDownloads();
   bindInputs();
   bindCommandPanelToggle();
+  bindTvChartControls();
   initChartTooltips();
   restoreForm();
   syncAiPortfolioUniverseMode();
@@ -13980,15 +13875,20 @@ function bindInputs() {
   renderSymbolTargetChips("aiPortfolioCustomUniverse");
   populateBacktestStrategyRegistry();
   renderHistory();
-  renderWatchlist();
+  renderWatchlist({ force: true });
   loadActiveDashboardResources(false);
   if (els.watchlistAddBtn) {
     els.watchlistAddBtn.addEventListener("click", watchlistAddFromForm);
   }
   // Poll watchlist every 30s so scheduled runs and last_run_at timestamps stay fresh.
-  state.watchlistTimer = setInterval(renderWatchlist, 30000);
+  state.watchlistTimer = setInterval(() => renderWatchlist(), 30000);
   checkHealth();
   loadRunbook();
-  loadPreflight(false);
+  loadPreflight(false, { allowHidden: true });
   state.preflightTimer = setInterval(() => loadPreflight(false), 60000);
+  document.addEventListener("visibilitychange", () => {
+    if (!shouldRunBackgroundPoll()) return;
+    renderWatchlist();
+    loadPreflight(false);
+  });
 })();

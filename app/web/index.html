@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FinGPT Local Research Assistant</title>
-  <link rel="stylesheet" href="styles.css?v=20260512-ui-density" />
+  <link rel="stylesheet" href="styles.css?v=20260512-macro-cache" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='48' font-size='48'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E" />
 </head>
 <body>
@@ -24,6 +24,7 @@
       </button>
       <button id="qdrantAdminBtn" type="button" class="ghost-btn admin-btn" title="벡터 DB 컬렉션 상태와 정리">Qdrant</button>
       <button id="qualityDashBtn" type="button" class="ghost-btn admin-btn" title="평가 및 품질 대시보드">품질</button>
+      <button id="themeToggleBtn" type="button" class="ghost-btn admin-btn theme-toggle" aria-pressed="false" aria-label="테마 전환">테마</button>
       <span id="healthPill" class="health-pill">api · 확인 중</span>
     </nav>
   </header>
@@ -318,7 +319,54 @@
           <section class="home-card home-chart-card market-surface">
             <div class="home-card-head">
               <h3>TradingView 단일 차트</h3>
-              <span>SPY · Daily</span>
+              <span id="tvOverviewMeta">SPY · Daily</span>
+            </div>
+            <div class="chart-control-bar" aria-label="TradingView chart controls">
+              <label>
+                <span>소스</span>
+                <select id="tvChartSource" aria-label="Market chart source">
+                  <option value="tradingview">TradingView</option>
+                  <option value="internal">Internal data</option>
+                </select>
+              </label>
+              <label>
+                <span>심볼</span>
+                <select id="tvChartSymbol" aria-label="TradingView chart symbol">
+                  <option value="SPY">SPY · S&P 500</option>
+                  <option value="QQQ">QQQ · Nasdaq 100</option>
+                  <option value="TLT">TLT · 20Y Treasury</option>
+                  <option value="HYG">HYG · High Yield</option>
+                  <option value="LQD">LQD · IG Credit</option>
+                  <option value="GLD">GLD · Gold</option>
+                  <option value="BTC-USD">BTC-USD · Bitcoin</option>
+                  <option value="DXY">DXY · Dollar Index</option>
+                  <option value="US10Y">US10Y · 10Y Yield</option>
+                </select>
+              </label>
+              <label>
+                <span>기간</span>
+                <select id="tvChartInterval" aria-label="TradingView chart interval">
+                  <option value="5">5m</option>
+                  <option value="15">15m</option>
+                  <option value="60">1h</option>
+                  <option value="D">Daily</option>
+                  <option value="W">Weekly</option>
+                  <option value="M">Monthly</option>
+                </select>
+              </label>
+              <label>
+                <span>비교</span>
+                <select id="tvChartCompare" aria-label="TradingView comparison symbol">
+                  <option value="">비교 없음</option>
+                  <option value="SPY">SPY</option>
+                  <option value="QQQ">QQQ</option>
+                  <option value="TLT">TLT</option>
+                  <option value="GLD">GLD</option>
+                  <option value="DXY">DXY</option>
+                  <option value="US10Y">US10Y</option>
+                </select>
+              </label>
+              <button id="tvChartApply" type="button" class="ghost-btn" data-testid="tradingview-chart-apply">적용</button>
             </div>
             <div id="tvOverviewWidget" class="tradingview-widget-container tv-overview">
               <div class="tradingview-widget-container__widget"></div>
@@ -1349,6 +1397,11 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260512-ui-density"></script>
+  <script src="modules/market-ui.js?v=20260514-domain-modules"></script>
+  <script src="modules/macro-ui.js?v=20260514-domain-modules"></script>
+  <script src="modules/forecast-ui.js?v=20260514-domain-modules"></script>
+  <script src="modules/quant-ui.js?v=20260514-domain-modules"></script>
+  <script src="modules/ai-portfolio-ui.js?v=20260514-domain-modules"></script>
+  <script src="app.js?v=20260514-domain-modules"></script>
 </body>
 </html>

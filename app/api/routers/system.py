@@ -52,7 +52,10 @@ SUPPORTED_INFERENCE_ROUTES = (
     "gemma-experimental",
 )
 
-_PREFLIGHT_CACHE_TTL_SEC = 15
+# Full preflight touches local services and provider probes. Keep the status
+# pill responsive across multiple open UI tabs; manual force refresh still
+# bypasses this cache.
+_PREFLIGHT_CACHE_TTL_SEC = 300
 _preflight_cache: dict[str, Any] = {"ts": 0.0, "report": None}
 _preflight_lock = asyncio.Lock()
 

@@ -288,6 +288,7 @@ class PortfolioDashboardResponse(BaseModel):
     coverage_rows: list[PortfolioCoverageRow] = Field(default_factory=list)
     snapshot_timeline: list[PortfolioSnapshotTimelinePoint] = Field(default_factory=list)
     operation_summary: PortfolioOperationSummary = Field(default_factory=PortfolioOperationSummary)
+    debug_timing: dict[str, float] = Field(default_factory=dict)
 
 
 class RecommendedChange(BaseModel):

@@ -6,6 +6,11 @@ import unittest
 APP_JS = Path(__file__).resolve().parents[1] / "app" / "web" / "app.js"
 INDEX_HTML = Path(__file__).resolve().parents[1] / "app" / "web" / "index.html"
 STYLES_CSS = Path(__file__).resolve().parents[1] / "app" / "web" / "styles.css"
+AI_PORTFOLIO_UI_JS = Path(__file__).resolve().parents[1] / "app" / "web" / "modules" / "ai-portfolio-ui.js"
+MARKET_UI_JS = Path(__file__).resolve().parents[1] / "app" / "web" / "modules" / "market-ui.js"
+MACRO_UI_JS = Path(__file__).resolve().parents[1] / "app" / "web" / "modules" / "macro-ui.js"
+FORECAST_UI_JS = Path(__file__).resolve().parents[1] / "app" / "web" / "modules" / "forecast-ui.js"
+QUANT_UI_JS = Path(__file__).resolve().parents[1] / "app" / "web" / "modules" / "quant-ui.js"
 
 
 class UiRoutingContractTests(unittest.TestCase):
@@ -57,6 +62,73 @@ class UiRoutingContractTests(unittest.TestCase):
     def test_progress_stage_helpers_are_null_safe(self):
         self.assertIn("function progressNode(stage)", self.source)
         self.assertIn("if (!node) return", self.source)
+
+    def test_top_level_function_declarations_are_not_shadowed(self):
+        names = re.findall(r"(?m)^\s*(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(", self.source)
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        self.assertEqual([], duplicates)
+
+    def test_background_polling_is_visibility_aware_and_deduplicated(self):
+        self.assertIn("function shouldRunBackgroundPoll", self.source)
+        self.assertIn("preflightRequest: null", self.source)
+        self.assertIn("watchlistRequest: null", self.source)
+        self.assertIn("if (state.preflightRequest) return state.preflightRequest", self.source)
+        self.assertIn("if (state.watchlistRequest) return state.watchlistRequest", self.source)
+        self.assertIn("renderWatchlist({ force: true })", self.source)
+        self.assertIn("state.watchlistTimer = setInterval(() => renderWatchlist(), 30000)", self.source)
+        self.assertIn("state.preflightTimer = setInterval(() => loadPreflight(false), 60000)", self.source)
+        self.assertIn('document.addEventListener("visibilitychange"', self.source)
+
+    def test_ai_portfolio_dashboard_is_loaded_once_per_refresh_path(self):
+        self.assertIn("async function loadAiPortfolioOps", self.source)
+        self.assertIn("const AI_PORTFOLIO_DASHBOARD_CACHE_TTL_MS = 15000", self.source)
+        self.assertIn("function aiPortfolioDashboardCacheFresh", self.source)
+        self.assertIn("function clearAiPortfolioDashboardCache", self.source)
+        self.assertIn("async function fetchAiPortfolioDashboard", self.source)
+        self.assertIn("if (state.aiPortfolioDashboardRequest && state.aiPortfolioDashboardRequestUrl === url)", self.source)
+        self.assertIn("return state.aiPortfolioDashboardRequest", self.source)
+        self.assertIn("Date.now() - state.aiPortfolioDashboardFetchedAt < AI_PORTFOLIO_DASHBOARD_CACHE_TTL_MS", self.source)
+        self.assertIn("err.superseded = true", self.source)
+        self.assertIn("if (err?.superseded) return", self.source)
+        self.assertIn("const dashboard = await fetchAiPortfolioDashboard(force)", self.source)
+        self.assertIn("clearAiPortfolioDashboardCache();", self.source)
+        self.assertNotIn("loadAiPortfolioOperations", self.source)
+
+    def test_ai_portfolio_ui_module_contract(self):
+        html = INDEX_HTML.read_text(encoding="utf-8")
+        css = STYLES_CSS.read_text(encoding="utf-8")
+        module_source = AI_PORTFOLIO_UI_JS.read_text(encoding="utf-8")
+        self.assertIn('src="modules/market-ui.js?v=20260514-domain-modules"', html)
+        self.assertIn('src="modules/macro-ui.js?v=20260514-domain-modules"', html)
+        self.assertIn('src="modules/forecast-ui.js?v=20260514-domain-modules"', html)
+        self.assertIn('src="modules/quant-ui.js?v=20260514-domain-modules"', html)
+        self.assertIn('src="modules/ai-portfolio-ui.js?v=20260514-domain-modules"', html)
+        self.assertIn('src="app.js?v=20260514-domain-modules"', html)
+        self.assertIn("global.FinGPTAiPortfolioUi", module_source)
+        self.assertIn("dashboardMeta", module_source)
+        self.assertIn("operationList", module_source)
+        self.assertIn("ai-portfolio-dashboard-meta", module_source)
+        self.assertIn("window.FinGPTAiPortfolioUi", self.source)
+        self.assertIn("window.FinGPTMarketUi", self.source)
+        self.assertIn("window.FinGPTMacroUi", self.source)
+        self.assertIn("window.FinGPTForecastUi", self.source)
+        self.assertIn("window.FinGPTQuantUi", self.source)
+        self.assertIn(".ai-dashboard-meta", css)
+        self.assertIn(".ai-operation-item", css)
+
+    def test_domain_ui_modules_are_connected(self):
+        modules = {
+            "market": (MARKET_UI_JS, "global.FinGPTMarketUi", ["marketTape", "marketSignals"]),
+            "macro": (MACRO_UI_JS, "global.FinGPTMacroUi", ["providerHealth"]),
+            "forecast": (FORECAST_UI_JS, "global.FinGPTForecastUi", ["jobs"]),
+            "quant": (QUANT_UI_JS, "global.FinGPTQuantUi", ["exportStorageReport"]),
+        }
+        for name, (path, global_marker, exported_markers) in modules.items():
+            with self.subTest(name=name):
+                source = path.read_text(encoding="utf-8")
+                self.assertIn(global_marker, source)
+                for marker in exported_markers:
+                    self.assertIn(marker, source)
 
     def test_quant_backtest_workbench_uses_artifact_endpoint(self):
         match = re.search(r"async function runHomeBacktest\(\) \{(?P<body>.*?)\n\}\n\nasync function loadQuantRunHistory", self.source, re.S)
@@ -296,6 +368,30 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn("loadDashboardMarket(force)", market_body)
         self.assertIn("loadDashboardNews(force)", market_body)
 
+    def test_tradingview_chart_controls_are_real_and_persistent(self):
+        html = INDEX_HTML.read_text(encoding="utf-8")
+        for marker in [
+            'id="tvChartSource"',
+            'id="tvChartSymbol"',
+            'id="tvChartInterval"',
+            'id="tvChartCompare"',
+            'data-testid="tradingview-chart-apply"',
+        ]:
+            self.assertIn(marker, html)
+        self.assertIn("fingpt.tvChart.v1", self.source)
+        self.assertIn("function tradingViewOverviewConfig", self.source)
+        self.assertIn("compareSymbols", self.source)
+        self.assertIn("function renderInternalOhlcChart", self.source)
+        self.assertIn("function mountInternalMarketChart", self.source)
+        self.assertIn("function fetchInternalChartPayload", self.source)
+        self.assertIn("function aggregateInternalOhlcRows", self.source)
+        self.assertIn("TV_INTERNAL_INTRADAY_INTERVALS", self.source)
+        self.assertIn("dashboardIntraday", self.source)
+        self.assertIn("API.dataPrices", self.source)
+        self.assertIn('data-testid="internal-market-chart"', self.source)
+        self.assertIn("function applyTvChartSettings", self.source)
+        self.assertIn("mountMarketOverviewChart", self.source)
+
     def test_macro_static_ui_contract(self):
         html = INDEX_HTML.read_text(encoding="utf-8")
         css = STYLES_CSS.read_text(encoding="utf-8")
@@ -374,6 +470,7 @@ class UiRoutingContractTests(unittest.TestCase):
             "function renderMacroProviderHealth",
             "function runMacroScenario",
             "function runMacroResearchPreview",
+            "function loadMacroDefaultSeriesDetail",
             "function macroFetchJsonWithTimeout",
             "function renderMacroLoadStatus",
             "function renderMacroPanelFailure",
@@ -466,7 +563,7 @@ class UiRoutingContractTests(unittest.TestCase):
             "function syncAiPortfolioUniverseMode",
             "function loadAiPortfolio",
             "function runAiPortfolioGenerate",
-            "function checkAiPortfolioRebalance",
+            "function runAiPortfolioRebalanceCheck",
             "function generateAiPortfolioReport",
             "state.aiPortfolioPolicy",
         ]:

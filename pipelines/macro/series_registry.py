@@ -169,9 +169,9 @@ for item in [
     _add(_definition(item[0], item[1], "fx_dollar", subcategory=item[2], frequency=item[3], unit=item[4], transform=item[5], stale_after_days=item[6], interpretation_hint=item[7], importance="medium"))
 
 for item in [
-    ("DCOILWTICO", "WTI Crude Oil", "energy", "daily", "USD per barrel", "level", 7, "Oil-price inflation and growth shock proxy."),
-    ("DHHNGSP", "Henry Hub Natural Gas", "energy", "daily", "USD per MMBtu", "level", 7, "Natural-gas energy cost pressure."),
-    ("DCOILBRENTEU", "Brent Crude Oil", "energy", "daily", "USD per barrel", "level", 7, "Global oil-price inflation and growth shock proxy."),
+    ("DCOILWTICO", "WTI Crude Oil", "energy", "daily", "USD per barrel", "level", 14, "Oil-price inflation and growth shock proxy."),
+    ("DHHNGSP", "Henry Hub Natural Gas", "energy", "daily", "USD per MMBtu", "level", 14, "Natural-gas energy cost pressure."),
+    ("DCOILBRENTEU", "Brent Crude Oil", "energy", "daily", "USD per barrel", "level", 14, "Global oil-price inflation and growth shock proxy."),
 ]:
     _add(_definition(item[0], item[1], "commodities", subcategory=item[2], frequency=item[3], unit=item[4], transform=item[5], stale_after_days=item[6], interpretation_hint=item[7], importance="medium"))
 

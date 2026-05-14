@@ -39,6 +39,11 @@ REQUIRED_UI_MARKERS: dict[str, str] = {
     "market signals": 'id="marketSignalSurface"',
     "home news": 'id="homeNewsList"',
     "tradingview chart": 'id="tvOverviewWidget"',
+    "market chart source": 'id="tvChartSource"',
+    "tradingview chart symbol": 'id="tvChartSymbol"',
+    "tradingview chart interval": 'id="tvChartInterval"',
+    "tradingview chart compare": 'id="tvChartCompare"',
+    "tradingview chart apply": 'data-testid="tradingview-chart-apply"',
     "intraday heatmap": 'id="homeHeatmap"',
     "intraday heatmap refresh": 'id="homeHeatmapRefresh"',
     "intraday heatmap refresh testid": 'data-testid="market-heatmap-refresh"',
@@ -203,6 +208,11 @@ REQUIRED_UI_MARKERS: dict[str, str] = {
     "ai portfolio universe status": 'id="aiPortfolioUniverseStatus"',
     "ai portfolio ops": 'id="aiPortfolioOpsSurface"',
     "ai portfolio ops refresh": 'id="aiPortfolioOpsRefresh"',
+    "market ui module": 'modules/market-ui.js?v=20260514-domain-modules',
+    "macro ui module": 'modules/macro-ui.js?v=20260514-domain-modules',
+    "forecast ui module": 'modules/forecast-ui.js?v=20260514-domain-modules',
+    "quant ui module": 'modules/quant-ui.js?v=20260514-domain-modules',
+    "ai portfolio ui module": 'modules/ai-portfolio-ui.js?v=20260514-domain-modules',
     "ai portfolio operation hydrate": 'id="aiPortfolioHydrateData"',
     "ai portfolio operation retry": 'id="aiPortfolioRetryMissing"',
     "ai portfolio snapshot job": 'id="aiPortfolioSnapshotJob"',
@@ -222,6 +232,10 @@ REQUIRED_UI_MARKERS: dict[str, str] = {
 }
 
 REQUIRED_APP_JS_MARKERS: dict[str, str] = {
+    "dashboard intraday chart api": "dashboardIntraday",
+    "internal chart payload loader": "function fetchInternalChartPayload",
+    "internal chart intraday intervals": "TV_INTERNAL_INTRADAY_INTERVALS",
+    "macro default series detail loader": "function loadMacroDefaultSeriesDetail",
     "macro dashboard api": "macroDashboard",
     "macro provider health api": "macroProviderHealth",
     "macro scenario api": "macroScenario",
@@ -234,6 +248,12 @@ REQUIRED_APP_JS_MARKERS: dict[str, str] = {
     "macro provider health renderer": "function renderMacroProviderHealth",
     "macro scenario runner": "function runMacroScenario",
     "macro research preview runner": "function runMacroResearchPreview",
+    "ai portfolio dashboard cache": "function fetchAiPortfolioDashboard",
+    "market ui module bridge": "window.FinGPTMarketUi",
+    "macro ui module bridge": "window.FinGPTMacroUi",
+    "forecast ui module bridge": "window.FinGPTForecastUi",
+    "quant ui module bridge": "window.FinGPTQuantUi",
+    "ai portfolio ui module bridge": "window.FinGPTAiPortfolioUi",
 }
 
 
