@@ -1,414 +1,292 @@
-<div align="center">
-<img align="center" width="30%" alt="image" src="https://github.com/AI4Finance-Foundation/FinGPT/assets/31713746/e0371951-1ce1-488e-aa25-0992dafcc139">
-</div>
+# FinGPT 로컬 리서치 어시스턴트
 
-# FinGPT: Open-Source Financial Large Language Models
-[![Downloads](https://static.pepy.tech/badge/fingpt)](https://pepy.tech/project/fingpt)
-[![Downloads](https://static.pepy.tech/badge/fingpt/week)](https://pepy.tech/project/fingpt)
-[![Join Discord](https://img.shields.io/badge/Discord-Join-blue)](https://discord.gg/trsr8SXpW5)
-[![Python 3.8](https://img.shields.io/badge/python-3.6-blue.svg)](https://www.python.org/downloads/release/python-360/)
-[![PyPI](https://img.shields.io/pypi/v/fingpt.svg)](https://pypi.org/project/fingpt/)
-![License](https://img.shields.io/github/license/AI4Finance-Foundation/fingpt.svg?color=brightgreen)
-![](https://img.shields.io/github/issues-raw/AI4Finance-Foundation/fingpt?label=Issues)
-![](https://img.shields.io/github/issues-closed-raw/AI4Finance-Foundation/fingpt?label=Closed+Issues)
-![](https://img.shields.io/github/issues-pr-raw/AI4Finance-Foundation/fingpt?label=Open+PRs)
-![](https://img.shields.io/github/issues-pr-closed-raw/AI4Finance-Foundation/fingpt?label=Closed+PRs)
+FinGPT와 RAG(Retrieval-Augmented Generation)를 결합한 **로컬 실행형 금융 리서치 어시스턴트**입니다. 외부 API에 의존하지 않고 프라이버시를 유지한 채로, 종목 하나에 대한 심층 분석을 한 번의 명령으로 실행할 수 있습니다.
 
-<div align="center">
-<img align="center" src=figs/logo_transparent_background.png width="40%"/>
-</div>
+## 시작 방법
 
-Let us not expect Wall Street to open-source LLMs or open APIs, due to FinTech institutes' internal regulations and policies.
+### 최단 경로 (한 줄 실행)
 
-[Blueprint of FinGPT](https://ai4finance.org/research/fingpt-open-source-finllm.html)
+Windows에서 원클릭 스크립트 한 개로 환경 준비부터 샘플 분석까지 끝낼 수 있습니다.
 
-<https://huggingface.co/FinGPT>
-
-![Visitors](https://api.visitorbadge.io/api/VisitorHit?user=AI4Finance-Foundation&repo=FinGPT&countColor=%23B17A)
-[![Discord](https://dcbadge.limes.pink/api/server/trsr8SXpW5?v=20260320)](https://discord.gg/trsr8SXpW5)
-
-## Project Contributors
-
-FinGPT is an open-source financial large language model project developed and maintained by the AI4Finance Foundation.
-
-Key contributors include:
-
-- [**Hongyang (Bruce) Yang**](https://www.linkedin.com/in/brucehy/) – research and development on financial large language models and related applications
-- [other contributors…]
-
-## What's New:
- - [Model Release] Nov, 2023: We release [FinGPT-Forecaster](https://github.com/AI4Finance-Foundation/FinGPT/tree/master/fingpt/FinGPT_Forecaster)!  🔥[Demo](https://huggingface.co/spaces/FinGPT/FinGPT-Forecaster), [Medium Blog](https://medium.datadriveninvestor.com/introducing-fingpt-forecaster-the-future-of-robo-advisory-services-50add34e3d3c) & [Model](https://huggingface.co/FinGPT/fingpt-forecaster_dow30_llama2-7b_lora) are available on Huggingface🤗!
- - [Paper Acceptance] Oct, 2023: ["FinGPT: Instruction Tuning Benchmark for Open-Source Large Language Models in Financial Datasets"](https://arxiv.org/abs/2310.04793) is accepted🎉 by [Instruction Workshop](https://an-instructive-workshop.github.io/) @ NeurIPS 2023 
- - [Paper Acceptance] Oct, 2023: ["FinGPT: Democratizing Internet-scale Data for Financial Large Language Models"](https://arxiv.org/abs/2307.10485) is accepted🎉 by [Instruction Workshop](https://an-instructive-workshop.github.io/) @ NeurIPS 2023
- - [Model Release] Oct, 2023: We release the [financial multi-task LLMs](https://huggingface.co/FinGPT) 🔥 produced when evaluating base-LLMs on [FinGPT-Benchmark](https://github.com/AI4Finance-Foundation/FinGPT/tree/master/fingpt/FinGPT_Benchmark)
- - [Paper Acceptance] Sep, 2023: ["Enhancing Financial Sentiment Analysis via Retrieval Augmented Large Language Models"](https://arxiv.org/abs/2310.04027) is accepted🎉 by [ACM International Conference on AI in Finance (ICAIF-23)](https://ai-finance.org/icaif-23-accepted-papers/)
- - [Model Release] Aug, 2023: We release the [financial sentiment analysis model](https://huggingface.co/FinGPT/fingpt-sentiment_llama2-13b_lora) 🔥
- - [Paper Acceptance] Jul, 2023: ["Instruct-FinGPT: Financial Sentiment Analysis by Instruction Tuning of General-Purpose Large Language Models"](https://arxiv.org/abs/2306.12659) is accepted🎉 by [FinLLM 2023](https://finllm.github.io/workshop/#/fcb)@IJCAI 2023
- - [Paper Acceptance] Jul, 2023: ["FinGPT: Open-Source Financial Large Language Models"](https://arxiv.org/abs/2306.06031) is accepted🎉 by [FinLLM 2023](https://finllm.github.io/workshop/#/fcb)@IJCAI 2023
- - [Medium Blog] Jun 2023: [FinGPT: Powering the Future of Finance with 20 Cutting-Edge Applications](https://medium.datadriveninvestor.com/fingpt-powering-the-future-of-finance-with-20-cutting-edge-applications-7c4d082ad3d8)
-
-## Why FinGPT?
-
-1). Finance is highly dynamic. [BloombergGPT](https://arxiv.org/abs/2303.17564) trained an LLM using a mixture of finance data and general-purpose data, which took about 53 days, at a cost of around **$3M**). It is costly to retrain an LLM model like BloombergGPT every month or every week, thus lightweight adaptation is highly favorable. FinGPT can be fine-tuned swiftly to incorporate new data (the cost falls significantly, less than **$300 per fine-tuning**).
-
-2). Democratizing Internet-scale financial data is critical, say allowing timely updates of the model (monthly or weekly updates) using an automatic data curation pipeline.  BloombergGPT has privileged data access and APIs, while FinGPT presents a more accessible alternative. It prioritizes lightweight adaptation, leveraging the best available open-source LLMs.
-
-3). The key technology is "RLHF (Reinforcement learning from human feedback)", which is missing in BloombergGPT. RLHF enables an LLM model to learn individual preferences (risk-aversion level, investing habits, personalized robo-advisor, etc.), which is the "secret" ingredient of ChatGPT and GPT4.
-
-
-### Milestone of AI Robo-Advisor: FinGPT-Forecaster
-
-Try the latest released FinGPT-Forecaster demo at our [HuggingFace Space](https://huggingface.co/spaces/FinGPT/FinGPT-Forecaster)
-
-The dataset for FinGPT-Forecaster: https://huggingface.co/datasets/FinGPT/fingpt-forecaster-dow30-202305-202405
-
-![demo_interface](fingpt/FinGPT_Forecaster/figs/interface.png)
-
-Enter the following inputs:
-
-1) ticker symbol (e.g. AAPL, MSFT, NVDA)
-2) the day from which you want the prediction to happen (yyyy-mm-dd)
-3) the number of past weeks where market news are retrieved
-4) whether to add the latest basic financials as additional information
-
-Click Submit！ And you'll be responded with a well-rounded analysis of the company and a prediction for next week's stock price movement!
-
-For detailed and more customized implementation, please refer to [FinGPT-Forecaster](https://github.com/AI4Finance-Foundation/FinGPT/tree/master/fingpt/FinGPT_Forecaster)
-
-
-## FinGPT Demos: 
-
-### Current State-of-the-arts for Financial Sentiment Analysis
-
-* [FinGPT V3 (Updated on 10/12/2023)](./fingpt)
-  
-  * What's new: **Best trainable and inferable FinGPT for sentiment analysis on a single RTX 3090, which is even better than GPT-4 and ChatGPT Finetuning.**
-  
-  * [FinGPT v3](https://huggingface.co/FinGPT/fingpt-sentiment_llama2-13b_lora) series are LLMs finetuned with the LoRA method on the News and Tweets sentiment analysis dataset which achieve the best scores on most of the financial sentiment analysis datasets with low cost.
-  
-  * FinGPT v3.3 use llama2-13b as base model; FinGPT v3.2 uses llama2-7b as base model; FinGPT v3.1 uses chatglm2-6B as base model.
-  
-  * Benchmark Results:
-  
-  * | Weighted F1                                                  |    FPB    |  FiQA-SA  |   TFNS    |   NWGI    |      Devices       |    Time     |      Cost      |
-    | ------------------------------------------------------------ | :-------: | :-------: | :-------: | :-------: | :----------------: | :---------: | :------------: |
-    | [FinGPT v3.3](https://huggingface.co/FinGPT/fingpt-sentiment_llama2-13b_lora)| **0.882** |   0.874   | **0.903** | **0.643** |    1 × RTX 3090    | 17.25 hours |     $17.25     |
-    | FinGPT v3.2|   0.850   |   0.860   |   0.894   |   0.636   |      1 × A100      |  5.5 hours  |    $ 22.55     |
-    | FinGPT v3.1|   0.855   |   0.850   |   0.875   |   0.642   |      1 × A100      |  5.5 hours  |    $ 22.55     |
-    | FinGPT (8bit)                                                |   0.855   |   0.847   |   0.879   |   0.632   |    1 × RTX 3090    | 6.47 hours  |     $ 6.47     |
-    | FinGPT (QLoRA)                                               |   0.777   |   0.752   |   0.828   |   0.583   |    1 × RTX 3090    | 4.15 hours  |     $ 4.15     |
-    | OpenAI Fine-tune                                             |   0.878   | **0.887** |   0.883   |     -     |         -          |      -      |       -        |
-    | GPT-4                                                        |   0.833   |   0.630   |   0.808   |     -     |         -          |      -      |       -        |
-    | FinBERT                                                      |   0.880   |   0.596   |   0.733   |   0.538   | 4 × NVIDIA K80 GPU |      -      |       -        |
-    | Llama2-7B                                                    |   0.390   |   0.800   |   0.296   |   0.503   |    2048 × A100     |   21 days   | $ 4.23 million |
-    | BloombergGPT                                                 |   0.511   |   0.751   |     -     |     -     |     512 × A100     |   53 days   | $ 2.67 million |
-  
-    **Cost per GPU hour.** For **A100 GPUs**, the AWS p4d.24xlarge instance, equipped with 8 A100 GPUs is used as a benchmark to estimate the costs. Note that BloombergGPT also used p4d.24xlarge As of July 11, 2023, the hourly rate for this instance stands at $32.773. Consequently, the estimated cost per GPU hour comes to $32.77 divided by 8, resulting in approximately **$4.10**. With this value as the reference unit price (1 GPU hour). **BloombergGPT estimated cost= 512 x 53 x 24 = 651,264 GPU hours x $4.10 = $2,670,182.40**. For **RTX 3090**, we assume its cost per hour is approximately **$1.0**, which is actually much higher than available GPUs from platforms like vast.ai.
-  
-  * Reproduce the results by running [benchmarks](./fingpt/FinGPT_Sentiment_Analysis_v3/benchmark/benchmarks.ipynb), and the detailed tutorial is on the way.
-  * Finetune your own FinGPT v3 model with the LoRA method on only an RTX 3090 with this [notebook](./fingpt/FinGPT_Sentiment_Analysis_v3/training_8bit/train_Llama2_13B.ipynb) in 8bit or this [notebook](./fingpt/FinGPT_Sentiment_Analysis_v3/training_int4/train.ipynb) in int4 (QLoRA)
-  
-* [FinGPT V1](./fingpt)
-  + **FinGPT by finetuning ChatGLM2 / Llama2 with LoRA with the market-labeled data for the Chinese Market**
- 
-## Instruction Tuning Datasets and Models
-The datasets we used, and the **multi-task financial LLM** models are available at <https://huggingface.co/FinGPT>
-
-[Our Code](https://github.com/AI4Finance-Foundation/FinGPT/tree/master/fingpt/FinGPT_Benchmark)
-  
-  | Datasets | Train Rows |  Test Rows |Description  |
-  | --------- | ----------------- | ------------ | --------------------- |
-  | [fingpt-sentiment-train](https://huggingface.co/datasets/FinGPT/fingpt-sentiment-train) | 76.8K | N/A|Sentiment Analysis Training Instructions |
-  | [fingpt-finred](https://huggingface.co/datasets/FinGPT/fingpt-finred)| 27.6k | 5.11k | Financial Relation Extraction Instructions |
-  | [fingpt-headline](https://huggingface.co/datasets/FinGPT/fingpt-headline) | 82.2k | 20.5k | Financial Headline Analysis Instructions|
-  | [fingpt-ner](https://huggingface.co/datasets/FinGPT/fingpt-ner) | 511   | 98  | Financial Named-Entity Recognition Instructions|
-  | [fingpt-fiqa_qa](https://huggingface.co/datasets/FinGPT/fingpt-fiqa_qa) | 17.1k   | N/A  | Financial Q&A Instructions|
-  | [fingpt-fineval](https://huggingface.co/datasets/FinGPT/fingpt-fineval) | 1.06k   | 265  | Chinese Multiple-Choice Questions Instructions|
-
-  Multi-task financial LLMs Models:
-```python
-  demo_tasks = [
-      'Financial Sentiment Analysis',
-      'Financial Relation Extraction',
-      'Financial Headline Classification',
-      'Financial Named Entity Recognition',]
-  demo_inputs = [
-      "Glaxo's ViiV Healthcare Signs China Manufacturing Deal With Desano",
-      "Apple Inc. Chief Executive Steve Jobs sought to soothe investor concerns about his health on Monday, saying his weight loss was caused by a hormone imbalance that is relatively simple to treat.",
-      'gold trades in red in early trade; eyes near-term range at rs 28,300-28,600',
-      'This LOAN AND SECURITY AGREEMENT dated January 27 , 1999 , between SILICON VALLEY BANK (" Bank "), a California - chartered bank with its principal place of business at 3003 Tasman Drive , Santa Clara , California 95054 with a loan production office located at 40 William St ., Ste .',]
-  demo_instructions = [
-      'What is the sentiment of this news? Please choose an answer from {negative/neutral/positive}.',
-      'Given phrases that describe the relationship between two words/phrases as options, extract the word/phrase pair and the corresponding lexical relationship between them from the input text. The output format should be "relation1: word1, word2; relation2: word3, word4". Options: product/material produced, manufacturer, distributed by, industry, position held, original broadcaster, owned by, founded by, distribution format, headquarters location, stock exchange, currency, parent organization, chief executive officer, director/manager, owner of, operator, member of, employer, chairperson, platform, subsidiary, legal form, publisher, developer, brand, business division, location of formation, creator.',
-      'Does the news headline talk about price going up? Please choose an answer from {Yes/No}.',
-      'Please extract entities and their types from the input sentence, entity types should be chosen from {person/organization/location}.',]
+```bash
+cd FinGPT
+powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1
 ```
 
-  | Models | Description  | Function |
-  | --------- | --------------------- |---------------- |
-  | [fingpt-mt_llama2-7b_lora](https://huggingface.co/FinGPT/fingpt-mt_llama2-7b_lora)| Fine-tuned Llama2-7b model with LoRA | Multi-Task |
-  | [fingpt-mt_falcon-7b_lora](https://huggingface.co/FinGPT/fingpt-mt_falcon-7b_lora)| Fine-tuned falcon-7b model with LoRA  | Multi-Task |
-  | [fingpt-mt_bloom-7b1_lora](https://huggingface.co/FinGPT/fingpt-mt_bloom-7b1_lora) | Fine-tuned bloom-7b1 model with LoRA | Multi-Task |
-  | [fingpt-mt_mpt-7b_lora](https://huggingface.co/FinGPT/fingpt-mt_mpt-7b_lora) | Fine-tuned mpt-7b model with LoRA | Multi-Task |
-  | [fingpt-mt_chatglm2-6b_lora](https://huggingface.co/FinGPT/fingpt-mt_chatglm2-6b_lora) | Fine-tuned chatglm-6b model with LoRA | Multi-Task |
-  | [fingpt-mt_qwen-7b_lora](https://huggingface.co/FinGPT/fingpt-mt_qwen-7b_lora) | Fine-tuned qwen-7b model with LoRA | Multi-Task |
-  | [fingpt-sentiment_llama2-13b_lora](https://huggingface.co/FinGPT/fingpt-sentiment_llama2-13b_lora) | Fine-tuned llama2-13b model with LoRA | Single-Task |
-  | [fingpt-forecaster_dow30_llama2-7b_lora](https://huggingface.co/FinGPT/fingpt-forecaster_dow30_llama2-7b_lora) | Fine-tuned llama2-7b model with LoRA | Single-Task |
+원하는 종목과 질문으로 실행하려면 파라미터를 전달하세요.
 
-  
-## Tutorials
-[[Training] Beginner’s Guide to FinGPT: Training with LoRA and ChatGLM2–6B One Notebook, $10 GPU](https://byfintech.medium.com/beginners-guide-to-fingpt-training-with-lora-chatglm2-6b-9eb5ace7fe99)
-
-## Understanding FinGPT: An Educational Blog Series
-+ [FinGPT: Powering the Future of Finance with 20 Cutting-Edge Applications
-](https://medium.datadriveninvestor.com/fingpt-powering-the-future-of-finance-with-20-cutting-edge-applications-7c4d082ad3d8)
-+ [FinGPT I: Why We Built the First Open-Source Large Language Model for Finance
-](https://medium.datadriveninvestor.com/fingpt-i-why-we-built-the-first-open-source-large-language-model-for-finance-c01b5517ca)
-+ [FinGPT II: Cracking the Financial Sentiment Analysis Task Using Instruction Tuning of General-Purpose Large Language Models
-](https://medium.datadriveninvestor.com/fingpt-ii-cracking-the-financial-sentiment-analysis-task-using-instruction-tuning-of-3333bce428c4)
-
-
-## FinGPT Ecosystem
-### FinGPT embraces a full-stack framework for FinLLMs with five layers:
-1. **Data source layer**: This layer assures comprehensive market coverage, addressing the temporal sensitivity of financial data through real-time information capture.
-2. **Data engineering layer**: Primed for real-time NLP data processing, this layer tackles the inherent challenges of high temporal sensitivity and low signal-to-noise ratio in financial data.
-3. **LLMs layer**: Focusing on a range of fine-tuning methodologies such as LoRA, this layer mitigates the highly dynamic nature of financial data, ensuring the model’s relevance and accuracy.
-4. **Task layer**: This layer is responsible for executing fundamental tasks. These tasks serve as the benchmarks for performance evaluations and cross-comparisons in the realm of FinLLMs
-5. **Application layer**: Showcasing practical applications and demos, this layer highlights the potential capability of FinGPT in the financial sector.
-
-* FinGPT Framework: Open-Source Financial Large Language Models
-
-<div align="center">
-<img align="center" src=figs/FinGPT_framework_20240301.png>
-</div>
-
-* [FinGPT-RAG](https://github.com/AI4Finance-Foundation/FinGPT/tree/master/fingpt/FinGPT_RAG): We present a retrieval-augmented large language model framework specifically designed for financial sentiment analysis, optimizing information depth and context through external knowledge retrieval, thereby ensuring nuanced predictions.
-
-<div align="center">
-<img align="center" src=figs/FinGPT_RAG_framework.png>
-</div>
-
-* [FinGPT-FinNLP](https://github.com/AI4Finance-Foundation/FinNLP): FinNLP provides a playground for all people interested in LLMs and NLP in Finance. Here we provide full pipelines for LLM training and finetuning in the field of finance. The full architecture is shown in the following picture. Detail codes and introductions can be found [here](https://github.com/AI4Finance-Foundation/FinNLP). Or you may refer to the [wiki](https://ai4finance-foundation.github.io/FinNLP/)
-
-<div align="center">
-<img align="center" src=figs/FinGPT_FinNLP_data_source.png>
-</div>
-
-* [FinGPT-Benchmark](https://github.com/AI4Finance-Foundation/FinGPT/tree/master/fingpt/FinGPT_Benchmark): We introduce a novel Instruction Tuning paradigm optimized for open-source Large Language Models (LLMs) in finance, enhancing their adaptability to diverse financial datasets while also facilitating cost-effective, systematic benchmarking from task-specific, multi-task, and zero-shot instruction tuning tasks. 
-
-
-<div align="center">
-<img align="center" src=figs/FinGPT_Benchmark_20231110.png>
-</div>
-
-
-
-## Cloud LLM Providers for FinGPT Inference
-
-For the Finogrid platform (finogrid/), FinGPT supports multiple cloud LLM providers as alternatives to running local models. Set `FINGPT_LLM_PROVIDER` in your environment:
-
-| Provider | Model | Context Length | Use Case |
-|----------|-------|---------------|----------|
-| OpenAI | GPT-3.5-turbo | 16K | Default fallback for sentiment & agents |
-| [MiniMax](https://platform.minimaxi.com/) | MiniMax-M2.7 | 204K | Latest flagship model with enhanced reasoning and coding |
-| FinGPT (local) | Llama-2-13B LoRA | 4K | Full local inference (requires GPU) |
-
-## Open-Source Base Model used in the LLMs layer of FinGPT
-* Feel free to contribute more open-source base models tailored for various language-specific financial markets.
-
-| Base Model |Pretraining Tokens|Context Length  | Model Advantages |Model Size|Experiment Results |  Applications |
-|  ----  |  ----  |  ----  |   ----  |   ----  |  ----  | ----  |
-| [Llama-2](https://github.com/facebookresearch/llama)|2 Trillion|4096| Llama-2 excels on English-based market data | [llama-2-7b](https://huggingface.co/meta-llama/Llama-2-7b-hf) and [Llama-2-13b](https://huggingface.co/meta-llama/Llama-2-13b-hf) | llama-2 consistently shows superior fine-tuning results  | Financial Sentiment Analysis, Robo-Advisor |
-| [Falcon](https://github.com/falconry/falcon) |1,500B|2048|  Maintains high-quality results while being more resource-efficient | [falcon-7b](https://huggingface.co/tiiuae/falcon-7b) |Good for English market data  | Financial Sentiment Analysis |
-| [MPT](https://github.com/mosaicml/llm-foundry) |1T|2048| MPT models can be trained with high throughput efficiency and stable convergence | [mpt-7b](https://huggingface.co/mosaicml/mpt-7b) |Good for English market data  | Financial Sentiment Analysis |
-| [Bloom](https://github.com/bigscience-workshop/bigscience/tree/master/train/tr11-176B-ml#readme) |366B|2048| World’s largest open multilingual language model  | [bloom-7b1](https://huggingface.co/bigscience/bloom-7b1) |Good for English market data  | Financial Sentiment Analysis |
-| [ChatGLM2](https://github.com/THUDM/ChatGLM2-6B)|1.4T  |32K |Exceptional capability for Chinese language expression| [chatglm2-6b](https://huggingface.co/THUDM/chatglm2-6b) |Shows prowess for Chinese market data  | Financial Sentiment Analysis, Financial Report Summary |
-| [Qwen](https://github.com/QwenLM/Qwen-7B)|2.2T  |8k |Fast response and high accuracy| [qwen-7b](https://huggingface.co/tangger/Qwen-7B-Chat) |Effective for Chinese market data  | Financial Sentiment Analysis|
-| [InternLM](https://github.com/InternLM/InternLM) |1.8T  |8k |Can flexibly and independently construct workflows |[internlm-7b](https://huggingface.co/internlm/internlm-7b) |Effective for Chinese market data  | Financial Sentiment Analysis |
-
-* Benchmark Results for the above open-source Base Models in the financial sentiment analysis task using the same instruction template for SFT (LoRA):
-  | Weighted F1/Acc  |Llama2 |Falcon |  MPT|Bloom |ChatGLM2|Qwen|InternLM |
-  | --------- | ----------------- | ------------ | --------------------- | ---------------- | --------------- | ----------------- |----------------- |
-  | [FPB](https://huggingface.co/datasets/financial_phrasebank) | 0.863/0.863 | 0.846/0.849  | **0.872**/**0.872**   | 0.810/0.810 | 0.850/0.849 |0.854/0.854| 0.709/0.714 |
-  | [FiQA-SA](https://huggingface.co/datasets/pauri32/fiqa-2018)| **0.871**/0.855| 0.840/0.811  | 0.863/0.844 | 0.771/0.753| 0.864/**0.862** | 0.867/0.851  |0.679/0.687 |
-  | [TFNS](https://huggingface.co/datasets/zeroshot/twitter-financial-news-sentiment) | 0.896/0.895 | 0.893/0.893 | **0.907**/**0.907** | 0.840/0.840 | 0.859/0.858 | 0.883/0.882|0.729/0.731|
-  | [NWGI](https://huggingface.co/datasets/oliverwang15/news_with_gpt_instructions) | **0.649/0.651**   | 0.636/0.638  | 0.640/0.641| 0.573/0.574| 0.619/0.629 |0.638/0.643|0.498/0.503|
-
-### All Thanks To Our Contributors :
-<a href="https://github.com/AI4Finance-Foundation/FinGPT/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AI4Finance-Foundation/FinGPT" />
-</a>
-
-## News
-
-+ [Columbia Perspectives on ChatGPT](https://datascience.columbia.edu/news/2023/columbia-perspectives-on-chatgpt/?utm_source=sendinblue&utm_campaign=DSI%20Newsletter%20April%202023&utm_medium=email)
-+ [MIT Technology Review] [ChatGPT is about to revolutionize the economy. We need to decide what that looks like](https://www.technologyreview.com/2023/03/25/1070275/chatgpt-revolutionize-economy-decide-what-looks-like/)
-+ [BloombergGPT] [BloombergGPT: A Large Language Model for Finance](https://arxiv.org/abs/2303.17564)
-+ [Finextra] [ChatGPT and Bing AI to sit as panellists at fintech conference](https://www.finextra.com/newsarticle/41973/chatgpt-and-bing-ai-to-sit-as-panellists-at-fintech-conference)
-
-## ChatGPT at AI4Finance
-
-+ [YouTube video] [I Built a Trading Bot with ChatGPT](https://www.youtube.com/watch?v=fhBw3j_O9LE), combining ChatGPT and FinRL.
-+ [Hey, ChatGPT! Explain FinRL code to me!](https://medium.com/@ai4finance/hey-chatgpt-explain-finrl-code-to-me-6a91d612296f)
-
-## Introductory
-
-+ [Sparks of artificial general intelligence: Early experiments with GPT-4](https://arxiv.org/abs/2303.12712)
-+ [GPT-4] [GPT-4 Technical Report](https://arxiv.org/abs/2303.08774)
-+ [InstructGPT] [Training language models to follow instructions with human feedback](https://openreview.net/forum?id=TG8KACxEON) NeurIPS 2022.
-
-[The Journey of Open AI GPT models](https://medium.com/walmartglobaltech/the-journey-of-open-ai-gpt-models-32d95b7b7fb2).  GPT models explained. Open AI's GPT-1, GPT-2, GPT-3.
-
-+ [GPT-3] [Language models are few-shot learners](https://proceedings.neurips.cc/paper/2020/hash/1457c0d6bfcb4967418bfb8ac142f64a-Abstract.html) NeurIPS 2020.
-+ [GPT-2] [Language Models are Unsupervised Multitask Learners](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf)
-+ [GPT-1] [Improving Language Understanding by Generative Pre-Training](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf)
-+ [Transformer] [Attention is All you Need](https://proceedings.neurips.cc/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html) NeurIPS 2017.
-
-## (Financial) Big Data
-
-+ [BloombergGPT] [BloombergGPT: A Large Language Model for Finance](https://arxiv.org/abs/2303.17564)
-
-+ [WHAT’S IN MY AI?](https://lifearchitect.ai/whats-in-my-ai/) A Comprehensive Analysis of Datasets Used to Train GPT-1, GPT-2, GPT-3, GPT-NeoX-20B, Megatron-11B, MT-NLG, and Gopher
-
-+ [FinRL-Meta Repo](https://github.com/AI4Finance-Foundation/FinRL-Meta) and paper [FinRL-Meta: Market Environments and Benchmarks for Data-Driven Financial Reinforcement Learning](https://proceedings.neurips.cc/paper_files/paper/2022/hash/0bf54b80686d2c4dc0808c2e98d430f7-Abstract-Datasets_and_Benchmarks.html). Advances in Neural Information Processing Systems, 2022.
-
-+ [AI4Finance] [FinNLP](https://github.com/AI4Finance-Foundation/FinNLP) Democratizing Internet-scale financial data.
-
-## Interesting Demos
-
-+ [GPT-3 Creative Fiction](https://gwern.net/gpt-3#prompts-as-programming) Creative writing by OpenAI’s GPT-3 model, demonstrating poetry, dialogue, puns, literary parodies, and storytelling. Plus advice on effective GPT-3 prompt programming & avoiding common errors.
-
-## ChatGPT for FinTech
-
-**ChatGPT Trading Bot**
-+ [YouTube video] [ChatGPT Trading strategy 20097% returns](https://www.youtube.com/watch?v=unsa_gXPAJ4)
-+ [YouTube video] [ChatGPT Coding - Make A Profitable Trading Strategy In Five Minutes!](https://www.youtube.com/watch?v=4SG2884RcDY)
-+ [YouTube video] [Easy Automated Live Trading using ChatGPT (+9660.3% hands free)](https://www.youtube.com/watch?v=dIEZVPVOZPQ)
-+ [YouTube video] [ChatGPT Trading Strategy 893% Returns](https://www.youtube.com/watch?v=YxjvjK5AD2M)
-+ [YouTube video] [ChatGPT 10 Million Trading Strategy](https://www.youtube.com/watch?v=9VPfd08uU4Q)
-+ [YouTube video] [ChatGPT: Your Crypto Assistant](https://www.youtube.com/watch?v=LpzeshX6s2w)
-+ [YouTube video] [Generate Insane Trading Returns with ChatGPT and TradingView](https://www.youtube.com/watch?v=ekz6ugJE1h0&t=3s)
-
-<!--- 
-**(Fast and accurate) Sentiment Analysis**
-
-   GPT-3 can help study customer surveys, social media tweets from customers/users.
-
-   Tweets
-+ [Tweet Classifier](https://platform.openai.com/playground/p/default-tweet-classifier?model=text-davinci-003)
-+ [Advanced Tweet Classifier](https://platform.openai.com/playground/p/default-adv-tweet-classifier?model=text-davinci-003)
-
-  Financial News
-+ [Algorithmic Trading using Sentiment Analysis on News Articles](https://towardsdatascience.com/https-towardsdatascience-com-algorithmic-trading-using-sentiment-analysis-on-news-articles-83db77966704)
-+ [Accessing Historical Financial News Headlines with Python](https://python.plainenglish.io/access-historical-financial-news-headlines-with-python-be1b8faaea9f)
-
-**PromptNet** Analogy to ImageNet and WordNet, it is critical to build a PromptNet.
-
-+ [Awesome_Prompting_Papers_in_Computer_Vision](https://github.com/ttengwang/Awesome_Prompting_Papers_in_Computer_Vision)
-+ [OpenPrompt](https://github.com/thunlp/OpenPrompt)
-+ [promptsource](https://github.com/bigscience-workshop/promptsource)
-
-**Robo-advisor**
-
-**Coding-tutor**
-
-+ [Hey, ChatGPT! Explain FinRL code to me!](https://medium.com/@ai4finance/hey-chatgpt-explain-finrl-code-to-me-6a91d612296f)
-
-**Blogs about ChatGPT for FinTech**
-
-## ChatGPT APIs
-
-Prompting as a new programming paradigm!
-+ [Towards Data Science] [GPT-3: Creative Potential of NLP](https://towardsdatascience.com/gpt-3-creative-potential-of-nlp-d5ccae16c1ab)
-+ [YouTube video] [OpenAI GPT-3 - Prompt Engineering For Financial NLP](https://www.youtube.com/watch?v=Nl2Cdbao5Ws)
-
-+ [OpenAI API for GPT-3](https://platform.openai.com/docs/models/gpt-3)
-+ [ChatGPT-wrapper: python and shell](https://github.com/mmabrouk/chatgpt-wrapper)
-+ [OpenAI Examples Library](https://platform.openai.com/examples)
-+ [GPT-3 Sandbox (Github)](https://github.com/shreyashankar/gpt3-sandbox) Enable users to create cool web demos using OpenAI GPT-3 API.
-+ [Exploring the Capabilities of the ChatGPT API: A Beginner’s Guide](https://levelup.gitconnected.com/exploring-the-capabilities-of-the-chatgpt-api-a-beginners-guide-e9089d49961f)
-+ [Reverse engineered ChatGPT API](https://github.com/acheong08/ChatGPT)
-
-**Prompting programming**
-
-## ChatGPT relatives: 
-
-[A Release Timeline](https://github.com/osanseviero/ml_timeline) of many LLMs.
-
-[PaLM](https://arxiv.org/abs/2204.02311)
-
-[Chincella](https://arxiv.org/abs/2203.15556)
-
-Interesting evaluations:
-+ [RLHF for pretraining](https://arxiv.org/abs/2302.08582)
-
-+ [Compare ChatGPT with GPT3.5](https://arxiv.org/pdf/2302.06476.pdf)
-
-+ [Is ChatGPT A Good Translator? A Preliminary Study](https://arxiv.org/pdf/2301.08745.pdf)
-
-+ [A Multitask, Multilingual, Multimodal Evaluation of ChatGPT
-on Reasoning, Hallucination, and Interactivity](https://arxiv.org/pdf/2302.04023.pdf)
-
-[YouTube video] [Physics Solution: ChatGPT vs. Google](https://www.youtube.com/watch?v=x4dIx9VYQoM)
----> 
-
-## Citing FinGPT
-```
-@article{yang2023fingpt_open,
-     title   = {FinGPT: Open-Source Financial Large Language Models},
-     author  = {Yang, Hongyang and Liu, Xiao-Yang and Wang, Christina Dan},
-     journal = {arXiv preprint arXiv:2306.06031},
-     year    = {2023},
-     url     = {https://arxiv.org/abs/2306.06031},
-     note    = {First official FinGPT paper; FinLLM Workshop at IJCAI 2023}
-}
-
-@article{zhang2023instructfingpt,
-     title={Instruct-FinGPT: Financial Sentiment Analysis by Instruction Tuning of General-Purpose Large Language Models}, 
-     author={Boyu Zhang and Hongyang Yang and Xiao-Yang Liu},
-     journal={FinLLM Symposium at IJCAI 2023},
-     year={2023}
-}
-
-@article{zhang2023fingptrag,
-     title={Enhancing Financial Sentiment Analysis via Retrieval Augmented Large Language Models},
-     author={Zhang, Boyu and Yang, Hongyang and Zhou, tianyu and Babar, Ali and Liu, Xiao-Yang},
-     journal = {ACM International Conference on AI in Finance (ICAIF)},
-     year={2023}
-}
-
-@article{liang2024fingpt,
-     title={FinGPT: enhancing sentiment-based stock movement prediction with dissemination-aware and context-enriched LLMs},
-     author={Liang, Yixuan and Liu, Yuncong and Wang, Neng and Yang, Hongyang and Zhang, Boyu and Wang, Christina Dan},
-     journal={AAAI 2025 Workshop GoodData},
-     year={2025}
-}
-
-@article{wang2023fingptbenchmark,
-     title={FinGPT: Instruction Tuning Benchmark for Open-Source Large Language Models in Financial Datasets},
-     author={Wang, Neng and Yang, Hongyang and Wang, Christina Dan},
-     journal={NeurIPS Workshop on Instruction Tuning and Instruction Following},
-     year={2023}
-}
-
-@article{2023finnlp,
-     title={Data-centric FinGPT: Democratizing Internet-scale Data for Financial Large Language Models},
-     author={Liu, Xiao-Yang and Wang, Guoxuan and Yang, Hongyang and Zha, Daochen},
-     journal={NeurIPS Workshop on Instruction Tuning and Instruction Following},
-     year={2023}
-}
-
+```bash
+powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -Ticker NVDA -Question "다음 분기 핵심 상방/하방 촉매는?"
 ```
 
-<div align="center">
-<a href="https://finllm.github.io/workshop/#/fcb" target="_blank">
-<img align="center" src=figs/fingpt_best_presentation.png width="65%">
-</div>
+이 스크립트는 다음 작업을 자동으로 수행합니다.
 
+- `venv311` 가상환경 생성 및 활성화
+- `requirements.txt` 의존성 설치
+- `.env` 파일 준비 (없으면 `.env.example`에서 복사)
+- Qdrant/Ollama 연결 상태 점검
+- 지정한 종목으로 샘플 리서치 실행
 
-## LICENSE
+### 사전 준비
 
-MIT License
+스크립트 실행 전에 아래 도구가 설치 및 실행 상태여야 합니다.
 
-**Disclaimer: We are sharing codes for academic purposes under the MIT education license. Nothing herein is financial advice, and NOT a recommendation to trade real money. Please use common sense and always first consult a professional before trading or investing.**
+1. **Python 3.11** — 프로젝트 표준 런타임 버전입니다.
+2. **Docker Desktop** — 벡터 DB인 Qdrant를 띄우기 위해 필요하며, **실행 중** 상태여야 합니다.
+3. **Ollama** — 로컬 LLM 추론에 사용합니다.
+   - [ollama.com](https://ollama.com/)에서 설치합니다.
+   - 설치 후 `ollama serve`로 데몬을 띄웁니다 (트레이에서 이미 실행 중이면 "port in use" 오류가 뜨지만 무시해도 됩니다).
+   - 기본 모델을 내려받습니다: `ollama pull qwen2.5:7b`.
 
+### 단계별 수동 실행 (스크립트를 쓰지 않을 때)
+
+원클릭 스크립트가 맞지 않거나 각 단계를 직접 확인하고 싶을 때 사용합니다.
+
+```bash
+cd FinGPT
+
+py -3.11 -m venv venv311
+.\venv311\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+copy .env.example .env
+
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap_local.ps1
+
+# OpenBB Workspace custom agent를 실제로 연결할 때만 선택 실행
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap_local.ps1 -WithOpenBBAgent
+
+python app/cli/main.py --ticker AAPL --question "최근 실적 발표에서 가장 중요한 단기 리스크는 무엇인가?"
+```
+
+### 웹 UI 실행 (선택)
+
+브라우저에서 종목, 질문, 소스, 조회 기간, top-k, 모델 라우트를 바꿔가며 실행하고 싶다면 웹 UI를 띄우세요. 요약·상승/하락 테제·인용·증거 문서·원본 JSON까지 한 화면에서 확인할 수 있습니다.
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts/run_web.ps1
+```
+
+- UI: `http://127.0.0.1:8000/ui/`
+- API 문서: `http://127.0.0.1:8000/docs`
+
+### Local Data Mart Update
+
+Structured financial data is stored separately from Qdrant in `data/research_mart.db`.
+Use this for daily prices, macro observations, news metadata, SEC filing metadata, provider status, and data quality checks:
+
+```bash
+python scripts/daily_update.py --market us --json
+python scripts/daily_update.py --market kr --skip-macro --json
+```
+
+Use `--skip-news`, `--skip-macro`, or `--skip-filings` when a provider is intentionally unavailable during a recovery run.
+
+For Windows Task Scheduler, use:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_daily_update.ps1 -Market us
+```
+
+Qdrant remains the document evidence store for news, filings, transcripts, and current-run RAG chunks. `data/runs.db` remains the research-run history database.
+
+수동으로 띄울 때는 다음 명령을 사용합니다.
+
+```bash
+python -m uvicorn app.api.server:app --host 127.0.0.1 --port 8000 --reload
+```
+
+---
+
+## 동작 방식
+
+입력은 **종목 코드(ticker)** 와 **질문(question)** 두 가지뿐입니다. 어시스턴트는 아래 6단계를 순서대로 실행합니다.
+
+1. **Collect (수집)**: 소스별 타임아웃에 따라 원문 문서를 모읍니다. 기본 소스는 `news`이고, `transcript`는 보조, `report`는 운영 경로에서 의도적으로 꺼져 있습니다.
+2. **Ingest (적재)**: 이번 실행에서 모은 문서를 정규화해 벡터 DB(Qdrant)에 넣습니다.
+3. **Retrieve (검색)**: 시맨틱 검색으로 관련 컨텍스트를 뽑은 뒤, 이번 실행에서 수집된 문서 ID만 남겨 **과거 문서가 결과에 섞이지 않도록** 격리합니다.
+4. **Infer (추론)**: 프롬프트와 컨텍스트를 Ollama의 구조화 출력 경로로 전달합니다. JSON이 깨지거나 잘리면 제한된 횟수만큼 자동 재시도합니다.
+5. **Analyze (분석)**: 모델 출력 JSON을 파싱해 감성(sentiment), 상승/하락 촉매, 핵심 수치, 타임라인 같은 속성으로 매핑합니다.
+6. **Report (보고)**: 최종 Markdown/HTML 보고서를 생성해 `data/outputs/`에 저장합니다.
+
+더 자세한 설계는 `docs/PROJECT_MAP.md`, `docs/ARCHITECTURE.md`를 참고하세요.
+
+### 기술 스택 요약
+
+- **뉴스 수집**: Yahoo Finance를 1차로 시도하고, 결과가 부족하면 SEC EDGAR 최근 공시 → Google News RSS → OpenBB(호환성 통과/옵션) → Alpha Vantage(옵션) → FMP(옵션) 순서로 보강합니다.
+- **트랜스크립트**: 기본값은 비활성화입니다. `FMP_ENABLED=true`와 `FMP_API_KEY`를 설정한 경우에만 FMP 트랜스크립트를 보조 소스로 사용합니다.
+- **벡터 DB**: Qdrant (Docker Desktop 기반, 저장소의 Compose 스택이 자동으로 띄움).
+- **LLM**: 로컬 Ollama. 운영 기본 모델은 `qwen2.5:7b`이며, `gemma4:e4b`는 실험용 옵션으로만 제공됩니다.
+
+## 문제 해결
+
+### `Error: listen tcp 127.0.0.1:11434: bind: Only one usage of each socket address...`
+
+Ollama가 이미 트레이에서 돌고 있다는 신호입니다. `ollama serve`를 다시 띄울 필요 없이 다음 단계로 넘어가면 됩니다.
+
+### `docker: command not found` 또는 `Docker daemon not reachable`
+
+Docker Desktop이 설치되어 있고 실행 중인지 확인하세요. 방금 설치했다면 터미널이나 PC를 한 번 재시작하면 해결됩니다.
+
+### `app/cli/main.py` 실행 시 `No such file or directory`
+
+현재 경로가 `FinGPT` 루트가 아닐 때 발생합니다. `pwd`로 경로를 확인하고 `ls`로 `app/` 폴더가 있는지 확인하세요.
+
+## 기타 명령어
+
+- **벤치마크 스윕**: `python quality_review.py --suite all`
+- **토픽 지연시간 프로파일**: `python quality_review.py --suite topic --measure-latency`
+- **지연시간 프로파일 아티팩트 생성**: `python scripts/profile_topic_latency.py`
+- **빠른 통합 검증 게이트**: `powershell -ExecutionPolicy Bypass -File scripts/verify_production_path.ps1`
+- **UI/API 계약 스모크**: `python scripts/check_ui_contract.py`
+- **릴리스 후보 live 검증**: `powershell -ExecutionPolicy Bypass -File scripts/verify_production_path.ps1 -ReleaseCandidate`
+- **OpenBB Workspace agent 포함 검증**: `powershell -ExecutionPolicy Bypass -File scripts/verify_production_path.ps1 -WithOpenBBAgent`
+
+실행 결과는 `data/outputs/` 폴더에 구조화 JSON, Markdown 보고서, 렌더링된 HTML 형태로 저장됩니다.
+
+## 출력 기준일 / Topic 정량 보강
+
+- 모든 `key_metrics` 값은 `as_of` 기준일을 포함합니다. 모델이 누락하면 근거 문서 날짜로 보강하고, 그래도 없으면 `unknown`으로 표시합니다.
+- UI와 보고서는 핵심 지표를 `지표 / 값 / 단위 / 기준일 / 출처 / freshness / 맥락 / 근거` 표로 보여줍니다. 근거 doc id는 Evidence 탭의 원문으로 연결됩니다.
+- Topic quant snapshot은 rates/bonds(TLT), credit, FX, commodity, crypto, sector/theme 프록시를 지원합니다. TLT는 10Y/30Y 금리, 10Y-2Y 곡선, 실질금리 proxy, TLT 가격 흐름, duration proxy, 금리 충격 민감도를 deterministic하게 생성합니다.
+- 이 스냅샷은 `execution_meta.extras.quant_snapshot`과 `key_metrics`에 들어가며, LLM은 숫자를 새로 만들지 않고 해석만 합니다.
+- FRED/FMP entitlement 또는 뉴스 부족은 가능한 경우 `partial + actionable uncertainty`로 표현합니다. parser/LLM JSON 오류와 evidence 부족은 UI diagnostics에서 분리됩니다.
+
+## 모델 운용 정책
+
+- `qwen2.5:7b`가 최종 JSON/report 생성의 production baseline입니다.
+- `fingpt` route는 final structured report 생성기가 아니라 보조 capability로 분류합니다. 현재 adapter policy는 FinGPT를 event extraction, sentiment/risk tagging, financial tone classification 같은 보조 작업 후보로 제한하고, final JSON은 qwen production path로 라우팅합니다.
+- 모델별 capability(`json_reliability`, `korean_reliability`, `structured_output_support`, `finance_reasoning`, `gpu_required`)는 `execution_meta.extras.model_capabilities`에 기록됩니다.
+
+## 수집 동작 상세
+
+- 지원되는 소스는 `news`, `transcript`, `macro`, 그리고 비활성 상태인 `report`입니다. 기본값(CLI/UI)은 `news transcript`입니다.
+- `report`는 등록만 되어 있고 현재는 수집이 꺼진 상태입니다. `report`만 단독 요청하면 사전 검증에서 막히고, 다른 소스와 섞여 있을 때는 `report=disabled`로 로그에 남습니다.
+- `news`는 주식 종목의 기본 소스입니다. Yahoo Finance를 먼저 시도하고, 최신 문서가 3개 미만이면 기본 정책상 **SEC EDGAR 최근 공시 → Google News RSS → OpenBB news(옵션) → Alpha Vantage(옵션) → FMP 종목 뉴스(옵션)** 순으로 보강합니다.
+- `transcript`는 기본 hot path에서 꺼져 있습니다. `FMP_ENABLED=true`, `TRANSCRIPT_PROVIDER=fmp_optional`, `FMP_API_KEY`를 모두 설정한 경우에만 FMP 안정(stable) 엔드포인트를 보조 소스로 호출합니다.
+- `macro`는 채권 ETF, 원자재 ETF, FX(`EURUSD=X`), 선물(`GC=F`), 암호화폐(`BTC-USD`) 같은 비주식 자산의 기본 소스입니다. FRED(금리/CPI/달러 인덱스), yfinance 가격 이력, Google News RSS를 함께 묶어 반환합니다. 비주식 종목에 기본 소스(`news transcript`)를 그대로 쓰면 `news`는 자동으로 macro 번들로 전환되고 `transcript`는 `skipped`로 처리됩니다.
+- 이번 실행에서 사용할 수 있는 1차 문서가 하나도 없으면 Retrieve/Infer 단계는 건너뜁니다. 이 경우 오래된 Qdrant 문서로 답하는 대신 `partial` 상태와 함께 "컨텍스트 없음" 가설을 반환합니다.
+- `data/outputs/latest_collection.json` 파일에는 소스/프로바이더 상태, 수집된 문서 ID, 최신성 기준 시점, 그리고 `current_run_only` 검색 정책이 기록됩니다.
+- SEC EDGAR를 꾸준히 쓰려면 `.env`에 `SEC_USER_AGENT`(조직/연락처 형태 문자열)를 설정하세요. macro 번들의 FRED 경로를 쓰려면 `FRED_API_KEY`를 설정하세요([fred.stlouisfed.org](https://fred.stlouisfed.org)에서 발급).
+
+## 지원 자산 범위
+
+| 자산군 | 예시 종목 | 기본 소스 | 트랜스크립트 |
+| --- | --- | --- | --- |
+| 미국 개별 주식 | `AAPL`, `MSFT`, `NVDA` | yfinance + SEC + Google RSS + optional OpenBB/Alpha Vantage/FMP | optional FMP 실적 콜 |
+| 미국 ETF (일반) | `SPY`, `QQQ`, `XLK` | yfinance + issuer profile + Google RSS + optional OpenBB/Alpha Vantage/FMP | — |
+| 미국 채권 ETF | `TLT`, `IEF`, `AGG`, `HYG` | yfinance + issuer profile + `macro`(FRED/Yahoo) + optional OpenBB/Alpha Vantage/FMP | — |
+| 미국 원자재 ETF | `GLD`, `SLV`, `USO`, `DBC` | yfinance + issuer profile + `macro` + optional OpenBB/Alpha Vantage/FMP | — |
+| 해외 상장 주식 | `005930.KS`, `9988.HK` | yfinance + Google News | — |
+| FX 페어 (Yahoo) | `EURUSD=X`, `USDJPY=X` | `macro` 번들 | — |
+| 선물 (Yahoo) | `GC=F`(금), `CL=F`(WTI), `ZN=F`(10Y) | `macro` 번들 | — |
+| 암호화폐 (Yahoo) | `BTC-USD`, `ETH-USD` | `macro` 번들 | — |
+
+종목 코드 사전 검증 정규식은 `[A-Z0-9.\-=]{1,12}` 이므로 Yahoo 형식의 FX/선물 심볼도 그대로 허용됩니다.
+
+### ETF 발행사 프로필 자동 수집
+
+iShares, SPDR, Vanguard, Invesco, ARK, Schwab, J.P. Morgan, Global X, USCF 등 ETF로 인식되는 종목은 요청 소스와 상관없이 발행사 상품 페이지를 자동으로 가져와 `etf_profile` 문서로 추가합니다. 안정성을 위해 3단계 대체 경로를 씁니다.
+
+1. **큐레이션된 발행사 URL** (예: `https://www.ishares.com/us/products/239454/...`)을 trafilatura로 파싱
+2. **Yahoo Finance `/profile`** 페이지를 trafilatura로 파싱
+3. **yfinance 메타데이터**(`longBusinessSummary`, 카테고리, expense ratio, AUM, inception)를 자연어 단락으로 합성 (SPDR/Vanguard/Schwab 같은 JS 기반 SPA 페이지일 때 사용)
+
+ETF가 아닌 종목은 조용히 건너뛰며, 추가 API 키는 필요 없습니다.
+
+## Research upgrades: rerank, chunk, hybrid, topic mode
+
+Recent retrieval and routing improvements are controlled by feature flags so
+the legacy ticker workflow can be restored without code changes.
+
+CLI examples:
+
+```powershell
+python app/cli/main.py --ticker AAPL --question "recent catalysts?"
+python app/cli/main.py --ticker TLT --question "scenario risks?" --simulate
+python app/cli/main.py --question "Fed의 2026년 금리 경로가 성장주에 미치는 영향은?"
+python app/cli/main.py --topic "AI semiconductors" --question "short-term risks?"
+```
+
+API:
+
+- Existing ticker endpoint remains unchanged: `POST /api/v1/research`.
+- Universal auto-routing endpoint: `POST /api/v1/research/universal`.
+- Universal responses include a top-level `mode` so clients can distinguish
+  ticker, compare, sector/macro, and concept reports.
+- Ticker, universal, compare, and topic request bodies can set
+  `scenario_simulation_enabled: true|false` to override the environment flag
+  for that request.
+
+Operational flags:
+
+```env
+RERANKER_ENABLED=true
+FUNDAMENTALS_CARD_ENABLED=true
+INGEST_CHUNKING_ENABLED=true
+HYBRID_SEARCH_ENABLED=true
+TOPIC_MODE_ENABLED=true
+SCENARIO_SIMULATION_ENABLED=false
+```
+
+Rollback is flag-based for Phase 1, 2, 4, and 5:
+
+```env
+RERANKER_ENABLED=false
+FUNDAMENTALS_CARD_ENABLED=false
+HYBRID_SEARCH_ENABLED=false
+TOPIC_MODE_ENABLED=false
+SCENARIO_SIMULATION_ENABLED=false
+```
+
+Chunking can also be disabled with `INGEST_CHUNKING_ENABLED=false`, but data
+already stored as chunks remains in Qdrant until the collection is recreated.
+When enabling chunking and hybrid BM25 for an existing collection, recreate the
+collection once and re-ingest:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/migrate_collection.ps1
+python app/cli/main.py --ticker AAPL --question "smoke test"
+```
+
+The new chunked payload stores `doc_id` as the chunk id and `parent_doc_id` as
+the source document id. Readers accept both fields for backward compatibility.
+
+## Scenario Simulation Layer
+
+This optional layer adds evidence-grounded base/bull/bear/tail scenarios,
+market participant personas, agent-style views, risk triggers, deterministic
+scenario scores, and a decision checklist.
+
+It is disabled by default:
+
+```env
+SCENARIO_SIMULATION_ENABLED=false
+```
+
+It does not replace the existing RAG/research pipeline and does not perform
+deterministic price prediction. Results are stored under:
+
+```text
+response.execution_meta.extras["scenario_simulation"]
+```
+
+Rollback is done by setting:
+
+```env
+SCENARIO_SIMULATION_ENABLED=false
+```
+
+For one-off CLI runs, `--simulate` enables the layer and `--no-simulate`
+disables it for that process only.
+
+## 문서
+
+- 제품 규칙: [PROJECT_SCOPE.md](docs/PROJECT_SCOPE.md)
+- 내부 구조 지도: [PROJECT_MAP.md](docs/PROJECT_MAP.md)
+- 실행/진단 가이드: [RUNBOOK.md](docs/RUNBOOK.md)
+- 향후 계획: [ROADMAP.md](docs/ROADMAP.md)
+- 최신 업데이트 제안: [UPDATE_PROPOSAL.md](docs/UPDATE_PROPOSAL.md)
+- 사용 사례: [Use_Cases.md](docs/Use_Cases.md)
+
+> 참고: 과거 벤치마크, 아카이브된 스택 버전, 프로토타입 코드는 `legacy/` 디렉터리에 따로 모아두었으며 메인 실행 경로에서는 제외됩니다.
