@@ -392,6 +392,7 @@ const els = {
   qualityPanel: document.getElementById("qualityPanel"),
   qualitySubtitle: document.getElementById("qualitySubtitle"),
   qualitySummary: document.getElementById("qualitySummary"),
+  qualityContextSummary: document.getElementById("qualityContextSummary"),
   qualityDataHealth: document.getElementById("qualityDataHealth"),
   qualityMacroData: document.getElementById("qualityMacroData"),
   qualityCategories: document.getElementById("qualityCategories"),
@@ -1838,43 +1839,38 @@ function selectedRangeLabel() {
 
 function renderGlobalQualitySummary() {
   if (!els.globalQualitySummary) return;
-  const quality = state.globalQuality || {};
-  const status = quality.status || "unknown";
+  const detail = globalQualityContextModel();
+  const status = detail.status;
   const statusClassName = qualityStatusClass(status);
-  const asOf = displayQualityValue(quality.asOf || quality.dataBasisDate);
-  const updatedAt = displayCompactQualityTime(quality.updatedAt || quality.lastUpdated, "-");
-  const range = selectedRangeLabel();
-  const observations = displayQualityCount(quality.observations, "확인 불가");
-  const missing = displayMissingSummary(quality.missing, "확인 불가");
-  const source = displayQualityValue(quality.source, "확인 불가");
-  const aiSnapshot = displayCompactQualityTime(quality.aiSnapshotAt, "확인 불가");
   const label = [
-    `품질 ${qualityStatusLabel(status)}`,
-    `기준일 ${asOf}`,
-    `업데이트 ${updatedAt}`,
-    `기간 ${range}`,
-    `관측치 ${observations}`,
-    `결측 ${missing}`,
-    `AI 기준 ${aiSnapshot}`,
+    `품질 ${detail.statusLabel}`,
+    `기준일 ${detail.asOf}`,
+    `업데이트 ${detail.updatedAt}`,
+    `기간 ${detail.range}`,
+    `관측치 ${detail.observations}`,
+    `결측 ${detail.missing}`,
+    `AI 기준 ${detail.aiSnapshot}`,
   ].join(", ");
   els.globalQualitySummary.className = `global-quality-summary ${statusClassName}`;
   els.globalQualitySummary.setAttribute("aria-label", label);
   els.globalQualitySummary.title = [
-    `데이터 소스: ${source}`,
-    `분석 기간: ${range}`,
-    `관측치 수: ${observations}`,
-    `결측치: ${missing}`,
-    `AI 분석 기준: ${aiSnapshot}`,
+    `데이터 소스: ${detail.source}`,
+    `분석 기간: ${detail.range}`,
+    `관측치 수: ${detail.observations}`,
+    `결측치: ${detail.missing}`,
+    `캐시: ${detail.cache}`,
+    `AI 분석 기준: ${detail.aiSnapshot}`,
   ].join("\n");
   els.globalQualitySummary.innerHTML = `
-    <span class="quality-status">품질: ${escapeHtml(qualityStatusLabel(status))}</span>
-    <span class="quality-meta">기준일: ${escapeHtml(asOf)}</span>
-    <span class="quality-meta">업데이트: ${escapeHtml(updatedAt)}</span>
-    <span class="quality-meta quality-range">기간: ${escapeHtml(range)}</span>
-    <span class="quality-meta quality-observations" data-summary-field="observations">관측치: ${escapeHtml(observations)}</span>
-    <span class="quality-meta quality-missing" data-summary-field="missing">결측: ${escapeHtml(missing)}</span>
-    <span class="quality-meta quality-ai" data-summary-field="ai-snapshot">AI 기준: ${escapeHtml(aiSnapshot)}</span>
+    <span class="quality-status">품질: ${escapeHtml(detail.statusLabel)}</span>
+    <span class="quality-meta">기준일: ${escapeHtml(detail.asOf)}</span>
+    <span class="quality-meta">업데이트: ${escapeHtml(detail.updatedAt)}</span>
+    <span class="quality-meta quality-range">기간: ${escapeHtml(detail.range)}</span>
+    <span class="quality-meta quality-observations" data-summary-field="observations">관측치: ${escapeHtml(detail.observations)}</span>
+    <span class="quality-meta quality-missing" data-summary-field="missing">결측: ${escapeHtml(detail.missing)}</span>
+    <span class="quality-meta quality-ai" data-summary-field="ai-snapshot">AI 기준: ${escapeHtml(detail.aiSnapshot)}</span>
   `;
+  renderGlobalQualityContextSummary();
 }
 
 function updateGlobalQualitySummary(next = {}) {
@@ -1883,6 +1879,52 @@ function updateGlobalQualitySummary(next = {}) {
     ...next,
   };
   renderGlobalQualitySummary();
+}
+
+function globalQualityContextModel() {
+  const quality = state.globalQuality || {};
+  const status = quality.status || "unknown";
+  const cacheValue = quality.cache ?? quality.cacheStatus ?? quality.cacheLayer
+    ?? (quality.cache_hit === true ? "사용" : (quality.cache_hit === false ? "미사용" : undefined));
+  return {
+    status,
+    statusLabel: qualityStatusLabel(status),
+    asOf: displayQualityValue(quality.asOf || quality.dataBasisDate),
+    updatedAt: displayCompactQualityTime(quality.updatedAt || quality.lastUpdated, "-"),
+    range: selectedRangeLabel(),
+    observations: displayQualityCount(quality.observations, "확인 불가"),
+    missing: displayMissingSummary(quality.missing, "확인 불가"),
+    source: displayQualityValue(quality.source, "확인 불가"),
+    cache: displayQualityValue(cacheValue, "확인 불가"),
+    aiSnapshot: displayCompactQualityTime(quality.aiSnapshotAt, "확인 불가"),
+  };
+}
+
+function qualityContextItem(label, value, field) {
+  return `<span class="quality-context-item" data-quality-detail="${escapeHtml(field)}"><strong>${escapeHtml(label)}</strong><em>${escapeHtml(value)}</em></span>`;
+}
+
+function renderGlobalQualityContextSummary() {
+  if (!els.qualityContextSummary) return;
+  const detail = globalQualityContextModel();
+  const statusClassName = qualityStatusClass(detail.status);
+  els.qualityContextSummary.className = `quality-context-summary ${statusClassName}`;
+  els.qualityContextSummary.innerHTML = `
+    <div class="quality-context-head">
+      <strong>현재 분석 신뢰도: ${escapeHtml(detail.statusLabel)}</strong>
+      <span>상단 품질 배지와 같은 기준입니다. 확인 불가 값은 아직 출처나 기준일이 확보되지 않은 항목입니다.</span>
+    </div>
+    <div class="quality-context-grid">
+      ${qualityContextItem("데이터 소스", detail.source, "source")}
+      ${qualityContextItem("분석 기간", detail.range, "range")}
+      ${qualityContextItem("기준일", detail.asOf, "basis-date")}
+      ${qualityContextItem("마지막 업데이트", detail.updatedAt, "updated-at")}
+      ${qualityContextItem("관측치", detail.observations, "observations")}
+      ${qualityContextItem("결측치", detail.missing, "missing")}
+      ${qualityContextItem("캐시", detail.cache, "cache")}
+      ${qualityContextItem("AI 분석 기준", detail.aiSnapshot, "ai-snapshot")}
+    </div>
+  `;
 }
 
 const KNOWN_TICKERS = SYMBOL_CATALOG
@@ -2858,6 +2900,7 @@ function renderQdrantInfo(info) {
 async function openQualityPanel() {
   if (!els.qualityPanel) return;
   els.qualityPanel.classList.remove("hidden");
+  renderGlobalQualityContextSummary();
   await loadQualityDashboard();
 }
 

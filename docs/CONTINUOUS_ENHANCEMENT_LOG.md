@@ -227,3 +227,92 @@
 - [x] README updated if needed
 - [x] PR summary includes changed files
 - [x] PR summary includes validation result
+
+## 2026-05-19 Continuous Enhancement Run 07:02
+
+- Branch: `automation/continuous-enhancement-20260519-0702`.
+- Current project summary: the repo remains a FastAPI-served local financial research workstation with a static `app/web` shell, Python API routers/services, data-mart backed market/macro/quantamental flows, local LLM routing, and Python/Playwright validation rather than a package-managed frontend build.
+- Scope selected: the previous automation PRs already added All-default dashboard filtering, global period controls, top-right quality badges, and Quantamental AI used-data guardrails. This run kept those contracts intact and improved the click-through quality panel so users can understand the top-right badge without reading internal diagnostics.
+- Compatibility: no API response schema, trading/order logic, strategy entry/exit condition, data provider, model route, secret, or environment file behavior was changed.
+- Data consistency: the quality panel now mirrors the same global quality context as the top-right badge: data source, selected range, basis date, last update, observation count, missing-data state, cache state, and AI analysis basis time.
+- UI/UX: added a responsive `qualityContextSummary` block at the top of the quality dashboard, using concise user-facing Korean labels instead of raw diagnostic exceptions.
+- Visualization: no chart math or chart renderer changed in this slice; existing chart/range behavior was re-verified through UI contract and browser smoke.
+- AI briefing: no prompt/model logic changed; existing Quantamental used-data and hallucination guard contracts were re-run.
+- Translation: Korean labels were added directly in the static UI and verified through the UTF-8 contract script with no mojibake/placeholder failures.
+- Performance: the new detail block is rendered from already-held client state and does not add extra network requests or background polling.
+
+### 07:02 Validation Results
+
+| Check | Command / Tool | Result | Notes |
+|---|---|---|---|
+| JS syntax | `node --check app/web/app.js` | Passed | Static JavaScript syntax. |
+| Python syntax | `python -m py_compile scripts/check_ui_contract.py scripts/ai_portfolio_ui_smoke.py` | Passed | Contract and smoke scripts remain importable. |
+| UI contract | `python scripts/check_ui_contract.py` | Passed | New quality context markers included; no mojibake or placeholder lines. |
+| UI routing tests | `python -m pytest tests/test_ui_routing_contract.py -q` | Passed | `39 passed, 4 subtests passed`. |
+| UI module tests | `python -m pytest tests/test_ui_modules.py -q` | Passed | `2 passed`. |
+| AI briefing guard regression | `python -m pytest tests/test_quantamental_api.py -q` | Passed | `20 passed`; deterministic AI guard contract preserved. |
+| Diff hygiene | `git diff --check -- app/web/index.html app/web/app.js app/web/styles.css scripts/check_ui_contract.py scripts/ai_portfolio_ui_smoke.py tests/test_ui_routing_contract.py docs/CONTINUOUS_ENHANCEMENT_LOG.md` | Passed | No whitespace errors in touched files. |
+| Live desktop UI | Playwright MCP at `http://host.docker.internal:8372/ui/?range=1Y#quantamental` | Passed | `qualityContextSummary` visible after clicking top quality badge; bundle version v2 loaded. |
+| Live mobile UI | Playwright MCP resized to `390x900` | Passed | `horizontalOverflow=false`; quality context uses one-column layout and does not overflow. |
+| Browser console | Playwright MCP console check | Passed | No console errors after opening the quality panel. |
+| AI Portfolio browser smoke | `python scripts/ai_portfolio_ui_smoke.py --base-url http://127.0.0.1:8372 --timeout-s 120 --output reports/ai_portfolio_ui_smoke_continuous_20260519_0702.json` | Passed | The first run failed on the old v1 bundle selector; after updating the smoke script to v2 it passed with no console errors. |
+| npm/pnpm build/lint/test | Not run | Excluded | Repo root has no frontend package manifest; static UI is validated through Python contracts and Playwright. |
+
+### 07:02 Completion Checklist
+
+#### Compatibility
+- [x] Existing features still work
+- [x] Existing API contracts are not broken
+- [x] Existing UI flow is preserved
+- [x] No unauthorized strategy logic change
+- [x] No secret or env file exposure
+
+#### Data
+- [x] Date range selection works
+- [x] KPI/chart/table use the same selected period
+- [x] Data source and 기준일 are displayed
+- [x] Missing data is handled
+- [x] Data quality summary is visible at top-right
+- [x] Cache/fresh data distinction is clear
+
+#### UI
+- [x] Default view is All
+- [x] Core/Diagnostics/Operations filters still exist
+- [x] Font sizes are readable
+- [x] Layout spacing is consistent
+- [x] Cards/tables/charts are aligned
+- [x] Mobile layout is acceptable
+- [x] Loading state exists
+- [x] Empty state exists
+- [x] Error state exists
+
+#### Visualization
+- [x] Chart titles are meaningful
+- [x] Axis labels are readable
+- [x] Tooltips are useful
+- [x] Legends are not confusing
+- [x] Period selection updates charts
+- [x] No chart overflow or label collision
+
+#### AI Briefing
+- [x] Gemma/Qwen availability is checked
+- [x] Model selection is not fake
+- [x] AI output includes used data period
+- [x] AI output includes 기준일/source/observation count
+- [x] AI does not invent unsupported numbers
+- [x] Unverified facts are marked as 확인 불가
+- [x] Translation preserves numbers/dates/units
+
+#### Validation
+- [x] Lint executed or reason documented
+- [x] Build executed or reason documented
+- [x] Tests executed or reason documented
+- [x] UI validation executed or reason documented
+- [x] Data validation executed or reason documented
+- [x] AI briefing validation executed or reason documented
+
+#### Documentation
+- [x] docs/CONTINUOUS_ENHANCEMENT_LOG.md updated
+- [x] README updated if needed
+- [x] PR summary includes changed files
+- [x] PR summary includes validation result

@@ -10097,6 +10097,75 @@ html[data-theme="light"] button.primary-btn {
 .global-quality-summary.warn .quality-status { color: var(--warn); }
 .global-quality-summary.fail .quality-status { color: var(--bear); }
 
+.quality-context-summary {
+  margin: 10px 0 14px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.quality-context-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.quality-context-head strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.quality-context-head span {
+  color: var(--text-mute);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.quality-context-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  gap: 8px;
+}
+
+.quality-context-item {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 7px;
+  background: rgba(2, 6, 23, 0.24);
+}
+
+.quality-context-item strong {
+  color: var(--text-mute);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.quality-context-item em {
+  color: var(--text);
+  font-style: normal;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.quality-context-summary.ok {
+  border-color: rgba(106, 163, 122, 0.38);
+}
+
+.quality-context-summary.warn {
+  border-color: rgba(201, 164, 92, 0.42);
+}
+
+.quality-context-summary.fail {
+  border-color: rgba(194, 109, 109, 0.42);
+}
+
 .dashboard-range-controls {
   display: grid;
   grid-template-columns: minmax(150px, 190px) repeat(2, minmax(132px, 160px)) minmax(220px, 1fr);
@@ -10155,10 +10224,16 @@ html[data-theme="light"] button.primary-btn {
 }
 
 html[data-theme="light"] .global-quality-summary,
-html[data-theme="light"] .dashboard-range-controls {
+html[data-theme="light"] .dashboard-range-controls,
+html[data-theme="light"] .quality-context-summary {
   background: rgba(255, 253, 246, 0.76);
   border-color: rgba(52, 56, 48, 0.14);
   color: var(--text-secondary);
+}
+
+html[data-theme="light"] .quality-context-item {
+  background: rgba(255, 255, 255, 0.58);
+  border-color: rgba(52, 56, 48, 0.12);
 }
 
 @media (max-width: 1180px) {
@@ -10268,6 +10343,15 @@ html[data-theme="light"] .dashboard-range-controls {
   .dashboard-context-strip,
   .dashboard-range-controls,
   .workbench-guardrail-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .quality-context-head {
+    display: grid;
+    gap: 5px;
+  }
+
+  .quality-context-grid {
     grid-template-columns: 1fr;
   }
 
