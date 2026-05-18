@@ -116,3 +116,27 @@
 - Period selection: `dashboardRangeSelect` supports `1D`, `1W`, `1M`, `3M`, `6M`, `YTD`, `1Y`, `3Y`, `5Y`, `MAX`, and `custom`, writes URL query state, and synchronizes existing research, asset detail, backtest, portfolio, forecast, cross-asset, AI Portfolio, and Quantamental controls where those surfaces support the range.
 - AI briefing: Quantamental AI context now includes `used_data`/`data_snapshot`; deterministic fallback and LLM outputs are forced to include used data, key changes, interpretation, scenarios, user actions, guardrails, and unavailable-value handling.
 - Model selection: `/api/v1/config` now marks Qwen/Gemma routes as runtime-checked instead of implying local model availability without request-time verification.
+
+## 2026-05-19 Continuous Enhancement Run 05:02
+
+- Branch: `automation/continuous-enhancement-20260519-0502`.
+- Current status: the previous run already added All-default panel behavior, a global range selector, and Quantamental AI used-data guardrails. This run kept that architecture intact and narrowed scope to the top-right quality summary UX.
+- Problem found: the quality summary carried observation count, missing-data status, and AI snapshot time in tooltip/detail text, but the always-visible top-right badge only showed status, basis date, update time, and period.
+- Change: the `globalQualitySummary` badge now directly renders `관측치`, `결측`, and `AI 기준` alongside quality status, 기준일, 업데이트, and 기간. Missing counts are normalized to user-readable labels such as `없음`, `있음`, or `n개`; long timestamps are compacted to avoid layout overflow.
+- UI resilience: the badge now wraps predictably on desktop and 390px mobile, keeps an accessible Korean `aria-label`, and preserves the click-through quality panel behavior.
+- Contract coverage: static UI contract checks now require the observation, missing-data, and AI-snapshot markers so future regressions do not hide these fields again.
+
+### 05:02 Validation Results
+
+| Check | Command / Tool | Result | Notes |
+|---|---|---|---|
+| JS syntax | `node --check app/web/app.js` | Passed | Static JavaScript syntax. |
+| Python syntax | `python -m py_compile scripts/check_ui_contract.py` | Passed | Contract script remains importable. |
+| UI contract | `python scripts/check_ui_contract.py` | Passed | New quality summary markers included. |
+| UI routing tests | `python -m pytest tests/test_ui_routing_contract.py -q` | Passed | `39 passed, 4 subtests passed`. |
+| UI module tests | `python -m pytest tests/test_ui_modules.py -q` | Passed | `2 passed`. |
+| AI briefing guard regression | `python -m pytest tests/test_quantamental_api.py -q` | Passed | `20 passed`; used-data guard contract preserved. |
+| Diff hygiene | `git diff --check -- app/web/index.html app/web/app.js app/web/styles.css tests/test_ui_routing_contract.py scripts/check_ui_contract.py` | Passed | No whitespace errors in touched files. |
+| Live desktop UI | `playwright-cli` at `http://127.0.0.1:8352/ui/?range=1Y#quantamental` | Passed | Quality badge exposes all seven fields in the accessibility snapshot. |
+| Live mobile UI | `playwright-cli resize 390 900` + DOM check | Passed | `horizontalOverflow=false`, `panelView=all`, quality fields remain visible. |
+| npm/pnpm build/lint/test | Not run | Excluded | Repo root has no frontend package manifest; static UI is validated through Python contracts and Playwright. |

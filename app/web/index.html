@@ -24,11 +24,14 @@
       </button>
       <button id="qdrantAdminBtn" type="button" class="ghost-btn admin-btn" title="벡터 DB 컬렉션 상태와 정리">Qdrant</button>
       <button id="qualityDashBtn" type="button" class="ghost-btn admin-btn" title="평가 및 품질 대시보드">품질</button>
-      <button id="globalQualitySummary" type="button" class="global-quality-summary unknown" aria-label="Data quality summary" title="품질 상세 보기">
+      <button id="globalQualitySummary" type="button" class="global-quality-summary unknown" aria-label="데이터 품질 요약: 확인 불가" title="품질 상세 보기">
         <span class="quality-status">품질: 확인 불가</span>
         <span class="quality-meta">기준일: -</span>
         <span class="quality-meta">업데이트: -</span>
         <span class="quality-meta quality-range">기간: 1Y</span>
+        <span class="quality-meta quality-observations" data-summary-field="observations">관측치: 확인 불가</span>
+        <span class="quality-meta quality-missing" data-summary-field="missing">결측: 확인 불가</span>
+        <span class="quality-meta quality-ai" data-summary-field="ai-snapshot">AI 기준: 확인 불가</span>
       </button>
       <button id="themeToggleBtn" type="button" class="ghost-btn admin-btn theme-toggle" aria-pressed="false" aria-label="테마 전환">테마</button>
       <div id="languageToggle" class="language-toggle" role="group" aria-label="출력 언어">

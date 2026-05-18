@@ -10012,9 +10012,10 @@ html[data-theme="light"] button.primary-btn {
 .global-quality-summary {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  flex-wrap: wrap;
+  gap: 4px 7px;
   min-height: 32px;
-  max-width: min(520px, 48vw);
+  max-width: min(720px, 56vw);
   padding: 5px 10px;
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 8px;
@@ -10023,9 +10024,9 @@ html[data-theme="light"] button.primary-btn {
   cursor: pointer;
   font-size: 11px;
   font-family: var(--font-mono);
-  white-space: nowrap;
+  line-height: 1.35;
+  white-space: normal;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .global-quality-summary:hover {
@@ -10040,6 +10041,14 @@ html[data-theme="light"] button.primary-btn {
 
 .global-quality-summary .quality-meta {
   color: var(--text-mute);
+  min-width: 0;
+}
+
+.global-quality-summary .quality-ai {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .global-quality-summary.ok {
@@ -10274,7 +10283,22 @@ html[data-theme="light"] .dashboard-range-controls {
   .global-quality-summary {
     grid-column: 1 / -1;
     max-width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
+  }
+
+  .global-quality-summary .quality-status {
+    flex: 1 1 100%;
+    text-align: center;
+  }
+
+  .global-quality-summary .quality-meta {
+    flex: 1 1 calc(50% - 8px);
+    text-align: center;
+  }
+
+  .global-quality-summary .quality-ai {
+    flex-basis: 100%;
+    max-width: 100%;
   }
 
   .health-pill {

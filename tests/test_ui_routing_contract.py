@@ -611,6 +611,9 @@ class UiRoutingContractTests(unittest.TestCase):
             'id="dashboardRangeSelect"',
             'id="dashboardRangeStart"',
             'id="dashboardRangeEnd"',
+            'data-summary-field="observations"',
+            'data-summary-field="missing"',
+            'data-summary-field="ai-snapshot"',
             '<option value="1D">1D</option>',
             '<option value="MAX">MAX</option>',
             '<button type="button" id="macroBriefGenerate"',
@@ -626,6 +629,8 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn('macro: "all"', self.source)
         self.assertIn("function setGlobalRange", self.source)
         self.assertIn("function updateGlobalQualitySummary", self.source)
+        self.assertIn("function displayMissingSummary", self.source)
+        self.assertIn("AI 기준:", self.source)
         self.assertIn("globalRangeLookbackDays", self.source)
         self.assertLess(
             html.index('class="home-card macro-card macro-hints-card macro-surface"'),

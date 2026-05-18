@@ -1797,6 +1797,32 @@ function displayQualityValue(value, fallback = "-") {
   return String(value);
 }
 
+function displayQualityCount(value, fallback = "확인 불가") {
+  if (value === null || value === undefined || value === "") return fallback;
+  if (Array.isArray(value)) return value.length ? _fmtNumber(value.length) : "0";
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return _fmtNumber(numeric);
+  return displayQualityValue(value, fallback);
+}
+
+function displayMissingSummary(value, fallback = "확인 불가") {
+  if (value === null || value === undefined || value === "") return fallback;
+  if (Array.isArray(value)) return value.length ? `${_fmtNumber(value.length)}개` : "없음";
+  if (typeof value === "boolean") return value ? "있음" : "없음";
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric > 0 ? `${_fmtNumber(numeric)}개` : "없음";
+  const text = displayQualityValue(value, fallback);
+  return ["none", "no", "false", "0", "없음"].includes(text.toLowerCase()) ? "없음" : text;
+}
+
+function displayCompactQualityTime(value, fallback = "확인 불가") {
+  const text = displayQualityValue(value, fallback);
+  if (text === fallback || text === "-") return text;
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}:\d{2}))?/);
+  if (match) return match[2] ? `${match[1]} ${match[2]}` : match[1];
+  return text.length > 24 ? `${text.slice(0, 21)}...` : text;
+}
+
 function selectedRangeLabel() {
   const range = state.globalRange || DEFAULT_GLOBAL_RANGE;
   if (range.range === "custom") {
@@ -1813,13 +1839,23 @@ function renderGlobalQualitySummary() {
   const status = quality.status || "unknown";
   const statusClassName = qualityStatusClass(status);
   const asOf = displayQualityValue(quality.asOf || quality.dataBasisDate);
-  const updatedAt = displayQualityValue(quality.updatedAt || quality.lastUpdated);
+  const updatedAt = displayCompactQualityTime(quality.updatedAt || quality.lastUpdated, "-");
   const range = selectedRangeLabel();
-  const observations = displayQualityValue(quality.observations, "확인 불가");
-  const missing = displayQualityValue(quality.missing, "확인 불가");
+  const observations = displayQualityCount(quality.observations, "확인 불가");
+  const missing = displayMissingSummary(quality.missing, "확인 불가");
   const source = displayQualityValue(quality.source, "확인 불가");
-  const aiSnapshot = displayQualityValue(quality.aiSnapshotAt, "확인 불가");
+  const aiSnapshot = displayCompactQualityTime(quality.aiSnapshotAt, "확인 불가");
+  const label = [
+    `품질 ${qualityStatusLabel(status)}`,
+    `기준일 ${asOf}`,
+    `업데이트 ${updatedAt}`,
+    `기간 ${range}`,
+    `관측치 ${observations}`,
+    `결측 ${missing}`,
+    `AI 기준 ${aiSnapshot}`,
+  ].join(", ");
   els.globalQualitySummary.className = `global-quality-summary ${statusClassName}`;
+  els.globalQualitySummary.setAttribute("aria-label", label);
   els.globalQualitySummary.title = [
     `데이터 소스: ${source}`,
     `분석 기간: ${range}`,
@@ -1832,6 +1868,9 @@ function renderGlobalQualitySummary() {
     <span class="quality-meta">기준일: ${escapeHtml(asOf)}</span>
     <span class="quality-meta">업데이트: ${escapeHtml(updatedAt)}</span>
     <span class="quality-meta quality-range">기간: ${escapeHtml(range)}</span>
+    <span class="quality-meta quality-observations" data-summary-field="observations">관측치: ${escapeHtml(observations)}</span>
+    <span class="quality-meta quality-missing" data-summary-field="missing">결측: ${escapeHtml(missing)}</span>
+    <span class="quality-meta quality-ai" data-summary-field="ai-snapshot">AI 기준: ${escapeHtml(aiSnapshot)}</span>
   `;
 }
 
