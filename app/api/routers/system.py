@@ -67,6 +67,8 @@ def _ui_model_options() -> list[dict[str, Any]]:
             "label": f"{getattr(_settings, 'primary_model', 'qwen2.5:7b')} (Ollama · 기본)",
             "role": "primary",
             "enabled": True,
+            "availability": "runtime_checked",
+            "availability_note": "Configured route; Ollama model availability is verified when a request runs.",
         }
     ]
     gemma4_model = getattr(_settings, "gemma4_model", None) or getattr(_settings, "experimental_fallback_model", "gemma4:e4b")
@@ -77,6 +79,8 @@ def _ui_model_options() -> list[dict[str, Any]]:
                 "label": f"{gemma4_model} (Gemma4 E4B experimental)",
                 "role": "experimental",
                 "enabled": True,
+                "availability": "runtime_checked",
+                "availability_note": "Displayed only as a configured route; local model availability is not claimed until runtime.",
             }
         )
     if bool(getattr(_settings, "enable_experimental_fallback", False)):
@@ -86,6 +90,8 @@ def _ui_model_options() -> list[dict[str, Any]]:
                 "label": f"{getattr(_settings, 'experimental_fallback_model', 'gemma4:e4b')} (fallback)",
                 "role": "fallback",
                 "enabled": True,
+                "availability": "runtime_checked",
+                "availability_note": "Displayed only when experimental fallback is enabled; checked at runtime.",
             }
         )
     return options
