@@ -1,0 +1,5 @@
+# Optional OpenBB Workspace agent adapter.
+# Keep separate from requirements.txt so the core FinGPT local API/UI remains
+# compatible even when OpenBB's agent SDK changes.
+openbb-ai>=1.10.0,<1.11.0
+sse-starlette>=3.0.0,<4.0.0
