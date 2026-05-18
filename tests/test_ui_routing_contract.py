@@ -618,6 +618,7 @@ class UiRoutingContractTests(unittest.TestCase):
             'id="qualityContextSummary"',
             'data-quality-detail="source"',
             'data-quality-detail="cache"',
+            'data-quality-detail="range-support"',
             '<option value="1D">1D</option>',
             '<option value="MAX">MAX</option>',
             '<button type="button" id="macroBriefGenerate"',
@@ -637,6 +638,7 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn("function setGlobalRange", self.source)
         self.assertIn("function normalizeCustomGlobalDateOrder", self.source)
         self.assertIn("function globalRangeValidationMessage", self.source)
+        self.assertIn("function globalRangeSupportSummary", self.source)
         self.assertIn("function updateGlobalQualitySummary", self.source)
         self.assertIn("function renderGlobalQualityContextSummary", self.source)
         self.assertIn("function displayMissingSummary", self.source)

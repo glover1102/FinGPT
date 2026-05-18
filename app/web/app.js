@@ -1886,6 +1886,7 @@ function globalQualityContextModel() {
   const status = quality.status || "unknown";
   const cacheValue = quality.cache ?? quality.cacheStatus ?? quality.cacheLayer
     ?? (quality.cache_hit === true ? "사용" : (quality.cache_hit === false ? "미사용" : undefined));
+  const rangeSupport = globalRangeSupportSummary();
   return {
     status,
     statusLabel: qualityStatusLabel(status),
@@ -1897,6 +1898,7 @@ function globalQualityContextModel() {
     source: displayQualityValue(quality.source, "확인 불가"),
     cache: displayQualityValue(cacheValue, "확인 불가"),
     aiSnapshot: displayCompactQualityTime(quality.aiSnapshotAt, "확인 불가"),
+    rangeSupport: rangeSupport.detail,
   };
 }
 
@@ -1923,6 +1925,7 @@ function renderGlobalQualityContextSummary() {
       ${qualityContextItem("결측치", detail.missing, "missing")}
       ${qualityContextItem("캐시", detail.cache, "cache")}
       ${qualityContextItem("AI 분석 기준", detail.aiSnapshot, "ai-snapshot")}
+      ${qualityContextItem("기간 적용 방식", detail.rangeSupport, "range-support")}
     </div>
   `;
 }
@@ -5830,8 +5833,8 @@ function globalRangeToAssetRange(range = state.globalRange?.range) {
   }[normalized] || "1y";
 }
 
-function quantamentalLookbackFromRange(range = state.globalRange?.range) {
-  const days = globalRangeLookbackDays(range);
+function quantamentalLookbackFromRange(range = state.globalRange?.range, startDate = state.globalRange?.startDate, endDate = state.globalRange?.endDate) {
+  const days = globalRangeLookbackDays(range, startDate, endDate);
   if (days <= 1) return "1";
   if (days <= 7) return "5";
   if (days <= 31) return "21";
@@ -5841,6 +5844,28 @@ function quantamentalLookbackFromRange(range = state.globalRange?.range) {
   if (days <= 900) return "756";
   if (days <= 1500) return "1260";
   return "5000";
+}
+
+function globalRangeSupportSummary(rangeState = state.globalRange) {
+  const range = normalizeGlobalRange(rangeState?.range);
+  const bounds = globalRangeDateBounds(range, rangeState?.startDate, rangeState?.endDate);
+  const lookbackDays = globalRangeLookbackDays(range, bounds.startDate, bounds.endDate);
+  const researchDays = Math.max(
+    Number(els.lookback?.min || 1),
+    Math.min(Number(els.lookback?.max || 180), lookbackDays),
+  );
+  const quantamentalBucket = quantamentalLookbackFromRange(range, bounds.startDate, bounds.endDate);
+  const dateTargets = "자산·백테스트·포트폴리오·Forecast";
+  const dateWindow = range === "custom" && !bounds.startDate
+    ? `Custom 시작일 없음(1Y 기본 기간)~${bounds.endDate || "오늘"}`
+    : `${bounds.startDate || "시작 제한 없음"}~${bounds.endDate || "오늘"}`;
+  return {
+    lookbackDays,
+    researchDays,
+    quantamentalBucket,
+    summary: `${selectedRangeLabel()} · 약 ${_fmtNumber(lookbackDays)}일 기준. 날짜 지원 화면은 직접 반영하고, lookback 기반 화면은 지원 버킷으로 변환합니다.`,
+    detail: `${dateTargets}: ${dateWindow} · Research: ${_fmtNumber(researchDays)}일 · Quantamental: ${_fmtNumber(Number(quantamentalBucket))}일 버킷`,
+  };
 }
 
 function setSelectValueIfPresent(select, value) {
@@ -5865,9 +5890,10 @@ function syncDashboardRangeControls() {
   if (els.dashboardRangeStart) els.dashboardRangeStart.setAttribute("aria-invalid", missingCustomStart ? "true" : "false");
   if (els.dashboardRangeEnd) els.dashboardRangeEnd.setAttribute("aria-invalid", missingCustomEnd ? "true" : "false");
   if (els.dashboardRangeSupport) {
-    const days = globalRangeLookbackDays();
-    const suffix = `${selectedRangeLabel()} · 약 ${_fmtNumber(days)}일 기준으로 KPI, 차트, 테이블, AI 브리핑 입력을 맞춥니다.`;
-    els.dashboardRangeSupport.textContent = validationMessage ? `${validationMessage} · ${suffix}` : suffix;
+    const support = globalRangeSupportSummary();
+    els.dashboardRangeSupport.textContent = validationMessage ? `${validationMessage} · ${support.summary}` : support.summary;
+    els.dashboardRangeSupport.title = support.detail;
+    if (els.dashboardRangeControls) els.dashboardRangeControls.dataset.rangeSupport = support.detail;
   }
   renderGlobalQualitySummary();
 }
@@ -5894,7 +5920,7 @@ function applyGlobalRangeToControls() {
   if (els.portfolioLookbackDays) els.portfolioLookbackDays.value = String(Math.min(5000, Math.max(1, lookbackDays)));
   if (els.forecastStartDate) els.forecastStartDate.value = bounds.startDate;
   if (els.forecastEndDate) els.forecastEndDate.value = bounds.endDate;
-  setSelectValueIfPresent(els.quantamentalLookback, quantamentalLookbackFromRange(range));
+  setSelectValueIfPresent(els.quantamentalLookback, quantamentalLookbackFromRange(range, bounds.startDate, bounds.endDate));
   if (els.aiPortfolioLookbackMonths) {
     const months = range === "MAX" ? 120 : Math.max(1, Math.round(lookbackDays / 21));
     els.aiPortfolioLookbackMonths.value = String(Math.min(120, months));

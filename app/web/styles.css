@@ -10154,6 +10154,10 @@ html[data-theme="light"] button.primary-btn {
   overflow-wrap: anywhere;
 }
 
+.quality-context-item-wide {
+  grid-column: 1 / -1;
+}
+
 .quality-context-summary.ok {
   border-color: rgba(106, 163, 122, 0.38);
 }

@@ -99,6 +99,7 @@
         <span class="quality-context-item" data-quality-detail="missing"><strong>결측치</strong><em>확인 불가</em></span>
         <span class="quality-context-item" data-quality-detail="cache"><strong>캐시</strong><em>확인 불가</em></span>
         <span class="quality-context-item" data-quality-detail="ai-snapshot"><strong>AI 분석 기준</strong><em>확인 불가</em></span>
+        <span class="quality-context-item quality-context-item-wide" data-quality-detail="range-support"><strong>기간 적용 방식</strong><em>날짜 지원 화면은 직접 반영, lookback 기반 화면은 지원 버킷으로 변환</em></span>
       </div>
     </div>
     <section class="quality-section">
@@ -346,7 +347,7 @@
             <span>종료일</span>
             <input id="dashboardRangeEnd" type="date" aria-label="Global range end date" />
           </label>
-          <span id="dashboardRangeSupport" class="dashboard-range-support">KPI, 차트, 테이블, AI 브리핑 입력에 같은 기간을 적용합니다.</span>
+          <span id="dashboardRangeSupport" class="dashboard-range-support">날짜 지원 화면은 직접 반영하고, lookback 기반 화면은 지원 기간 버킷으로 변환합니다.</span>
         </div>
         <div id="dashboardViewControls" class="dashboard-view-controls" aria-label="Dashboard panel view" hidden>
           <button type="button" data-panel-view="overview" aria-pressed="false">Core</button>

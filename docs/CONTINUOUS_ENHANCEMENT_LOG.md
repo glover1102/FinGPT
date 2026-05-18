@@ -228,6 +228,96 @@
 - [x] PR summary includes changed files
 - [x] PR summary includes validation result
 
+## 2026-05-19 Continuous Enhancement Run 08:04
+
+- Branch: `automation/continuous-enhancement-20260519-0804`.
+- Current project summary: the project remains a FastAPI-served local financial research workstation with static UI, Python API routers/services, deterministic Quantamental engines, data-quality summaries, and local LLM interpretation guards.
+- Scope selected: prior automation PRs already added All-default filtering, top-right quality badges, range controls, and quality-panel context. This run focused on data-period truthfulness so users do not assume every tab receives the exact same date range when some surfaces only support lookback buckets.
+- Compatibility: no API response schema, data provider, model route, trading/order logic, strategy entry/exit condition, secret, or environment-file behavior was changed.
+- Data consistency: the global range helper now exposes a user-readable support summary showing date-supported surfaces, capped Research lookback, and the Quantamental bucket used for the selected period.
+- UI/UX: the dashboard range note and quality panel now say that date-supported screens receive the selected dates directly while lookback-based screens are mapped to supported buckets.
+- Visualization: no chart renderer or calculation logic changed in this slice; the selected range explanation was verified against the Quantamental UI surface and existing chart/overview smoke.
+- AI briefing: no prompt/model behavior changed; existing Quantamental AI used-data and deterministic-output guard contracts were re-run.
+- Translation: Korean copy was kept concise and verified through the UTF-8 UI contract script with no mojibake or placeholder lines.
+- Performance: the new range-support summary is derived from existing client state and does not add network requests, timers, or background refresh loops.
+
+### 08:04 Validation Results
+
+| Check | Command / Tool | Result | Notes |
+|---|---|---|---|
+| JS syntax | `node --check app/web/app.js` | Passed | Static JavaScript syntax. |
+| Python syntax | `python -m py_compile scripts/check_ui_contract.py` | Passed | Contract script remains importable. |
+| UI contract | `python scripts/check_ui_contract.py` | Passed | New range-support markers included; no mojibake or placeholder lines. |
+| UI routing tests | `python -m pytest tests/test_ui_routing_contract.py -q` | Passed | `39 passed, 4 subtests passed`. |
+| UI module tests | `python -m pytest tests/test_ui_modules.py -q` | Passed | `2 passed`. |
+| AI briefing guard regression | `python -m pytest tests/test_quantamental_api.py -q` | Passed | `20 passed`; deterministic AI guard contract preserved. |
+| Diff hygiene | `git diff --check -- app/web/index.html app/web/app.js app/web/styles.css scripts/check_ui_contract.py tests/test_ui_routing_contract.py docs/CONTINUOUS_ENHANCEMENT_LOG.md` | Passed | No whitespace errors in touched files. |
+| Live desktop UI | Playwright CLI at `http://127.0.0.1:8382/ui/?range=1Y#quantamental` | Passed | `panelView=all`; dashboard support note and quality panel range-support detail visible. |
+| Live mobile UI | Playwright CLI resized to `390x900` | Passed | `horizontalOverflow=false`; support note and range-support detail fit within viewport. |
+| Quantamental browser smoke | `python scripts/quantamental_ui_smoke.py --base-url http://127.0.0.1:8382 --output reports/quantamental_ui_smoke_continuous_20260519_0804.json` | Passed | Required tickers, invalid ticker, GLOBAL resolver, Top 5, threshold screener, overview axes, comparison, Q&A, and audit smoke passed. |
+| Quantamental API data/AI smoke | `GET /api/v1/quantamental/analysis/AAPL?...include_ai=true&use_llm=false` | Passed | Wrote `reports/quantamental_api_continuous_20260519_0804.json`; AI report remains data-snapshot based. |
+| npm/pnpm build/lint/test | Not run | Excluded | Repo root has no frontend package manifest; static UI is validated through Python contracts and Playwright. |
+
+### 08:04 Completion Checklist
+
+#### Compatibility
+- [x] Existing features still work
+- [x] Existing API contracts are not broken
+- [x] Existing UI flow is preserved
+- [x] No unauthorized strategy logic change
+- [x] No secret or env file exposure
+
+#### Data
+- [x] Date range selection works
+- [x] KPI/chart/table use the same selected period where exact date support exists
+- [x] Lookback-only surfaces now disclose bucket conversion
+- [x] Data source and 기준일 are displayed
+- [x] Missing data is handled
+- [x] Data quality summary is visible at top-right
+- [x] Cache/fresh data distinction is clear
+
+#### UI
+- [x] Default view is All
+- [x] Core/Diagnostics/Operations filters still exist
+- [x] Font sizes are readable
+- [x] Layout spacing is consistent
+- [x] Cards/tables/charts are aligned
+- [x] Mobile layout is acceptable
+- [x] Loading state exists
+- [x] Empty state exists
+- [x] Error state exists
+
+#### Visualization
+- [x] Chart titles are meaningful
+- [x] Axis labels are readable
+- [x] Tooltips are useful
+- [x] Legends are not confusing
+- [x] Period selection updates charts
+- [x] No chart overflow or label collision
+
+#### AI Briefing
+- [x] Gemma/Qwen availability is checked by existing runtime-checked config path
+- [x] Model selection is not fake
+- [x] AI output includes used data period
+- [x] AI output includes 기준일/source/observation count
+- [x] AI does not invent unsupported numbers
+- [x] Unverified facts are marked as 확인 불가
+- [x] Translation preserves numbers/dates/units
+
+#### Validation
+- [x] Lint executed or reason documented
+- [x] Build executed or reason documented
+- [x] Tests executed or reason documented
+- [x] UI validation executed or reason documented
+- [x] Data validation executed or reason documented
+- [x] AI briefing validation executed or reason documented
+
+#### Documentation
+- [x] docs/CONTINUOUS_ENHANCEMENT_LOG.md updated
+- [x] README updated if needed
+- [x] PR summary includes changed files
+- [x] PR summary includes validation result
+
 ## 2026-05-19 Continuous Enhancement Run 07:02
 
 - Branch: `automation/continuous-enhancement-20260519-0702`.
