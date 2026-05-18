@@ -1,0 +1,4 @@
+{"case_id":"sent-1","task":"sentiment","input_text":"Company revenue rose and margins expanded after strong demand.","expected_label":"positive","ticker":"MSFT"}
+{"case_id":"sent-2","task":"sentiment","input_text":"The company cut guidance after weaker orders and higher costs.","expected_label":"negative","ticker":"AAPL"}
+{"case_id":"headline-1","task":"headline","input_text":"Shares climb after earnings beat expectations","expected_label":"price_up","ticker":"NVDA"}
+{"case_id":"headline-2","task":"headline","input_text":"Stock falls as regulator opens investigation","expected_label":"price_down","ticker":"TSLA"}
