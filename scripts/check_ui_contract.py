@@ -305,6 +305,8 @@ REQUIRED_APP_JS_MARKERS: dict[str, str] = {
     "all default panel version": "DASHBOARD_PANEL_LAYOUT_VERSION",
     "global range storage": "fingpt.dashboardRange.v1",
     "global range setter": "function setGlobalRange",
+    "global range date order guard": "function normalizeCustomGlobalDateOrder",
+    "global range validation copy": "function globalRangeValidationMessage",
     "global quality summary": "function updateGlobalQualitySummary",
     "global quality missing summary": "function displayMissingSummary",
     "global quality ai basis label": "AI 기준:",

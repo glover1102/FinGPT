@@ -327,10 +327,11 @@ function initGlobalRangeFromLocation() {
   const params = new URLSearchParams(window.location.search || "");
   const urlRange = params.get("range");
   const range = normalizeGlobalRange(urlRange || saved.range || DEFAULT_GLOBAL_RANGE.range);
+  const ordered = normalizeCustomGlobalDateOrder(params.get("start") || saved.startDate, params.get("end") || saved.endDate);
   return {
     range,
-    startDate: params.get("start") || saved.startDate || "",
-    endDate: params.get("end") || saved.endDate || "",
+    startDate: ordered.startDate,
+    endDate: ordered.endDate,
   };
 }
 
@@ -814,6 +815,7 @@ const state = {
   tvChartSettings: safeReadStoredJson(STORAGE.tvChart, TV_CHART_DEFAULTS),
   dashboardPanelViewByTab: initDashboardPanelViews(),
   globalRange: initGlobalRangeFromLocation(),
+  globalRangeNotice: "",
   globalQuality: null,
   macroLoaded: false,
   macroLoading: false,
@@ -1826,8 +1828,9 @@ function displayCompactQualityTime(value, fallback = "확인 불가") {
 function selectedRangeLabel() {
   const range = state.globalRange || DEFAULT_GLOBAL_RANGE;
   if (range.range === "custom") {
-    const start = range.startDate || "시작일 미지정";
-    const end = range.endDate || "종료일 미지정";
+    const bounds = globalRangeDateBounds(range.range, range.startDate, range.endDate);
+    const start = bounds.startDate || "시작일 미지정";
+    const end = bounds.endDate || range.endDate || "종료일 미지정";
     return `${start}~${end}`;
   }
   return range.range || DEFAULT_GLOBAL_RANGE.range;
@@ -5710,6 +5713,27 @@ function sanitizeDateInput(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
 }
 
+function normalizeCustomGlobalDateOrder(startDate, endDate) {
+  const start = sanitizeDateInput(startDate);
+  const end = sanitizeDateInput(endDate);
+  if (start && end && start > end) {
+    return { startDate: end, endDate: start, reordered: true };
+  }
+  return { startDate: start, endDate: end, reordered: false };
+}
+
+function globalRangeValidationMessage(rangeState = state.globalRange) {
+  const normalized = normalizeGlobalRange(rangeState?.range);
+  if (normalized !== "custom") return state.globalRangeNotice || "";
+  if (state.globalRangeNotice) return state.globalRangeNotice;
+  const start = sanitizeDateInput(rangeState?.startDate);
+  const end = sanitizeDateInput(rangeState?.endDate);
+  if (!start && !end) return "Custom 기간은 시작일 또는 종료일이 필요합니다. 현재는 1Y 기본 기간으로 계산합니다.";
+  if (!start) return "시작일이 없어 1Y lookback으로 계산합니다.";
+  if (!end) return "종료일이 없어 오늘 기준으로 계산합니다.";
+  return "";
+}
+
 function globalRangeLookbackDays(range = state.globalRange?.range, startDate = state.globalRange?.startDate, endDate = state.globalRange?.endDate) {
   const normalized = normalizeGlobalRange(range);
   if (normalized === "YTD") {
@@ -5719,8 +5743,9 @@ function globalRangeLookbackDays(range = state.globalRange?.range, startDate = s
     return Math.max(1, Math.min(5000, diff));
   }
   if (normalized === "custom") {
-    const start = sanitizeDateInput(startDate);
-    const end = sanitizeDateInput(endDate) || localIsoDate();
+    const ordered = normalizeCustomGlobalDateOrder(startDate, endDate);
+    const start = ordered.startDate;
+    const end = ordered.endDate || localIsoDate();
     if (!start) return DASHBOARD_RANGE_LOOKBACK_DAYS["1Y"];
     const diff = Math.ceil((new Date(`${end}T00:00:00`) - new Date(`${start}T00:00:00`)) / 86400000) + 1;
     return Number.isFinite(diff) ? Math.max(1, Math.min(5000, diff)) : DASHBOARD_RANGE_LOOKBACK_DAYS["1Y"];
@@ -5732,8 +5757,8 @@ function globalRangeDateBounds(range = state.globalRange?.range, startDate = sta
   const normalized = normalizeGlobalRange(range);
   const end = sanitizeDateInput(endDate) || localIsoDate();
   if (normalized === "custom") {
-    const start = sanitizeDateInput(startDate);
-    return { startDate: start && start <= end ? start : "", endDate: end };
+    const ordered = normalizeCustomGlobalDateOrder(startDate, endDate || end);
+    return { startDate: ordered.startDate, endDate: ordered.endDate || end };
   }
   if (normalized === "MAX") return { startDate: "", endDate: end };
   if (normalized === "YTD") return { startDate: `${end.slice(0, 4)}-01-01`, endDate: end };
@@ -5789,10 +5814,17 @@ function syncDashboardRangeControls() {
   if (els.dashboardRangeStart) els.dashboardRangeStart.value = sanitizeDateInput(state.globalRange.startDate);
   if (els.dashboardRangeEnd) els.dashboardRangeEnd.value = sanitizeDateInput(state.globalRange.endDate);
   const isCustom = normalizeGlobalRange(state.globalRange.range) === "custom";
+  const validationMessage = globalRangeValidationMessage();
   if (els.dashboardRangeControls) els.dashboardRangeControls.classList.toggle("custom-active", isCustom);
+  if (els.dashboardRangeControls) els.dashboardRangeControls.classList.toggle("range-warning", Boolean(validationMessage));
+  const missingCustomStart = isCustom && !state.globalRangeNotice && !sanitizeDateInput(state.globalRange.startDate);
+  const missingCustomEnd = isCustom && !state.globalRangeNotice && !sanitizeDateInput(state.globalRange.endDate);
+  if (els.dashboardRangeStart) els.dashboardRangeStart.setAttribute("aria-invalid", missingCustomStart ? "true" : "false");
+  if (els.dashboardRangeEnd) els.dashboardRangeEnd.setAttribute("aria-invalid", missingCustomEnd ? "true" : "false");
   if (els.dashboardRangeSupport) {
     const days = globalRangeLookbackDays();
-    els.dashboardRangeSupport.textContent = `${selectedRangeLabel()} · 약 ${_fmtNumber(days)}일 기준으로 KPI, 차트, 테이블, AI 브리핑 입력을 맞춥니다.`;
+    const suffix = `${selectedRangeLabel()} · 약 ${_fmtNumber(days)}일 기준으로 KPI, 차트, 테이블, AI 브리핑 입력을 맞춥니다.`;
+    els.dashboardRangeSupport.textContent = validationMessage ? `${validationMessage} · ${suffix}` : suffix;
   }
   renderGlobalQualitySummary();
 }
@@ -5855,9 +5887,16 @@ function setGlobalRange(range, options = {}) {
   const normalized = normalizeGlobalRange(range);
   const start = sanitizeDateInput(options.startDate ?? els.dashboardRangeStart?.value ?? state.globalRange?.startDate);
   const end = sanitizeDateInput(options.endDate ?? els.dashboardRangeEnd?.value ?? state.globalRange?.endDate);
-  state.globalRange = normalized === "custom"
-    ? { range: normalized, startDate: start, endDate: end }
-    : { range: normalized, ...globalRangeDateBounds(normalized, start, end) };
+  state.globalRangeNotice = "";
+  if (normalized === "custom") {
+    const ordered = normalizeCustomGlobalDateOrder(start, end);
+    if (ordered.reordered) {
+      state.globalRangeNotice = "시작일과 종료일이 역순이라 자동으로 정렬했습니다.";
+    }
+    state.globalRange = { range: normalized, startDate: ordered.startDate, endDate: ordered.endDate };
+  } else {
+    state.globalRange = { range: normalized, ...globalRangeDateBounds(normalized, start, end) };
+  }
   if (options.persist !== false) safeWriteStoredJson(STORAGE.dashboardRange, state.globalRange);
   applyGlobalRangeToControls();
   if (options.updateUrl) updateGlobalRangeUrl();

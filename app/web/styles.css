@@ -5054,6 +5054,36 @@ input[type="date"]:focus {
   display: none;
 }
 
+.dashboard-surface-grid[data-panel-view="all"] [data-panel-tier] .home-card-head {
+  flex-wrap: wrap;
+}
+
+.dashboard-surface-grid[data-panel-view="all"] [data-panel-tier] .home-card-head::before {
+  order: -1;
+  flex: 0 0 100%;
+  width: fit-content;
+  margin-bottom: 2px;
+  color: var(--accent-hover);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.dashboard-surface-grid[data-panel-view="all"] [data-panel-tier="primary"] .home-card-head::before {
+  content: "Core";
+}
+
+.dashboard-surface-grid[data-panel-view="all"] [data-panel-tier="details"] .home-card-head::before {
+  content: "Diagnostics";
+}
+
+.dashboard-surface-grid[data-panel-view="all"] [data-panel-tier="operations"] .home-card-head::before {
+  content: "Operations";
+}
+
 .home-card-head {
   align-items: flex-start;
   margin-bottom: 12px;
@@ -10103,6 +10133,19 @@ html[data-theme="light"] button.primary-btn {
 
 .dashboard-range-controls:not(.custom-active) .custom-range-field input {
   pointer-events: none;
+}
+
+.dashboard-range-controls.range-warning {
+  border-color: rgba(201, 164, 92, 0.54);
+}
+
+.dashboard-range-controls.range-warning .dashboard-range-support {
+  color: var(--warn);
+}
+
+.dashboard-range-controls input[aria-invalid="true"] {
+  border-color: rgba(201, 164, 92, 0.68);
+  box-shadow: 0 0 0 1px rgba(201, 164, 92, 0.18);
 }
 
 .dashboard-range-support {
