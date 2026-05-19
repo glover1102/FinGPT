@@ -131,7 +131,7 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn('src="modules/forecast-ui.js?v=20260514-domain-modules"', html)
         self.assertIn('src="modules/quant-ui.js?v=20260514-domain-modules"', html)
         self.assertIn('src="modules/ai-portfolio-ui.js?v=20260514-domain-modules"', html)
-        self.assertIn('src="modules/quantamental-ui.js?v=20260516-quantamental-v11"', html)
+        self.assertIn('src="modules/quantamental-ui.js?v=20260519-quantamental-v12"', html)
         self.assertIn('href="styles.css?v=20260519-continuous-enhancement-v2"', html)
         self.assertIn('src="app.js?v=20260519-continuous-enhancement-v2"', html)
         self.assertIn('id="dashboardContextStrip"', html)
@@ -153,7 +153,7 @@ class UiRoutingContractTests(unittest.TestCase):
     def test_cross_dashboard_smoke_tracks_current_bundle_and_quantamental(self):
         smoke_source = AI_PORTFOLIO_UI_SMOKE.read_text(encoding="utf-8")
         self.assertIn('DOMAIN_BUNDLE_VERSION = "20260514-domain-modules"', smoke_source)
-        self.assertIn('QUANTAMENTAL_BUNDLE_VERSION = "20260516-quantamental-v11"', smoke_source)
+        self.assertIn('QUANTAMENTAL_BUNDLE_VERSION = "20260519-quantamental-v12"', smoke_source)
         self.assertIn('APP_BUNDLE_VERSION = "20260519-continuous-enhancement-v2"', smoke_source)
         self.assertIn("def _normalize_base_url", smoke_source)
         self.assertIn("modules/quantamental-ui.js", smoke_source)
@@ -640,6 +640,8 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn("function globalRangeValidationMessage", self.source)
         self.assertIn("function globalRangeSupportSummary", self.source)
         self.assertIn("function updateGlobalQualitySummary", self.source)
+        self.assertIn("function markGlobalQualityRangePending", self.source)
+        self.assertIn("기간 변경 후 데이터 재계산 대기", self.source)
         self.assertIn("function renderGlobalQualityContextSummary", self.source)
         self.assertIn("function displayMissingSummary", self.source)
         self.assertIn("AI 기준:", self.source)
@@ -825,7 +827,7 @@ class UiRoutingContractTests(unittest.TestCase):
             'data-testid="quantamental-score-screen-run"',
             'id="quantamentalScoreScreenStatus"',
             'id="quantamentalScoreScreenSurface"',
-            'src="modules/quantamental-ui.js?v=20260516-quantamental-v11"',
+            'src="modules/quantamental-ui.js?v=20260519-quantamental-v12"',
         ]:
             self.assertIn(marker, html)
         for marker in [
@@ -862,6 +864,8 @@ class UiRoutingContractTests(unittest.TestCase):
             "comparisonTable",
             "topSignals",
             "scoreScreen",
+            "quantamental-ai-used-data",
+            "function aiReportSection",
             "Research classification only. Not investment advice.",
         ]:
             self.assertIn(marker, module_source)

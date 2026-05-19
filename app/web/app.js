@@ -1881,6 +1881,21 @@ function updateGlobalQualitySummary(next = {}) {
   renderGlobalQualitySummary();
 }
 
+function markGlobalQualityRangePending() {
+  const isEnglish = selectedOutputLanguage() === "en";
+  state.globalQuality = {
+    status: "unknown",
+    asOf: "",
+    updatedAt: isEnglish ? "refreshing" : "갱신 중",
+    source: isEnglish ? "range changed; waiting for refreshed data" : "기간 변경 후 데이터 재계산 대기",
+    observations: "",
+    missing: isEnglish ? "checking" : "확인 중",
+    cache: isEnglish ? "refreshing" : "재조회 중",
+    aiSnapshotAt: isEnglish ? "pending recalculation" : "재계산 대기",
+  };
+  renderGlobalQualitySummary();
+}
+
 function globalQualityContextModel() {
   const quality = state.globalQuality || {};
   const status = quality.status || "unknown";
@@ -5969,7 +5984,10 @@ function setGlobalRange(range, options = {}) {
   if (options.persist !== false) safeWriteStoredJson(STORAGE.dashboardRange, state.globalRange);
   applyGlobalRangeToControls();
   if (options.updateUrl) updateGlobalRangeUrl();
-  if (options.reload) loadActiveDashboardResources(true);
+  if (options.reload) {
+    markGlobalQualityRangePending();
+    loadActiveDashboardResources(true);
+  }
 }
 
 function assetDetailOptionsFromControls() {

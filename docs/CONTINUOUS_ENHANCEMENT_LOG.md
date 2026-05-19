@@ -228,6 +228,97 @@
 - [x] PR summary includes changed files
 - [x] PR summary includes validation result
 
+## 2026-05-19 Continuous Enhancement Run 09:02
+
+- Branch: `automation/continuous-enhancement-20260519-0902`.
+- Current status: previous automation slices already added All-default dashboard views, the top-right quality summary, global range controls, range support copy, and Quantamental backend AI used-data guardrails. This run kept those contracts intact and focused on making the AI briefing evidence visible in the UI.
+- Compatibility: no API schema, strategy entry/exit logic, trading/order execution, environment files, or secrets were changed.
+- Data consistency: when the global range changes and a reload starts, the top-right quality badge now clears stale observations and shows a user-readable pending state (`갱신 중`, `확인 중`, `재계산 대기`) until fresh tab data replaces it.
+- UI/UX: the Quantamental AI tab now renders a dedicated `사용 데이터` / `Used Data` block with data basis date, analysis period, source, observation count, missing-data state, model, AI snapshot time, and cache state.
+- AI briefing: the Quantamental AI tab now exposes the structured guardrail sections already produced by the backend: key changes, interpretation, scenarios, and user actions. The UI still treats AI as interpretation over deterministic engine output only.
+- Translation: Korean and English labels for the new AI data/guardrail sections were added in the Quantamental UI module and verified for UTF-8/mojibake safety.
+- Performance: no new network request was added; the AI tab renders from the existing `ai_report` payload, and the range pending state is a local UI state transition.
+
+### 09:02 Validation Results
+
+| Check | Command / Tool | Result | Notes |
+|---|---|---|---|
+| JS syntax | `node --check app/web/app.js` | Passed | Static JavaScript syntax. |
+| JS module syntax | `node --check app/web/modules/quantamental-ui.js` | Passed | Quantamental UI module syntax. |
+| Python syntax | `python -m py_compile scripts/check_ui_contract.py scripts/ai_portfolio_ui_smoke.py` | Passed | Contract and smoke scripts remain importable. |
+| UI contract | `python scripts/check_ui_contract.py` | Passed | New bundle and quality pending markers included; no mojibake/placeholder lines. |
+| UI routing tests | `python -m pytest tests/test_ui_routing_contract.py -q` | Passed | `39 passed, 4 subtests passed`. |
+| Quantamental AI UI module test | `python -m pytest tests/test_quantamental_ui_ai_panel.py -q` | Passed | AI used-data and guardrail sections render in English and Korean. |
+| UI module tests | `python -m pytest tests/test_ui_modules.py -q` | Passed | `2 passed`; existing dirty file was not staged by this run. |
+| AI briefing guard regression | `python -m pytest tests/test_quantamental_api.py -q` | Passed | `20 passed`; backend used-data and advisory guardrails preserved. |
+| Diff hygiene | `git diff --check -- app/web/app.js app/web/index.html app/web/modules/quantamental-ui.js scripts/ai_portfolio_ui_smoke.py scripts/check_ui_contract.py tests/test_ui_routing_contract.py tests/test_quantamental_ui_ai_panel.py` | Passed | No whitespace errors in files selected for this run. |
+| Live desktop UI | Playwright MCP at `http://host.docker.internal:8392/ui/?range=1Y#quantamental` | Passed | Quantamental active, `panelView=all`, v12 module loaded, no horizontal overflow. |
+| AI tab DOM fixture | Playwright MCP module render fixture | Passed | `quantamental-ai-used-data`, key changes, and user actions appeared with Korean copy. |
+| Quality pending DOM | Playwright MCP direct pending-state check | Passed | Top-right quality badge showed `업데이트: 갱신 중`, `결측: 확인 중`, `AI 기준: 재계산 대기`. |
+| Mobile DOM | Playwright MCP resized to `390x900` | Passed | `horizontalOverflow=false`, quality badge and AI used-data marker remained visible. |
+| Quantamental browser smoke | `python scripts/quantamental_ui_smoke.py --base-url http://127.0.0.1:8392 --output reports/quantamental_ui_smoke_continuous_20260519_0902.json` | Passed | Required tickers, invalid ticker, GLOBAL resolver, Top 5, score screen, overview axes, comparison, Q&A, and audit smoke passed. |
+| AI Portfolio browser smoke | `python scripts/ai_portfolio_ui_smoke.py --base-url http://127.0.0.1:8392 --timeout-s 150 --output reports/ai_portfolio_ui_smoke_continuous_20260519_0902_retry.json` | Passed | First parallel run timed out on Macro search while Quantamental smoke was also running; direct API check passed and the standalone retry passed with no console errors. |
+| npm/pnpm build/lint/test | Not run | Excluded | Repo root has no frontend package manifest; static UI is validated through Python contracts and browser smoke. |
+
+### 09:02 Completion Checklist
+
+#### Compatibility
+- [x] Existing features still work
+- [x] Existing API contracts are not broken
+- [x] Existing UI flow is preserved
+- [x] No unauthorized strategy logic change
+- [x] No secret or env file exposure
+
+#### Data
+- [x] Date range selection works
+- [x] KPI/chart/table use the same selected period
+- [x] Data source and 기준일 are displayed
+- [x] Missing data is handled
+- [x] Data quality summary is visible at top-right
+- [x] Cache/fresh data distinction is clear
+
+#### UI
+- [x] Default view is All
+- [x] Core/Diagnostics/Operations filters still exist
+- [x] Font sizes are readable
+- [x] Layout spacing is consistent
+- [x] Cards/tables/charts are aligned
+- [x] Mobile layout is acceptable
+- [x] Loading state exists
+- [x] Empty state exists
+- [x] Error state exists
+
+#### Visualization
+- [x] Chart titles are meaningful
+- [x] Axis labels are readable
+- [x] Tooltips are useful
+- [x] Legends are not confusing
+- [x] Period selection updates charts
+- [x] No chart overflow or label collision
+
+#### AI Briefing
+- [x] Gemma/Qwen availability is checked
+- [x] Model selection is not fake
+- [x] AI output includes used data period
+- [x] AI output includes 기준일/source/observation count
+- [x] AI does not invent unsupported numbers
+- [x] Unverified facts are marked as 확인 불가
+- [x] Translation preserves numbers/dates/units
+
+#### Validation
+- [x] Lint executed or reason documented
+- [x] Build executed or reason documented
+- [x] Tests executed or reason documented
+- [x] UI validation executed or reason documented
+- [x] Data validation executed or reason documented
+- [x] AI briefing validation executed or reason documented
+
+#### Documentation
+- [x] docs/CONTINUOUS_ENHANCEMENT_LOG.md updated
+- [x] README updated if needed
+- [x] PR summary includes changed files
+- [x] PR summary includes validation result
+
 ## 2026-05-19 Continuous Enhancement Run 08:04
 
 - Branch: `automation/continuous-enhancement-20260519-0804`.
