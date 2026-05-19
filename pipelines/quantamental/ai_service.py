@@ -38,6 +38,7 @@ def build_context(analysis: dict[str, Any]) -> dict[str, Any]:
     data_quality = analysis.get("data_quality") or {}
     fundamentals = analysis.get("fundamentals") or {}
     quant = analysis.get("quant") or {}
+    quant_algorithm = ((quant.get("metrics") or {}).get("algorithm") or {}) if isinstance(quant, dict) else {}
     sec_evidence = analysis.get("sec_evidence") or {}
     peer_relative = analysis.get("peer_relative") or {}
     used_data = _build_used_data_snapshot(
@@ -123,6 +124,7 @@ def build_context(analysis: dict[str, Any]) -> dict[str, Any]:
         },
         "quant_snapshot": {
             "component_scores": quant.get("component_scores") or {},
+            "quality_adjusted_momentum": quant_algorithm,
             "missing_metrics": (quant.get("missing_metrics") or [])[:20],
         },
     }
@@ -294,12 +296,15 @@ def _key_changes(context: dict[str, Any], *, language: str) -> dict[str, Any]:
     risk = context.get("risk") or {}
     unavailable = _unavailable(language)
     factor_scores = scores.get("factor_scores") or {}
+    quant_algorithm = ((context.get("quant_snapshot") or {}).get("quality_adjusted_momentum") or {})
+    algorithm_text = _algorithm_change_text(quant_algorithm, unavailable=unavailable, language=language)
     if language == "en":
         return {
             "price": "Use deterministic quant components only; raw price change is unavailable." if scores.get("quant_score") is None else f"Quant score: {scores.get('quant_score')}.",
             "volume": unavailable,
             "volatility": f"Risk level: {risk.get('risk_level') or unavailable}.",
             "trend": f"Momentum score: {factor_scores.get('momentum_score', unavailable)}.",
+            "quant_algorithm": algorithm_text,
             "risk": risk.get("risk_summary") or f"Risk score: {scores.get('risk_score', unavailable)}.",
         }
     return {
@@ -309,6 +314,23 @@ def _key_changes(context: dict[str, Any], *, language: str) -> dict[str, Any]:
         "추세": f"모멘텀 점수: {factor_scores.get('momentum_score', unavailable)}.",
         "리스크": risk.get("risk_summary") or f"리스크 점수: {scores.get('risk_score', unavailable)}.",
     }
+
+
+def _algorithm_change_text(algorithm: dict[str, Any], *, unavailable: str, language: str) -> str:
+    score = algorithm.get("quality_adjusted_momentum_score")
+    classification = algorithm.get("classification") or unavailable
+    algorithm_id = algorithm.get("algorithm_id") or "quality_adjusted_momentum_v1"
+    if score is None:
+        return (
+            f"{algorithm_id}: unavailable; classification={classification}."
+            if language == "en"
+            else f"{algorithm_id}: 확인 불가; classification={classification}."
+        )
+    return (
+        f"{algorithm_id}: score={score}, classification={classification}; not used in the composite score."
+        if language == "en"
+        else f"{algorithm_id}: 점수={score}, classification={classification}; composite 점수에는 반영하지 않았습니다."
+    )
 
 
 def _interpretation(context: dict[str, Any], *, language: str) -> dict[str, Any]:
@@ -447,6 +469,14 @@ def _fallback_report(context: dict[str, Any], *, language: str = "ko") -> dict[s
             "user_actions": _user_actions(context, language=language),
         }
     )
+    quant_algorithm = ((context.get("quant_snapshot") or {}).get("quality_adjusted_momentum") or {})
+    if quant_algorithm:
+        key_changes = dict(report.get("key_changes") or {})
+        key_changes.setdefault(
+            "quant_algorithm",
+            _algorithm_change_text(quant_algorithm, unavailable=_unavailable(language), language=language),
+        )
+        report["key_changes"] = key_changes
     return {
         "status": "partial",
         "provider": "deterministic_interpreter",

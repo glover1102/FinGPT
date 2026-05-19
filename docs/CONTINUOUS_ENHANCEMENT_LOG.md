@@ -718,3 +718,94 @@
 - Final scope: added truthful Quantamental AI model selection without changing strategy logic, data providers, schemas, secrets, or default deterministic analysis behavior.
 - Final validation: `node --check app/web/app.js`, `python -m py_compile app/api/routers/system.py scripts/check_ui_contract.py scripts/ai_portfolio_ui_smoke.py`, `python scripts/check_ui_contract.py`, targeted UI/API/Quantamental tests, full `python -m pytest -q`, Quantamental browser smoke, AI Portfolio browser smoke retry, and Playwright DOM/payload checks all passed.
 - Remaining limit: Qwen/Gemma options are runtime-checked and not claimed as locally installed; provider failure still falls back to deterministic interpretation.
+
+## 2026-05-19 Continuous Enhancement Run 13:30
+
+- Branch: `automation/continuous-enhancement-20260519-0920`.
+- Current status: the existing All-default dashboard, top-right quality summary, global range controls, and Quantamental AI model guardrails were preserved. The working tree still contains broad pending work from earlier automation slices, so this run added a narrow Quant Lab enhancement only.
+- Compatibility: existing strategies, trading/order behavior, strategy entry/exit logic, API defaults, secrets, and `.env` were not changed. The new path is opt-in through a new template and factor.
+- Quant algorithm: added `risk_adjusted_momentum_63d`, calculated as 63-day momentum divided by realized volatility with a current-drawdown penalty. This gives Quant Lab a deterministic score that rewards momentum but penalizes unstable or deeply drawn-down price paths.
+- Data integration: the factor catalog, default feature preview payload, signal matrix, saved strategy draft payload, and backtest artifact path now include the risk-adjusted momentum field where the user selects `risk_adjusted_momentum`.
+- UI/UX: the Quant Lab strategy selector now exposes `위험조정 모멘텀`; the factor preview table adds a `위험조정` column without changing the existing table flow.
+- Visualization: the browser-verified backtest result still renders the existing chart surface and now labels the run template as `위험조정 모멘텀`.
+- AI briefing: Quantamental AI behavior was not modified; deterministic AI guard and used-data report tests were re-run.
+- Performance: no background polling or LLM calls were added. The new factor is computed in the existing feature-preview loop from already-loaded price vectors.
+
+### 13:30 Validation Results
+
+| Check | Command / Tool | Result | Notes |
+|---|---|---|---|
+| Python syntax | `python -m py_compile pipelines/factors/core.py pipelines/factors/catalog.py pipelines/signals/rule_based.py pipelines/backtest/engine.py pipelines/orchestration/quant_lab_pipeline.py app/api/routers/quant_lab.py core/schemas/quant.py scripts/check_ui_contract.py` | Passed | Targeted changed modules compile. |
+| JS syntax | `node --check app/web/app.js` | Passed | Static JavaScript syntax. |
+| UI contract | `python scripts/check_ui_contract.py` | Passed | New risk-adjusted option marker included. |
+| Quant Lab tests | `python -m pytest tests/test_quant_lab_pipeline.py tests/test_quant_lab_api.py -q` | Passed | `32 passed`. |
+| UI routing/module tests | `python -m pytest tests/test_ui_routing_contract.py tests/test_ui_modules.py -q` | Passed | `41 passed, 4 subtests passed`. |
+| Quantamental AI guard tests | `python -m pytest tests/test_quantamental_api.py tests/test_quantamental_ui_ai_panel.py -q` | Passed | `21 passed`; used-data and direct-order guard coverage preserved. |
+| Quantamental engine tests | `python -m pytest tests/test_quantamental_engines.py -q` | Passed | `19 passed`. |
+| Full regression | `python -m pytest -q` | Passed | `692 passed, 9 subtests passed`. |
+| Live API smoke | `POST /api/v1/quant/backtest` with `template=risk_adjusted_momentum` | Passed | `status=success`, `lookahead_safe=true`, first signal date precedes execution date. |
+| Live signal API smoke | `POST /api/v1/quant/signals/generate` with `template=risk_adjusted_momentum` | Passed | Returned `risk_adjusted_momentum_63d` feature and score. |
+| Browser UI validation | Browser at `http://127.0.0.1:8405/ui/?range=1Y#quant` | Passed | Option visible, factor table has risk-adjusted column, signal/backtest completed, no horizontal overflow. |
+| Mobile UI validation | Browser viewport `390x900` | Passed | `horizontalOverflow=false`, All view and top quality summary remain visible. |
+| Cross-tab browser smoke | `python scripts/ai_portfolio_ui_smoke.py --base-url http://127.0.0.1:8405 --timeout-s 120 --output reports/ai_portfolio_ui_smoke_continuous_20260519_1330.json` | Passed | Cross-dashboard tab matrix passed with no console errors. |
+| Quantamental browser smoke | `python scripts/quantamental_ui_smoke.py --base-url http://127.0.0.1:8405 --output reports/quantamental_ui_smoke_continuous_20260519_1330.json` | Passed | Required ticker set, invalid ticker, Top 5, score screen, overview axes, Q&A, audit smoke passed. |
+| npm/pnpm build/lint/test | Not run | Excluded | Repo root has no `package.json`, `pnpm-lock.yaml`, or frontend build manifest; static UI is validated through Python contracts and browser smoke. |
+
+### 13:30 Completion Checklist
+
+#### Compatibility
+- [x] Existing features still work
+- [x] Existing API contracts are not broken
+- [x] Existing UI flow is preserved
+- [x] No unauthorized strategy logic change
+- [x] No secret or env file exposure
+
+#### Data
+- [x] Date range selection works
+- [x] KPI/chart/table use the same selected period where exact date support exists
+- [x] Data source and basis date are displayed
+- [x] Missing data is handled
+- [x] Data quality summary is visible at top-right
+- [x] Cache/fresh data distinction is clear
+
+#### UI
+- [x] Default view is All
+- [x] Core/Diagnostics/Operations filters still exist
+- [x] Font sizes are readable in the checked Quant Lab surface
+- [x] Layout spacing is consistent in the checked desktop/mobile surfaces
+- [x] Cards/tables/charts are aligned
+- [x] Mobile layout is acceptable
+- [x] Loading state exists
+- [x] Empty state exists
+- [x] Error state exists
+
+#### Visualization
+- [x] Chart titles are meaningful in the checked backtest result
+- [x] Axis labels remain readable
+- [x] Tooltips/legends were not changed
+- [x] Period selection remains visible
+- [x] No chart overflow or label collision observed in browser checks
+
+#### AI Briefing
+- [x] Gemma/Qwen availability remains runtime-checked
+- [x] Model selection is not fake
+- [x] AI output includes used data period
+- [x] AI output includes basis/source/observation count
+- [x] AI does not invent unsupported numbers
+- [x] Unverified facts are marked as unavailable by existing guardrails
+- [x] Translation preserves numbers/dates/units in the tested AI panel contract
+
+#### Validation
+- [x] Lint/static checks executed or reason documented
+- [x] Build executed or reason documented
+- [x] Tests executed or reason documented
+- [x] UI validation executed or reason documented
+- [x] Data validation executed or reason documented
+- [x] AI briefing validation executed or reason documented
+
+#### Documentation
+- [x] docs/CONTINUOUS_ENHANCEMENT_LOG.md updated
+- [x] docs/QUANT_LAB_ADVANCEMENT_IMPLEMENTATION_CHECKLIST.md updated
+- [x] README updated if needed
+- [x] PR summary includes changed files
+- [x] PR summary includes validation result

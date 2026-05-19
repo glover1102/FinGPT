@@ -160,6 +160,7 @@ REQUIRED_UI_MARKERS: dict[str, str] = {
     "backtest universe picker": 'id="backtestUniverseOpen"',
     "backtest universe chips": 'id="backtestUniverseChips"',
     "backtest strategy registry": 'id="backtestStrategyRegistry"',
+    "backtest risk adjusted momentum option": 'value="risk_adjusted_momentum"',
     "backtest benchmark": 'id="backtestBenchmark"',
     "backtest benchmark picker": 'id="backtestBenchmarkOpen"',
     "backtest benchmark compare": 'id="backtestBenchmarkCompare"',
@@ -288,7 +289,7 @@ REQUIRED_UI_MARKERS: dict[str, str] = {
     "forecast ui module": 'modules/forecast-ui.js?v=20260514-domain-modules',
     "quant ui module": 'modules/quant-ui.js?v=20260514-domain-modules',
     "ai portfolio ui module": 'modules/ai-portfolio-ui.js?v=20260514-domain-modules',
-    "quantamental ui module": 'modules/quantamental-ui.js?v=20260519-quantamental-v12',
+    "quantamental ui module": 'modules/quantamental-ui.js?v=20260519-quantamental-v13',
     "ai portfolio operation hydrate": 'id="aiPortfolioHydrateData"',
     "ai portfolio operation retry": 'id="aiPortfolioRetryMissing"',
     "ai portfolio snapshot job": 'id="aiPortfolioSnapshotJob"',
@@ -372,6 +373,12 @@ REQUIRED_APP_JS_MARKERS: dict[str, str] = {
 }
 
 
+REQUIRED_QUANTAMENTAL_MODULE_MARKERS: dict[str, str] = {
+    "quantamental quant algorithm summary": "quantamental-quant-algorithm",
+    "quantamental quality adjusted momentum algorithm": "quality_adjusted_momentum_v1",
+}
+
+
 def _matching_lines(text: str, pattern: re.Pattern[str]) -> list[dict[str, Any]]:
     return [
         {"line": line_no, "text": line.strip()[:240]}
@@ -390,8 +397,13 @@ def run_check() -> dict[str, Any]:
     html = ui_response.text
     app_js_path = Path(__file__).resolve().parents[1] / "app" / "web" / "app.js"
     app_js = app_js_path.read_text(encoding="utf-8")
+    quantamental_js_path = Path(__file__).resolve().parents[1] / "app" / "web" / "modules" / "quantamental-ui.js"
+    quantamental_js = quantamental_js_path.read_text(encoding="utf-8")
     missing = [name for name, marker in REQUIRED_UI_MARKERS.items() if marker not in html]
     missing_js = [name for name, marker in REQUIRED_APP_JS_MARKERS.items() if marker not in app_js]
+    missing_quantamental_js = [
+        name for name, marker in REQUIRED_QUANTAMENTAL_MODULE_MARKERS.items() if marker not in quantamental_js
+    ]
     mojibake_lines = _matching_lines(html, HTML_MOJIBAKE_RE)
     placeholder_lines = _matching_lines(html, HTML_PLACEHOLDER_RE)
     passed = (
@@ -401,6 +413,7 @@ def run_check() -> dict[str, Any]:
         and health_response.status_code == 200
         and not missing
         and not missing_js
+        and not missing_quantamental_js
         and not mojibake_lines
         and not placeholder_lines
     )
@@ -412,10 +425,12 @@ def run_check() -> dict[str, Any]:
         "health_status": health_response.status_code,
         "missing_markers": missing,
         "missing_js_markers": missing_js,
+        "missing_quantamental_js_markers": missing_quantamental_js,
         "mojibake_lines": mojibake_lines,
         "placeholder_lines": placeholder_lines,
         "checked_markers": sorted(REQUIRED_UI_MARKERS),
         "checked_js_markers": sorted(REQUIRED_APP_JS_MARKERS),
+        "checked_quantamental_js_markers": sorted(REQUIRED_QUANTAMENTAL_MODULE_MARKERS),
         "html_bytes": len(html.encode("utf-8", errors="ignore")),
     }
 

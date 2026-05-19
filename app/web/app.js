@@ -7874,6 +7874,7 @@ function quantFeatureRequestFromControls() {
     freshness_profile: els.backtestFreshnessProfile?.value || "research_default",
     features: [
       { id: "momentum_63d" },
+      { id: "risk_adjusted_momentum_63d" },
       { id: "realized_vol_21d" },
       { id: "drawdown_current" },
       { id: "ma_ratio_20_50" },
@@ -7887,6 +7888,7 @@ function quantFeatureRequestFromControls() {
 function quantSignalTemplateFromStrategy(strategy) {
   const clean = String(strategy || "").toLowerCase();
   if (clean === "momentum_ranking") return "momentum_ranking";
+  if (clean === "risk_adjusted_momentum") return "risk_adjusted_momentum";
   if (clean === "research_confirmed_momentum") return "research_confirmed_momentum";
   if (clean === "moving_average") return "moving_average_trend";
   if (clean === "volatility_targeting") return "volatility_targeting";
@@ -7899,6 +7901,7 @@ const QUANT_TEMPLATE_LABELS = {
   moving_average_trend: "이동평균 추세",
   volatility_targeting: "변동성 타깃",
   momentum_ranking: "모멘텀 랭킹",
+  risk_adjusted_momentum: "위험조정 모멘텀",
   research_confirmed_momentum: "리서치 확인 모멘텀",
 };
 
@@ -8957,7 +8960,7 @@ async function runQuantFeaturePreview() {
       ${(resolution.data?.unavailable || []).length ? renderUniverseResolutionNotice(resolution.data) : ""}
       <div class="decision-table-wrap">
         <table class="decision-table">
-          <thead><tr><th>종목</th><th>기준일</th><th>신선도</th><th>모멘텀</th><th>변동성</th><th>낙폭</th><th>추세</th><th>상대강도</th></tr></thead>
+          <thead><tr><th>종목</th><th>기준일</th><th>신선도</th><th>모멘텀</th><th>위험조정</th><th>변동성</th><th>낙폭</th><th>추세</th><th>상대강도</th></tr></thead>
           <tbody>
             ${rows.map((row) => {
               const features = row.features || {};
@@ -8967,6 +8970,7 @@ async function runQuantFeaturePreview() {
                   <td>${escapeHtml(row.as_of || "알 수 없음")}</td>
                   <td><span class="table-status ${escapeHtml(decisionStatusClass(row.freshness_status))}">${escapeHtml(row.freshness_status || "알 수 없음")}</span></td>
                   <td>${escapeHtml(formatQuantValue(features.momentum_63d))}</td>
+                  <td>${escapeHtml(formatQuantValue(features.risk_adjusted_momentum_63d))}</td>
                   <td>${escapeHtml(formatQuantValue(features.realized_vol_21d))}</td>
                   <td>${escapeHtml(formatQuantValue(features.drawdown_current))}</td>
                   <td>${escapeHtml(formatQuantValue(features.ma_ratio_20_50))}</td>
@@ -9099,6 +9103,7 @@ function quantStrategyDraftFromControls() {
     frequency: "daily",
     features: {
       momentum_63d: { id: "momentum_63d", lookback: 63 },
+      ...(request.template === "risk_adjusted_momentum" ? { risk_adjusted_momentum_63d: { id: "risk_adjusted_momentum_63d", lookback: 63 } } : {}),
       realized_vol_21d: { id: "realized_vol_21d", lookback: 21 },
       ...(request.use_research_score ? { research_score: { id: "research_score", max_age_days: 7 } } : {}),
     },

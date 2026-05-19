@@ -131,7 +131,7 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn('src="modules/forecast-ui.js?v=20260514-domain-modules"', html)
         self.assertIn('src="modules/quant-ui.js?v=20260514-domain-modules"', html)
         self.assertIn('src="modules/ai-portfolio-ui.js?v=20260514-domain-modules"', html)
-        self.assertIn('src="modules/quantamental-ui.js?v=20260519-quantamental-v12"', html)
+        self.assertIn('src="modules/quantamental-ui.js?v=20260519-quantamental-v13"', html)
         self.assertIn('href="styles.css?v=20260519-continuous-enhancement-v3"', html)
         self.assertIn('src="app.js?v=20260519-continuous-enhancement-v3"', html)
         self.assertIn('id="dashboardContextStrip"', html)
@@ -153,7 +153,7 @@ class UiRoutingContractTests(unittest.TestCase):
     def test_cross_dashboard_smoke_tracks_current_bundle_and_quantamental(self):
         smoke_source = AI_PORTFOLIO_UI_SMOKE.read_text(encoding="utf-8")
         self.assertIn('DOMAIN_BUNDLE_VERSION = "20260514-domain-modules"', smoke_source)
-        self.assertIn('QUANTAMENTAL_BUNDLE_VERSION = "20260519-quantamental-v12"', smoke_source)
+        self.assertIn('QUANTAMENTAL_BUNDLE_VERSION = "20260519-quantamental-v13"', smoke_source)
         self.assertIn('APP_BUNDLE_VERSION = "20260519-continuous-enhancement-v3"', smoke_source)
         self.assertIn("def _normalize_base_url", smoke_source)
         self.assertIn("modules/quantamental-ui.js", smoke_source)
@@ -622,11 +622,13 @@ class UiRoutingContractTests(unittest.TestCase):
             'data-quality-detail="source"',
             'data-quality-detail="cache"',
             'data-quality-detail="range-support"',
+            'value="risk_adjusted_momentum"',
             '<option value="1D">1D</option>',
             '<option value="MAX">MAX</option>',
             '<button type="button" id="macroBriefGenerate"',
         ]:
             self.assertIn(marker, html)
+        module_source = QUANTAMENTAL_UI_JS.read_text(encoding="utf-8")
         self.assertIn('.dashboard-surface-grid[data-panel-view="overview"]', css)
         self.assertIn('.dashboard-view-controls', css)
         self.assertIn(".global-quality-summary", css)
@@ -647,7 +649,11 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn("function markGlobalQualityRangePending", self.source)
         self.assertIn("function renderQuantamentalAiModelOptions", self.source)
         self.assertIn("function quantamentalAiRequestOptions", self.source)
+        self.assertIn("quantamental-quant-algorithm", module_source)
+        self.assertIn("quality_adjusted_momentum_v1", module_source)
         self.assertIn("model: aiOptions.model", self.source)
+        self.assertIn("risk_adjusted_momentum_63d", self.source)
+        self.assertIn("risk_adjusted_momentum", self.source)
         self.assertIn("기간 변경 후 데이터 재계산 대기", self.source)
         self.assertIn("function renderGlobalQualityContextSummary", self.source)
         self.assertIn("function displayMissingSummary", self.source)
@@ -834,7 +840,7 @@ class UiRoutingContractTests(unittest.TestCase):
             'data-testid="quantamental-score-screen-run"',
             'id="quantamentalScoreScreenStatus"',
             'id="quantamentalScoreScreenSurface"',
-            'src="modules/quantamental-ui.js?v=20260519-quantamental-v12"',
+            'src="modules/quantamental-ui.js?v=20260519-quantamental-v13"',
         ]:
             self.assertIn(marker, html)
         for marker in [

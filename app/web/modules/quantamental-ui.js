@@ -1,4 +1,6 @@
 (function initQuantamentalUi(global) {
+  const QUALITY_ADJUSTED_MOMENTUM_ID = "quality_adjusted_momentum_v1";
+
   function escapeHtml(value) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
@@ -64,6 +66,9 @@
       priceAsOf: "Price As Of",
       oneYearReturn: "1Y Return",
       vol60d: "60D Vol",
+      qamScore: "QAM Score",
+      qamClass: "QAM Class",
+      qamNotInComposite: "Quality-adjusted momentum is shown as a deterministic research signal and is not used in the composite score.",
       maxDrawdown: "Max Drawdown",
       latestFiling: "Latest Filing",
       revenue: "Revenue",
@@ -273,6 +278,9 @@
       priceAsOf: "가격 기준일",
       oneYearReturn: "1년 수익률",
       vol60d: "60일 변동성",
+      qamScore: "QAM 점수",
+      qamClass: "QAM 분류",
+      qamNotInComposite: "품질 조정 모멘텀은 결정론적 리서치 신호로만 표시되며 복합 점수에는 반영하지 않습니다.",
       maxDrawdown: "최대 낙폭",
       latestFiling: "최근 공시",
       revenue: "매출",
@@ -536,6 +544,7 @@
       <div class="decision-summary ${escapeHtml(statusClass(data?.status))}">
         ${escapeHtml(c.style || "balanced")} / ${escapeHtml(c.data_conflict_classification || "mixed_or_insufficient_data")}
       </div>
+      ${quantAlgorithmSummary(data)}
     `;
   }
 
@@ -545,6 +554,14 @@
     if (num >= 70) return "ok";
     if (num >= 45) return "warn";
     return "fail";
+  }
+
+  function algorithmStatusClass(value) {
+    const key = String(value || "").toLowerCase();
+    if (key.includes("strong") || key.includes("constructive")) return "ok";
+    if (key.includes("weak")) return "fail";
+    if (key.includes("mixed") || key.includes("insufficient")) return "warn";
+    return "neutral";
   }
 
   function factorGrid(data) {
@@ -570,6 +587,19 @@
         `).join("")}
       </div>
       ${peer.relative_strength_score == null ? "" : `<div class="decision-summary ${escapeHtml(scoreClass(peer.relative_strength_score))}">${escapeHtml(copy().peerStrength)} ${escapeHtml(fmt(peer.relative_strength_score))} / ${escapeHtml(copy().rank)} ${escapeHtml(peer.rank || "-")} / ${escapeHtml(copy().peers)} ${escapeHtml(peer.peer_count || "-")}</div>`}
+    `;
+  }
+
+  function quantAlgorithmSummary(data) {
+    const cpy = copy();
+    const algorithm = data?.quant?.metrics?.algorithm || {};
+    if (!algorithm.algorithm_id) return "";
+    const algorithmId = algorithm.algorithm_id || QUALITY_ADJUSTED_MOMENTUM_ID;
+    return `
+      <div class="decision-summary ${escapeHtml(algorithmStatusClass(algorithm.classification))}" data-testid="quantamental-quant-algorithm">
+        ${escapeHtml(algorithmId)} / ${escapeHtml(cpy.qamScore)} ${escapeHtml(fmt(algorithm.quality_adjusted_momentum_score))} / ${escapeHtml(cpy.qamClass)} ${escapeHtml(algorithm.classification || cpy.unavailable)}
+        <br /><span class="muted">${escapeHtml(cpy.qamNotInComposite)}</span>
+      </div>
     `;
   }
 
@@ -625,6 +655,7 @@
       ...(data?.quant?.missing_metrics || []),
       ...(data?.factors?.missing_factor_inputs || []),
     ];
+    const algorithm = qMetrics?.algorithm || {};
     return `
       <div data-testid="quantamental-overview-tab">
         <div class="quantamental-overview-brief">
@@ -633,6 +664,8 @@
             ${metric(cpy.priceAsOf, latestPriceDate || "-", statusClass(freshness?.sections?.prices?.status))}
             ${metric(cpy.oneYearReturn, fmtPct(qMetrics?.return?.return_252d), scoreClass((qMetrics?.return?.return_252d || 0) * 100 + 50))}
             ${metric(cpy.vol60d, fmtPct(qMetrics?.volatility?.realized_volatility_60d), statusClass(qMetrics?.liquidity?.liquidity_risk))}
+            ${metric(cpy.qamScore, fmt(algorithm.quality_adjusted_momentum_score), scoreClass(algorithm.quality_adjusted_momentum_score))}
+            ${metric(cpy.qamClass, algorithm.classification || "-", algorithmStatusClass(algorithm.classification))}
             ${metric(cpy.maxDrawdown, fmtPct(qMetrics?.drawdown?.max_drawdown), "warn")}
             ${metric(cpy.latestFiling, latestStatement?.date || "-", statusClass(freshness?.sections?.fundamentals?.status))}
             ${metric(cpy.revenue, compact(latestStatement?.revenue), "neutral")}
