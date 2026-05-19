@@ -145,6 +145,12 @@ SCORE_SCREEN_REGISTRY: dict[str, dict[str, str]] = {
         "algorithm_key": "tail_risk_adjusted_momentum",
         "algorithm_score_field": "tail_risk_adjusted_momentum_score",
     },
+    "accumulation_quality": {
+        "label": "Accumulation Quality",
+        "row_field": "accumulation_quality_score",
+        "algorithm_key": "volume_accumulation_quality",
+        "algorithm_score_field": "volume_accumulation_quality_score",
+    },
 }
 
 
@@ -187,6 +193,7 @@ def health() -> dict[str, Any]:
             "trend_efficiency_stability_v1",
             "market_relative_resilience_v1",
             "tail_risk_adjusted_momentum_v1",
+            "volume_accumulation_quality_v1",
         ],
         "score_screen_keys": [
             {

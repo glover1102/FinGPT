@@ -223,6 +223,12 @@ const quantamentalMain = context.window.FinGPTQuantamentalUi.mainPanel({
           classification: "constructive_tail_risk_adjusted_momentum",
           used_in_composite_score: false,
         },
+        volume_accumulation_quality: {
+          algorithm_id: "volume_accumulation_quality_v1",
+          volume_accumulation_quality_score: 73.6,
+          classification: "constructive_volume_accumulation_quality",
+          used_in_composite_score: false,
+        },
       },
     },
     chart_data: {
@@ -259,6 +265,8 @@ assert.match(quantamentalMain, /market_relative_resilience_v1/);
 assert.match(quantamentalMain, /constructive_market_relative_resilience/);
 assert.match(quantamentalMain, /tail_risk_adjusted_momentum_v1/);
 assert.match(quantamentalMain, /constructive_tail_risk_adjusted_momentum/);
+assert.match(quantamentalMain, /volume_accumulation_quality_v1/);
+assert.match(quantamentalMain, /constructive_volume_accumulation_quality/);
 
 const quantamentalTopSignals = context.window.FinGPTQuantamentalUi.topSignals({
   status: "ok",
@@ -360,6 +368,12 @@ const quantamentalKorean = context.window.FinGPTQuantamentalUi.mainPanel({
           classification: "constructive_tail_risk_adjusted_momentum",
           used_in_composite_score: false,
         },
+        volume_accumulation_quality: {
+          algorithm_id: "volume_accumulation_quality_v1",
+          volume_accumulation_quality_score: 73.6,
+          classification: "constructive_volume_accumulation_quality",
+          used_in_composite_score: false,
+        },
       },
     },
     chart_data: {
@@ -384,6 +398,7 @@ assert.match(quantamentalKorean, /커버리지/);
 assert.match(quantamentalKorean, /Y: 가격/);
 assert.match(quantamentalKorean, /QAM 점수/);
 assert.match(quantamentalKorean, /TRM 점수/);
+assert.match(quantamentalKorean, /VAQ 점수/);
 
 const quantamentalKoreanTopSignals = context.window.FinGPTQuantamentalUi.topSignals({
   status: "ok",

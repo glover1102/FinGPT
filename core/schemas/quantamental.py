@@ -24,6 +24,7 @@ QuantamentalScoreKey = Literal[
     "trend_efficiency",
     "market_resilience",
     "tail_risk_momentum",
+    "accumulation_quality",
 ]
 
 

@@ -114,7 +114,7 @@ def main() -> int:
                 "row_count": page.locator('#quantamentalScreenSurface [data-testid="quantamental-screen-table"] tbody tr').count(),
             }
 
-            page.locator("#quantamentalScoreMetric").select_option("tail_risk_momentum", timeout=10_000)
+            page.locator("#quantamentalScoreMetric").select_option("accumulation_quality", timeout=10_000)
             page.locator("#quantamentalScoreThreshold").fill("0", timeout=10_000)
             page.locator("#quantamentalScoreScreenLimit").select_option("10", timeout=10_000)
             page.get_by_test_id("quantamental-score-screen-run").click(timeout=10_000)
@@ -122,7 +122,7 @@ def main() -> int:
                 """() => {
                     const text = document.querySelector("#quantamentalScoreScreenSurface")?.textContent || "";
                     const rows = document.querySelectorAll('#quantamentalScoreScreenSurface [data-testid="quantamental-score-screen-table"] tbody tr').length;
-                    return (text.includes("Tail Risk Momentum") || text.includes("꼬리위험 모멘텀")) && text.includes(">=") && rows > 0 && rows <= 10;
+                    return (text.includes("Accumulation Quality") || text.includes("누적 품질")) && text.includes(">=") && rows > 0 && rows <= 10;
                 }""",
                 timeout=180_000,
             )

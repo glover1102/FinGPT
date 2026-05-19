@@ -154,6 +154,14 @@ def calculate_quant(payload: dict[str, Any]) -> dict[str, Any]:
         risk_adjusted=risk_adjusted,
         liquidity=liquidity,
     )
+    accumulation_quality_algorithm = _volume_accumulation_quality_algorithm(
+        rows=rows,
+        returns=returns,
+        trend=trend,
+        volatility=volatility,
+        drawdown=drawdown,
+        liquidity=liquidity,
+    )
     chart_data = {
         "price": _price_chart(rows),
         "cumulative_return": _cumulative_return_chart(rows),
@@ -179,6 +187,7 @@ def calculate_quant(payload: dict[str, Any]) -> dict[str, Any]:
             "trend_efficiency_stability": trend_efficiency_algorithm,
             "market_relative_resilience": market_resilience_algorithm,
             "tail_risk_adjusted_momentum": tail_risk_momentum_algorithm,
+            "volume_accumulation_quality": accumulation_quality_algorithm,
         },
     }
     return {
@@ -1177,6 +1186,101 @@ def _tail_risk_adjusted_momentum_algorithm(
     }
 
 
+def _volume_accumulation_quality_algorithm(
+    *,
+    rows: list[dict[str, Any]],
+    returns: list[float],
+    trend: dict[str, Any],
+    volatility: dict[str, Any],
+    drawdown: dict[str, Any],
+    liquidity: dict[str, Any],
+) -> dict[str, Any]:
+    closes = [_price(row) for row in rows]
+    available_observations = len(rows)
+    required_observations = 90
+    warnings: list[str] = []
+    if available_observations < required_observations:
+        warnings.append("insufficient_price_history_for_volume_accumulation_quality")
+
+    return_63d = _window_return(closes, 63)
+    close_location_63d = _close_location_in_range(closes, 63)
+    up_volume_share_63d, up_down_volume_ratio_63d = _up_volume_metrics(rows, 63)
+    positive_share_63d = _positive_return_share(returns, 63)
+    current_drawdown_abs = abs(drawdown.get("current_drawdown")) if drawdown.get("current_drawdown") is not None else None
+
+    return_score = _score_high(return_63d, -0.10, 0.25)
+    up_volume_score = _score_high(up_volume_share_63d, 0.45, 0.65)
+    close_location_score = _score_high(close_location_63d, 0.35, 0.90)
+    consistency_score = _score_high(positive_share_63d, 0.42, 0.64)
+    volume_trend_score = _score_high(liquidity.get("volume_trend"), -0.25, 0.45)
+    trend_score = _avg([
+        _trend_regime_score(trend.get("trend_regime")),
+        100.0 if trend.get("price_above_sma_50") is True else 30.0 if trend.get("price_above_sma_50") is False else None,
+    ])
+    volatility_score = _score_low(volatility.get("realized_volatility_60d"), 0.12, 0.75)
+    drawdown_score = _score_low(current_drawdown_abs, 0.0, 0.35)
+    liquidity_score = _score_high(
+        math.log10(liquidity.get("average_dollar_volume")) if liquidity.get("average_dollar_volume") else None,
+        6.0,
+        9.0,
+    )
+    score = _weighted_score(
+        [
+            (return_score, 0.20),
+            (up_volume_score, 0.18),
+            (close_location_score, 0.14),
+            (consistency_score, 0.12),
+            (volume_trend_score, 0.10),
+            (trend_score, 0.10),
+            (volatility_score, 0.08),
+            (drawdown_score, 0.05),
+            (liquidity_score, 0.03),
+        ],
+        min_components=5,
+    )
+    if available_observations < required_observations:
+        score = None
+
+    return {
+        "algorithm_id": "volume_accumulation_quality_v1",
+        "volume_accumulation_quality_score": score,
+        "classification": _volume_accumulation_quality_classification(score, up_volume_share_63d, return_63d),
+        "score_direction": "higher means recent returns are supported by up-day volume participation, range position, consistency, and controlled risk",
+        "required_observations": required_observations,
+        "available_observations": available_observations,
+        "return_63d": return_63d,
+        "positive_return_share_63d": positive_share_63d,
+        "up_volume_share_63d": up_volume_share_63d,
+        "up_down_volume_ratio_63d": up_down_volume_ratio_63d,
+        "close_location_63d": close_location_63d,
+        "volume_trend_20d_vs_prior": liquidity.get("volume_trend"),
+        "realized_volatility_60d": volatility.get("realized_volatility_60d"),
+        "current_drawdown_abs": current_drawdown_abs,
+        "average_dollar_volume_60d": liquidity.get("average_dollar_volume"),
+        "component_scores": {
+            "return": return_score,
+            "up_volume": up_volume_score,
+            "close_location": close_location_score,
+            "consistency": consistency_score,
+            "volume_trend": volume_trend_score,
+            "trend": trend_score,
+            "volatility": volatility_score,
+            "drawdown": drawdown_score,
+            "liquidity": liquidity_score,
+        },
+        "inputs": {
+            "accumulation_window": "63d",
+            "up_volume_basis": "up_day_volume_share_63d",
+            "range_basis": "latest_close_location_within_63d_range",
+            "risk_window": "60d",
+            "liquidity_basis": "average_dollar_volume_60d",
+        },
+        "warnings": warnings,
+        "not_investment_advice": True,
+        "used_in_composite_score": False,
+    }
+
+
 def _rolling_prior_high(closes: list[float | None], window: int) -> float | None:
     if len(closes) <= window:
         return None
@@ -1189,6 +1293,40 @@ def _recent_low(closes: list[float | None], window: int) -> float | None:
         return None
     nums = [value for value in closes[-window:] if value is not None]
     return min(nums) if nums else None
+
+
+def _close_location_in_range(closes: list[float | None], window: int) -> float | None:
+    if len(closes) < 2:
+        return None
+    latest = closes[-1]
+    nums = [value for value in closes[-window:] if value is not None]
+    if latest is None or len(nums) < 20:
+        return None
+    low = min(nums)
+    high = max(nums)
+    if high <= low:
+        return None
+    return safe_divide(latest - low, high - low)
+
+
+def _up_volume_metrics(rows: list[dict[str, Any]], window: int) -> tuple[float | None, float | None]:
+    pairs: list[tuple[bool, float]] = []
+    window_rows = rows[-window - 1 :]
+    for prev, current in zip(window_rows, window_rows[1:]):
+        prev_price = _price(prev)
+        current_price = _price(current)
+        volume = _finite(current.get("volume"))
+        if prev_price is None or current_price is None or volume is None or volume <= 0:
+            continue
+        pairs.append((current_price > prev_price, volume))
+    if len(pairs) < 20:
+        return None, None
+    up_volume = sum(volume for is_up, volume in pairs if is_up)
+    down_volume = sum(volume for is_up, volume in pairs if not is_up)
+    total_volume = up_volume + down_volume
+    up_share = safe_divide(up_volume, total_volume)
+    up_down_ratio = safe_divide(up_volume, down_volume) if down_volume > 0 else None
+    return up_share, up_down_ratio
 
 
 def _volatility_adjusted_breakout_classification(score: float | None, breakout_strength: float | None) -> str:
@@ -1284,6 +1422,26 @@ def _tail_risk_adjusted_momentum_classification(
     if score >= 45:
         return "mixed_tail_risk_adjusted_momentum"
     return "weak_tail_risk_adjusted_momentum"
+
+
+def _volume_accumulation_quality_classification(
+    score: float | None,
+    up_volume_share_63d: float | None,
+    return_63d: float | None,
+) -> str:
+    if score is None:
+        return "insufficient_data"
+    if up_volume_share_63d is not None and up_volume_share_63d < 0.45 and score < 60:
+        return "distribution_pressure_volume_profile"
+    if return_63d is not None and return_63d < 0 and score < 60:
+        return "negative_accumulation_quality"
+    if score >= 75:
+        return "strong_volume_accumulation_quality"
+    if score >= 60:
+        return "constructive_volume_accumulation_quality"
+    if score >= 45:
+        return "mixed_volume_accumulation_quality"
+    return "weak_volume_accumulation_quality"
 
 
 def _first_numeric(*values: Any) -> float | None:
@@ -1438,6 +1596,7 @@ def _component_scores(metrics: dict[str, Any]) -> dict[str, float | None]:
     trend_efficiency_algorithm = algorithms.get("trend_efficiency_stability") or {}
     market_resilience_algorithm = algorithms.get("market_relative_resilience") or {}
     tail_risk_momentum_algorithm = algorithms.get("tail_risk_adjusted_momentum") or {}
+    accumulation_quality_algorithm = algorithms.get("volume_accumulation_quality") or {}
     return {
         "momentum": _avg([
             _score_high(momentum.get("momentum_3m"), -0.10, 0.20),
@@ -1472,6 +1631,7 @@ def _component_scores(metrics: dict[str, Any]) -> dict[str, float | None]:
         "trend_efficiency_stability": _finite(trend_efficiency_algorithm.get("trend_efficiency_stability_score")),
         "market_relative_resilience": _finite(market_resilience_algorithm.get("market_relative_resilience_score")),
         "tail_risk_adjusted_momentum": _finite(tail_risk_momentum_algorithm.get("tail_risk_adjusted_momentum_score")),
+        "volume_accumulation_quality": _finite(accumulation_quality_algorithm.get("volume_accumulation_quality_score")),
     }
 
 

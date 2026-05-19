@@ -8112,6 +8112,17 @@ input[type="range"]::-webkit-slider-thumb {
     scrollbar-width: thin;
   }
 
+  .dashboard-view-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow-x: visible;
+    scrollbar-width: none;
+  }
+
+  .dashboard-view-controls::-webkit-scrollbar {
+    display: none;
+  }
+
   .dashboard-tab,
   .tab,
   .dashboard-view-controls button {
@@ -9224,6 +9235,11 @@ body.command-panel-expanded .layout {
 
   .home-dashboard-tabs .dashboard-tab {
     min-width: max-content;
+  }
+
+  .dashboard-view-controls button {
+    min-width: 0;
+    width: 100%;
   }
 
   .dashboard-surface-grid[data-dashboard-tab="market"] .home-chart-card {
@@ -10359,6 +10375,22 @@ html[data-theme="light"] .quality-context-item {
   .dashboard-tab {
     min-height: 38px;
     padding: 0 12px;
+  }
+
+  .dashboard-view-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow-x: visible;
+    scrollbar-width: none;
+  }
+
+  .dashboard-view-controls::-webkit-scrollbar {
+    display: none;
+  }
+
+  .dashboard-view-controls button {
+    width: 100%;
+    min-width: 0;
   }
 
   .dashboard-context-strip,

@@ -3341,6 +3341,7 @@ const UI_LANGUAGE_COPY = {
         trend_efficiency: "추세 효율",
         market_resilience: "시장 회복력",
         tail_risk_momentum: "꼬리위험 모멘텀",
+        accumulation_quality: "누적 품질",
       },
     },
   },
@@ -3454,6 +3455,7 @@ const UI_LANGUAGE_COPY = {
         trend_efficiency: "Trend Efficiency",
         market_resilience: "Market Resilience",
         tail_risk_momentum: "Tail Risk Momentum",
+        accumulation_quality: "Accumulation Quality",
       },
     },
   },
@@ -6412,7 +6414,7 @@ const MACRO_CATEGORY_LABELS = {
   market: "시장",
 };
 
-const MACRO_DASHBOARD_TIMEOUT_MS = 20000;
+const MACRO_DASHBOARD_TIMEOUT_MS = 45000;
 const MACRO_PANEL_TIMEOUT_MS = 30000;
 
 const MACRO_SCENARIO_PRESETS = {
@@ -6891,7 +6893,7 @@ async function searchMacroSeries() {
   try {
     let data;
     try {
-      data = await macroFetchJsonWithTimeout(API.macroSeriesSearch(query, 12), {}, 9000);
+      data = await macroFetchJsonWithTimeout(API.macroSeriesSearch(query, 12), {}, MACRO_PANEL_TIMEOUT_MS);
     } catch (searchErr) {
       data = macroCachedSeriesSearch(query, 12);
       data.data_quality = {
@@ -12252,7 +12254,7 @@ function quantamentalScoreScreenLimit() {
 
 function quantamentalScoreScreenMetric() {
   const raw = String(els.quantamentalScoreMetric?.value || "composite");
-  return ["composite", "value", "quality", "growth", "momentum", "low_volatility", "liquidity", "drawdown_resilience", "liquidity_stability", "trend_efficiency", "market_resilience", "tail_risk_momentum"].includes(raw) ? raw : "composite";
+  return ["composite", "value", "quality", "growth", "momentum", "low_volatility", "liquidity", "drawdown_resilience", "liquidity_stability", "trend_efficiency", "market_resilience", "tail_risk_momentum", "accumulation_quality"].includes(raw) ? raw : "composite";
 }
 
 function quantamentalScoreMetricLabel(scoreKey) {

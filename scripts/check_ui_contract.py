@@ -289,7 +289,7 @@ REQUIRED_UI_MARKERS: dict[str, str] = {
     "forecast ui module": 'modules/forecast-ui.js?v=20260514-domain-modules',
     "quant ui module": 'modules/quant-ui.js?v=20260514-domain-modules',
     "ai portfolio ui module": 'modules/ai-portfolio-ui.js?v=20260514-domain-modules',
-    "quantamental ui module": 'modules/quantamental-ui.js?v=20260519-quantamental-v18',
+    "quantamental ui module": 'modules/quantamental-ui.js?v=20260519-quantamental-v19',
     "ai portfolio operation hydrate": 'id="aiPortfolioHydrateData"',
     "ai portfolio operation retry": 'id="aiPortfolioRetryMissing"',
     "ai portfolio snapshot job": 'id="aiPortfolioSnapshotJob"',
@@ -357,6 +357,7 @@ REQUIRED_APP_JS_MARKERS: dict[str, str] = {
     "quantamental score screen trend efficiency": "trend_efficiency",
     "quantamental score screen market resilience": "market_resilience",
     "quantamental score screen tail risk momentum": "tail_risk_momentum",
+    "quantamental score screen accumulation quality": "accumulation_quality",
     "quantamental compare server watchlist api": "quantamentalCompareWatchlists",
     "quantamental snapshot export api": "quantamentalSnapshotExport",
     "quantamental snapshot diff api": "quantamentalSnapshotDiff",
@@ -392,6 +393,8 @@ REQUIRED_QUANTAMENTAL_MODULE_MARKERS: dict[str, str] = {
     "quantamental market resilience algorithm": "market_relative_resilience_v1",
     "quantamental tail risk momentum summary": "quantamental-tail-risk-momentum-algorithm",
     "quantamental tail risk momentum algorithm": "tail_risk_adjusted_momentum_v1",
+    "quantamental accumulation quality summary": "quantamental-accumulation-quality-algorithm",
+    "quantamental accumulation quality algorithm": "volume_accumulation_quality_v1",
 }
 
 
