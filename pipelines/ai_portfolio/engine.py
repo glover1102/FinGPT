@@ -42,7 +42,23 @@ BOND_ETFS = {
     "VCSH",
 }
 CASH_ETFS = {"SGOV", "BIL", "SHV", "MINT", "JPST", "CASH"}
-ALTERNATIVE_ETFS = {"GLD", "IAU", "SLV", "USO", "DBC", "VNQ", "REET", "BTC-USD", "ETH-USD"}
+ALTERNATIVE_ETFS = {
+    "GLD",
+    "IAU",
+    "SLV",
+    "USO",
+    "DBC",
+    "VNQ",
+    "REET",
+    "BTC-USD",
+    "ETH-USD",
+    "SOL-USD",
+    "BNB-USD",
+    "XRP-USD",
+    "ADA-USD",
+    "DOGE-USD",
+    "AVAX-USD",
+}
 DEFAULT_MULTI_ASSET = ["SPY", "QQQ", "TLT", "BND", "GLD", "SGOV"]
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -50,20 +66,26 @@ UNIVERSE_PRESET_LABELS: dict[str, str] = {
     "default_multi_asset": "기본 멀티에셋",
     "quant_lab_default": "Quant Lab 기본",
     "sp500_top_200": "미국 대형주 200",
+    "us_equity_core": "미국 주식 코어",
     "etf_core_100": "주요 ETF 100",
+    "etf_core_120": "주요 ETF 120",
     "kr_300": "한국 300",
-    "crypto_core": "암호화폐 2",
+    "global_equity_core": "글로벌 주식 코어",
+    "crypto_core": "암호화폐 8",
     "all_supported": "전체 지원 유니버스",
 }
 
 UNIVERSE_PRESET_DESCRIPTIONS: dict[str, str] = {
     "default_multi_asset": "미국 주식, 장기채, 종합채권, 금, 현금성 ETF를 함께 사용하는 기본 정책 유니버스입니다.",
     "quant_lab_default": "기존 Quant Lab 기본값과 같은 SPY, TLT, GLD 조합입니다.",
-    "sp500_top_200": "앱 심볼 카탈로그의 S&P 500 대형주 상위 200개 범위입니다.",
+    "sp500_top_200": "최신 S&P 500/Nasdaq-100 원천으로 갱신된 미국 주식 목록 중 상위 200개 호환 범위입니다.",
+    "us_equity_core": "최신 S&P 500 구성 종목과 Nasdaq-100 단독 종목을 합친 미국 주식 코어 범위입니다.",
     "etf_core_100": "주요 지수, 섹터, 채권, 원자재, 글로벌 ETF 100개 범위입니다.",
+    "etf_core_120": "주요 지수, 섹터, 팩터, 배당, 채권, 원자재, 글로벌 ETF 120개 범위입니다.",
     "kr_300": "KOSPI 200과 KOSDAQ 100을 합친 한국 주식 300개 범위입니다.",
-    "crypto_core": "BTC-USD와 ETH-USD만 포함하는 암호화폐 핵심 범위입니다.",
-    "all_supported": "미국 대형주 200, ETF 100, 한국 300, 암호화폐 2를 모두 포함합니다.",
+    "global_equity_core": "거래소 접미사가 있는 대표 글로벌 주식과 ADR/상장 주식을 포함하는 범위입니다.",
+    "crypto_core": "BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX를 포함하는 암호화폐 핵심 범위입니다.",
+    "all_supported": "미국 주식, ETF, 한국 주식, 글로벌 주식, 암호화폐 전체 지원 심볼을 포함합니다.",
 }
 
 UNIVERSE_PRESET_LABELS.update(
@@ -71,9 +93,12 @@ UNIVERSE_PRESET_LABELS.update(
         "default_multi_asset": "기본 멀티에셋",
         "quant_lab_default": "Quant Lab 기본",
         "sp500_top_200": "미국 대형주 200",
+        "us_equity_core": "미국 주식 코어",
         "etf_core_100": "주요 ETF 100",
+        "etf_core_120": "주요 ETF 120",
         "kr_300": "한국 300",
-        "crypto_core": "암호화폐 2",
+        "global_equity_core": "글로벌 주식 코어",
+        "crypto_core": "암호화폐 8",
         "all_supported": "전체 지원 유니버스",
     }
 )
@@ -82,11 +107,14 @@ UNIVERSE_PRESET_DESCRIPTIONS.update(
     {
         "default_multi_asset": "미국 주식, 장기채, 금, 현금성 ETF를 함께 쓰는 기본 정책 유니버스입니다.",
         "quant_lab_default": "기존 Quant Lab 기본값과 같은 SPY, TLT, GLD 조합입니다.",
-        "sp500_top_200": "심볼 레지스트리의 S&P 500 대형주 상위 200개 범위입니다.",
+        "sp500_top_200": "최신 S&P 500/Nasdaq-100 원천으로 갱신된 미국 주식 목록 중 상위 200개 호환 범위입니다.",
+        "us_equity_core": "최신 S&P 500 구성 종목과 Nasdaq-100 단독 종목을 합친 미국 주식 코어 범위입니다.",
         "etf_core_100": "주요 지수, 섹터, 채권, 원자재, 글로벌 ETF 100개 범위입니다.",
+        "etf_core_120": "주요 지수, 섹터, 팩터, 배당, 채권, 원자재, 글로벌 ETF 120개 범위입니다.",
         "kr_300": "KOSPI 200과 KOSDAQ 100을 합친 한국 주식 300개 범위입니다.",
-        "crypto_core": "BTC-USD와 ETH-USD만 포함하는 암호화폐 핵심 범위입니다.",
-        "all_supported": "미국 대형주 200, ETF 100, 한국 300, 암호화폐 2를 모두 포함합니다.",
+        "global_equity_core": "거래소 접미사가 있는 대표 글로벌 주식과 ADR/상장 주식을 포함하는 범위입니다.",
+        "crypto_core": "BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX를 포함하는 암호화폐 핵심 범위입니다.",
+        "all_supported": "미국 주식, ETF, 한국 주식, 글로벌 주식, 암호화폐 전체 지원 심볼을 포함합니다.",
     }
 )
 
@@ -173,8 +201,13 @@ def _canonical_universe_id(universe_id: str | None) -> str:
         "existing_universe_id": "default_multi_asset",
         "core_balanced": "quant_lab_default",
         "us_large_cap_200": "sp500_top_200",
+        "us_equity": "us_equity_core",
+        "us_equity_expanded": "us_equity_core",
         "major_etf_100": "etf_core_100",
+        "major_etf_120": "etf_core_120",
+        "etf_core": "etf_core_120",
         "korea_300": "kr_300",
+        "global_equity": "global_equity_core",
         "crypto": "crypto_core",
         "expanded_universe": "all_supported",
     }
@@ -226,6 +259,9 @@ def sector_for_ticker(ticker: str, raw_class: str | None = None) -> str:
         return "KOSDAQ EQUITY"
     if str(raw_class or "").strip().lower() == "crypto":
         return "CRYPTO"
+    identity = symbol_identities().get(ticker)
+    if identity and identity.market == "GLOBAL" and identity.asset_class == "stock":
+        return "GLOBAL EQUITY"
     return _static_heatmap_sectors().get(ticker, "")
 
 
@@ -298,14 +334,20 @@ def load_universe(universe_id: str | None) -> tuple[list[UniverseAsset], list[st
         tickers = ["SPY", "TLT", "GLD"]
     elif clean == "sp500_top_200":
         tickers = [ticker for ticker, item in identities.items() if item.market == "US" and item.asset_class == "stock"][:200]
+    elif clean == "us_equity_core":
+        tickers = [ticker for ticker, item in identities.items() if item.market == "US" and item.asset_class == "stock"]
     elif clean == "etf_core_100":
         tickers = [ticker for ticker, item in identities.items() if item.asset_class == "etf"][:100]
+    elif clean == "etf_core_120":
+        tickers = [ticker for ticker, item in identities.items() if item.asset_class == "etf"][:120]
     elif clean == "kr_300":
         tickers = [ticker for ticker, item in identities.items() if item.market == "KRX"][:300]
+    elif clean == "global_equity_core":
+        tickers = [ticker for ticker, item in identities.items() if item.market == "GLOBAL" and item.asset_class == "stock"]
     elif clean == "crypto_core":
-        tickers = ["BTC-USD", "ETH-USD"]
+        tickers = [ticker for ticker, item in identities.items() if item.asset_class == "crypto"]
     elif clean == "all_supported":
-        tickers = list(identities)[:602]
+        tickers = list(identities)
     else:
         warnings.append(f"universe_not_found:{raw}")
         return [], warnings
@@ -326,8 +368,11 @@ def universe_presets() -> list[dict[str, Any]]:
         "default_multi_asset",
         "quant_lab_default",
         "sp500_top_200",
+        "us_equity_core",
         "etf_core_100",
+        "etf_core_120",
         "kr_300",
+        "global_equity_core",
         "crypto_core",
         "all_supported",
     ]:

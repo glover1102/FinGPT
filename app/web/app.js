@@ -905,218 +905,554 @@ function symbolNameList(text) {
 }
 
 const US_LARGE_CAP_SYMBOLS = symbolList(`
-  MSFT AAPL NVDA AVGO ORCL CRM AMD CSCO ACN IBM INTU NOW PANW PLTR SNPS CRWD FTNT ADBE ADP ROP
-  CDNS PTC FICO TXN QCOM MU ADI AMAT LRCX KLAC INTC MCHP NXPI ANET DELL WDC STX GOOGL META NFLX DIS
-  TMUS VZ T CMCSA EA TTWO LYV WBD CHTR AMZN TSLA HD MCD LOW SBUX BKNG RCL CCL ABNB MAR HLT TJX ROST
-  LULU NKE ORLY AZO GM F CMG YUM DRI EBAY DASH WMT COST PG KO PEP PM MO CL KMB MDLZ MNST KDP EL TGT
-  DG KR ADM GIS HSY SYY KHC STZ BRK-B JPM V MA BAC WFC C AXP GS MS BLK SCHW SPGI ICE CME COF USB PNC
-  TFC CB PGR TRV AON AFL WELL AJG ALL KKR BX LLY JNJ UNH ABBV MRK TMO ABT ISRG DHR PFE AMGN MDT BSX
-  SYK CVS CI HUM BMY GILD REGN VRTX MCK COR HCA ELV BDX EW IQV ZTS GE RTX CAT DE BA LMT HON UPS ETN
-  PH MMM UNP CSX NSC WM RSG ITW EMR PCAR CMI FDX JCI TT AXON GEV CARR XOM CVX COP EOG SLB OXY MPC
-  PSX VLO KMI WMB HAL BKR FANG OKE DVN CTRA NEE SO
+  MSFT AAPL NVDA AVGO ORCL CRM AMD CSCO ACN IBM INTU NOW PANW PLTR SNPS CRWD FTNT ADBE
+  ADP ROP CDNS PTC FICO TXN QCOM MU ADI AMAT LRCX KLAC INTC MCHP NXPI ANET DELL WDC
+  STX GOOGL META NFLX DIS TMUS VZ T CMCSA EA TTWO LYV WBD CHTR AMZN TSLA HD MCD
+  LOW SBUX BKNG RCL CCL ABNB MAR HLT TJX ROST LULU NKE ORLY AZO GM F CMG YUM
+  DRI EBAY DASH WMT COST PG KO PEP PM MO CL KMB MDLZ MNST KDP EL TGT DG
+  KR ADM GIS HSY SYY KHC STZ BRK-B JPM V MA BAC WFC C AXP GS MS BLK
+  SCHW SPGI ICE CME COF USB PNC TFC CB PGR TRV AON AFL WELL AJG ALL KKR BX
+  LLY JNJ UNH ABBV MRK TMO ABT ISRG DHR PFE AMGN MDT BSX SYK CVS CI HUM BMY
+  GILD REGN VRTX MCK COR HCA ELV BDX EW IQV ZTS GE RTX CAT DE BA LMT HON
+  UPS ETN PH MMM UNP CSX NSC WM RSG ITW EMR PCAR CMI FDX JCI TT AXON GEV
+  CARR XOM CVX COP EOG SLB OXY MPC PSX VLO KMI WMB HAL BKR FANG OKE DVN NEE
+  SO AOS AES A APD AKAM ALB ARE ALGN ALLE LNT GOOG AMCR AEE AEP AIG AMT AWK
+  AMP AME APH APA APO APP APTV ACGL ARES AIZ ATO ADSK AVB AVY BALL BAX BBY TECH
+  BIIB XYZ BK BR BRO BF-B BLDR BG BXP CHRW CPT CPB CAH CVNA CASY CBOE CBRE CDW
+  CNC CNP CF CRL CHD CIEN CINF CTAS CFG CLX CMS CTSH COHR COIN FIX CAG ED CEG
+  COO CPRT GLW CPAY CTVA CSGP CRH CCI DDOG DVA DECK DAL DXCM DLR DLTR D DPZ DOV
+  DOW DHI DTE DUK DD SATS ECL EIX EME ETR EPAM EQT EFX EQIX EQR ERIE ESS EG
+  EVRG ES EXC EXE EXPE EXPD EXR FFIV FDS FAST FRT FIS FITB FSLR FE FISV FTV FOXA
+  FOX BEN FCX GRMN IT GEHC GEN GNRC GD GPC GPN GL GDDY HIG HAS DOC HSIC HPE
+  HRL HST HWM HPQ HUBB HBAN HII IEX IDXX INCY IR PODD IBKR IFF IP IVZ INVH IRM
+  JBHT JBL JKHY J KVUE KEY KEYS KIM LHX LH LVS LDOS LEN LII LIN L LITE LYB
+  MTB MRSH MLM MAS MKC MET MTD MGM MAA MRNA TAP MPWR MCO MOS MSI MSCI NDAQ NTAP
+  NEM NWSA NWS NI NDSN NTRS NOC NCLH NRG NUE NVR ODFL OMC ON OTIS PKG PSKY PAYX
+  PYPL PNR PCG PNW POOL PPG PPL PFG PLD PRU PEG PSA PHM PWR DGX Q RL RJF
+  O REG RF RMD RVTY HOOD ROK ROL SNDK SBAC SRE SHW SPG SWKS SJM SW SNA SOLV
+  LUV SWK STT STLD STE SMCI SYF TROW TPR TRGP TEL TDY TER TPL TXT TKO TTD TSCO
+  TDG TRMB TYL TSN UBER UDR ULTA UAL URI UHS VEEV VTR VLTO VRSN VRSK VRT VTRS VICI
+  VST VMC WRB GWW WAB WAT WEC WST WY WSM WTW WDAY WYNN XEL XYL ZBRA ZBH ALNY
+  ARM ASML CCEP FER INSM MRVL MELI MSTR PDD SHOP TRI ZS
 `);
 
 const US_SYMBOL_NAMES = Object.fromEntries(symbolNameList(`
+MSFT|Microsoft
 AAPL|Apple Inc.
-ABBV|AbbVie Inc.
-ABNB|Airbnb, Inc.
-ABT|Abbott Laboratories
-ACN|Accenture plc
-ADBE|Adobe Inc.
-ADI|Analog Devices, Inc.
-ADM|Archer-Daniels-Midland Company
-ADP|Automatic Data Processing, Inc.
-AFL|Aflac Incorporated
-AJG|Arthur J. Gallagher & Co.
-ALL|The Allstate Corporation
-AMAT|Applied Materials, Inc.
-AMD|Advanced Micro Devices, Inc.
-AMGN|Amgen Inc.
-AMZN|Amazon.com, Inc.
-ANET|Arista Networks, Inc.
-AON|Aon plc
-AVGO|Broadcom Inc.
-AXON|Axon Enterprise, Inc.
-AXP|American Express Company
-AZO|AutoZone, Inc.
-BA|The Boeing Company
-BAC|Bank of America Corporation
-BDX|Becton, Dickinson and Company
-BKNG|Booking Holdings Inc.
-BKR|Baker Hughes Company
-BLK|BlackRock, Inc.
-BMY|Bristol-Myers Squibb Company
-BRK-B|Berkshire Hathaway Inc. Class B
-BSX|Boston Scientific Corporation
-BX|Blackstone Inc.
-C|Citigroup Inc.
-CARR|Carrier Global Corporation
-CAT|Caterpillar Inc.
-CB|Chubb Limited
-CCL|Carnival Corporation & plc
-CDNS|Cadence Design Systems, Inc.
-CHTR|Charter Communications, Inc.
-CI|The Cigna Group
-CL|Colgate-Palmolive Company
-CMCSA|Comcast Corporation
-CME|CME Group Inc.
-CMG|Chipotle Mexican Grill, Inc.
-CMI|Cummins Inc.
-COF|Capital One Financial Corporation
-COP|ConocoPhillips
-COR|Cencora, Inc.
-COST|Costco Wholesale Corporation
-CRM|Salesforce, Inc.
-CRWD|CrowdStrike Holdings, Inc.
-CSCO|Cisco Systems, Inc.
-CSX|CSX Corporation
-CTRA|Coterra Energy Inc.
-CVS|CVS Health Corporation
-CVX|Chevron Corporation
-DASH|DoorDash, Inc.
-DE|Deere & Company
-DELL|Dell Technologies Inc.
-DG|Dollar General Corporation
-DHR|Danaher Corporation
-DIS|The Walt Disney Company
-DRI|Darden Restaurants, Inc.
-DVN|Devon Energy Corporation
-EA|Electronic Arts Inc.
-EBAY|eBay Inc.
-EL|The Estée Lauder Companies Inc.
-ELV|Elevance Health, Inc.
-EMR|Emerson Electric Co.
-EOG|EOG Resources, Inc.
-ETN|Eaton Corporation plc
-EW|Edwards Lifesciences Corporation
-F|Ford Motor Company
-FANG|Diamondback Energy, Inc.
-FDX|FedEx Corporation
-FICO|Fair Isaac Corporation
-FTNT|Fortinet, Inc.
-GE|GE Aerospace
-GEV|GE Vernova Inc.
-GILD|Gilead Sciences, Inc.
-GIS|General Mills, Inc.
-GM|General Motors Company
-GOOGL|Alphabet Inc.
-GS|The Goldman Sachs Group, Inc.
-HAL|Halliburton Company
-HCA|HCA Healthcare, Inc.
-HD|The Home Depot, Inc.
-HLT|Hilton Worldwide Holdings Inc.
-HON|Honeywell International Inc.
-HSY|The Hershey Company
-HUM|Humana Inc.
-IBM|International Business Machines Corporation
-ICE|Intercontinental Exchange, Inc.
-INTC|Intel Corporation
-INTU|Intuit Inc.
-IQV|IQVIA Holdings Inc.
-ISRG|Intuitive Surgical, Inc.
-ITW|Illinois Tool Works Inc.
-JCI|Johnson Controls International plc
-JNJ|Johnson & Johnson
-JPM|JPMorgan Chase & Co.
-KDP|Keurig Dr Pepper Inc.
-KHC|The Kraft Heinz Company
-KKR|KKR & Co. Inc.
-KLAC|KLA Corporation
-KMB|Kimberly-Clark Corporation
-KMI|Kinder Morgan, Inc.
-KO|The Coca-Cola Company
-KR|The Kroger Co.
-LLY|Eli Lilly and Company
-LMT|Lockheed Martin Corporation
-LOW|Lowe's Companies, Inc.
-LRCX|Lam Research Corporation
-LULU|lululemon athletica inc.
-LYV|Live Nation Entertainment, Inc.
-MA|Mastercard Incorporated
-MAR|Marriott International, Inc.
-MCD|McDonald's Corporation
-MCHP|Microchip Technology Incorporated
-MCK|McKesson Corporation
-MDLZ|Mondelez International, Inc.
-MDT|Medtronic plc
-META|Meta Platforms, Inc.
-WELL|Welltower Inc.
-MMM|3M Company
-MNST|Monster Beverage Corporation
-MO|Altria Group, Inc.
-MPC|Marathon Petroleum Corporation
-MRK|Merck & Co., Inc.
-MS|Morgan Stanley
-MSFT|Microsoft Corporation
-MU|Micron Technology, Inc.
-NEE|NextEra Energy, Inc.
-NFLX|Netflix, Inc.
-NKE|NIKE, Inc.
-NOW|ServiceNow, Inc.
-NSC|Norfolk Southern Corporation
-NVDA|NVIDIA Corporation
-NXPI|NXP Semiconductors N.V.
-OKE|ONEOK, Inc.
+NVDA|Nvidia
+AVGO|Broadcom
 ORCL|Oracle Corporation
-ORLY|O'Reilly Automotive, Inc.
-OXY|Occidental Petroleum Corporation
-PANW|Palo Alto Networks, Inc.
-PCAR|PACCAR Inc
-PEP|PepsiCo, Inc.
-PFE|Pfizer Inc.
-PG|The Procter & Gamble Company
-PGR|The Progressive Corporation
-PH|Parker-Hannifin Corporation
-PLTR|Palantir Technologies Inc.
-PM|Philip Morris International Inc.
-PNC|The PNC Financial Services Group, Inc.
-PSX|Phillips 66
+CRM|Salesforce
+AMD|Advanced Micro Devices
+CSCO|Cisco
+ACN|Accenture
+IBM|IBM
+INTU|Intuit
+NOW|ServiceNow
+PANW|Palo Alto Networks
+PLTR|Palantir Technologies
+SNPS|Synopsys
+CRWD|CrowdStrike
+FTNT|Fortinet
+ADBE|Adobe Inc.
+ADP|Automatic Data Processing
+ROP|Roper Technologies
+CDNS|Cadence Design Systems
 PTC|PTC Inc.
-QCOM|QUALCOMM Incorporated
-RCL|Royal Caribbean Cruises Ltd.
-REGN|Regeneron Pharmaceuticals, Inc.
-ROP|Roper Technologies, Inc.
-ROST|Ross Stores, Inc.
-RSG|Republic Services, Inc.
-RTX|RTX Corporation
-SBUX|Starbucks Corporation
-SCHW|The Charles Schwab Corporation
-SLB|SLB N.V.
-SNPS|Synopsys, Inc.
-SO|The Southern Company
-SPGI|S&P Global Inc.
-STX|Seagate Technology Holdings plc
-STZ|Constellation Brands, Inc.
-SYK|Stryker Corporation
-SYY|Sysco Corporation
-T|AT&T Inc.
-TFC|Truist Financial Corporation
-TGT|Target Corporation
-TJX|The TJX Companies, Inc.
-TMO|Thermo Fisher Scientific Inc.
-TMUS|T-Mobile US, Inc.
-TRV|The Travelers Companies, Inc.
+FICO|Fair Isaac
+TXN|Texas Instruments
+QCOM|Qualcomm
+MU|Micron Technology
+ADI|Analog Devices
+AMAT|Applied Materials
+LRCX|Lam Research
+KLAC|KLA Corporation
+INTC|Intel
+MCHP|Microchip Technology
+NXPI|NXP Semiconductors
+ANET|Arista Networks
+DELL|Dell Technologies
+WDC|Western Digital
+STX|Seagate Technology
+GOOGL|Alphabet Inc. (Class A)
+META|Meta Platforms
+NFLX|Netflix
+DIS|Walt Disney Company (The)
+TMUS|T-Mobile US
+VZ|Verizon
+T|AT&T
+CMCSA|Comcast
+EA|Electronic Arts
+TTWO|Take-Two Interactive
+LYV|Live Nation Entertainment
+WBD|Warner Bros. Discovery
+CHTR|Charter Communications
+AMZN|Amazon
 TSLA|Tesla, Inc.
-TT|Trane Technologies plc
-TTWO|Take-Two Interactive Software, Inc.
-TXN|Texas Instruments Incorporated
-UNH|UnitedHealth Group Incorporated
-UNP|Union Pacific Corporation
-UPS|United Parcel Service, Inc.
-USB|U.S. Bancorp
+HD|Home Depot (The)
+MCD|McDonald's
+LOW|Lowe's
+SBUX|Starbucks
+BKNG|Booking Holdings
+RCL|Royal Caribbean Group
+CCL|Carnival Corporation
+ABNB|Airbnb
+MAR|Marriott International
+HLT|Hilton Worldwide
+TJX|TJX Companies
+ROST|Ross Stores
+LULU|Lululemon Athletica
+NKE|Nike, Inc.
+ORLY|O’Reilly Automotive
+AZO|AutoZone
+GM|General Motors
+F|Ford Motor Company
+CMG|Chipotle Mexican Grill
+YUM|Yum! Brands
+DRI|Darden Restaurants
+EBAY|eBay Inc.
+DASH|DoorDash
+WMT|Walmart
+COST|Costco
+PG|Procter & Gamble
+KO|Coca-Cola Company (The)
+PEP|PepsiCo
+PM|Philip Morris International
+MO|Altria
+CL|Colgate-Palmolive
+KMB|Kimberly-Clark
+MDLZ|Mondelez International
+MNST|Monster Beverage
+KDP|Keurig Dr Pepper
+EL|Estée Lauder Companies (The)
+TGT|Target Corporation
+DG|Dollar General
+KR|Kroger
+ADM|Archer Daniels Midland
+GIS|General Mills
+HSY|Hershey Company (The)
+SYY|Sysco
+KHC|Kraft Heinz
+STZ|Constellation Brands
+BRK-B|Berkshire Hathaway
+JPM|JPMorgan Chase
 V|Visa Inc.
-VLO|Valero Energy Corporation
-VRTX|Vertex Pharmaceuticals Incorporated
-VZ|Verizon Communications Inc.
-WBD|Warner Bros. Discovery, Inc.
-WDC|Western Digital Corporation
-WFC|Wells Fargo & Company
-WM|Waste Management, Inc.
-WMB|The Williams Companies, Inc.
-WMT|Walmart Inc.
-XOM|Exxon Mobil Corporation
-YUM|Yum! Brands, Inc.
-ZTS|Zoetis Inc.
+MA|Mastercard
+BAC|Bank of America
+WFC|Wells Fargo
+C|Citigroup
+AXP|American Express
+GS|Goldman Sachs
+MS|Morgan Stanley
+BLK|BlackRock
+SCHW|Charles Schwab Corporation
+SPGI|S&P Global
+ICE|Intercontinental Exchange
+CME|CME Group
+COF|Capital One
+USB|U.S. Bancorp
+PNC|PNC Financial Services
+TFC|Truist Financial
+CB|Chubb Limited
+PGR|Progressive Corporation
+TRV|Travelers Companies (The)
+AON|Aon plc
+AFL|Aflac
+WELL|Welltower
+AJG|Arthur J. Gallagher & Co.
+ALL|Allstate
+KKR|KKR & Co.
+BX|Blackstone Inc.
+LLY|Lilly (Eli)
+JNJ|Johnson & Johnson
+UNH|UnitedHealth Group
+ABBV|AbbVie
+MRK|Merck & Co.
+TMO|Thermo Fisher Scientific
+ABT|Abbott Laboratories
+ISRG|Intuitive Surgical
+DHR|Danaher Corporation
+PFE|Pfizer
+AMGN|Amgen
+MDT|Medtronic
+BSX|Boston Scientific
+SYK|Stryker Corporation
+CVS|CVS Health
+CI|Cigna
+HUM|Humana
+BMY|Bristol Myers Squibb
+GILD|Gilead Sciences
+REGN|Regeneron Pharmaceuticals
+VRTX|Vertex Pharmaceuticals
+MCK|McKesson Corporation
+COR|Cencora
+HCA|HCA Healthcare
+ELV|Elevance Health
+BDX|Becton Dickinson
+EW|Edwards Lifesciences
+IQV|IQVIA
+ZTS|Zoetis
+GE|GE Aerospace
+RTX|RTX Corporation
+CAT|Caterpillar Inc.
+DE|Deere & Company
+BA|Boeing
+LMT|Lockheed Martin
+HON|Honeywell
+UPS|United Parcel Service
+ETN|Eaton Corporation
+PH|Parker Hannifin
+MMM|3M
+UNP|Union Pacific Corporation
+CSX|CSX Corporation
+NSC|Norfolk Southern
+WM|Waste Management
+RSG|Republic Services
+ITW|Illinois Tool Works
+EMR|Emerson Electric
+PCAR|Paccar
+CMI|Cummins
+FDX|FedEx
+JCI|Johnson Controls
+TT|Trane Technologies
+AXON|Axon Enterprise
+GEV|GE Vernova
+CARR|Carrier Global
+XOM|ExxonMobil
+CVX|Chevron Corporation
+COP|ConocoPhillips
+EOG|EOG Resources
+SLB|Schlumberger
+OXY|Occidental Petroleum
+MPC|Marathon Petroleum
+PSX|Phillips 66
+VLO|Valero Energy
+KMI|Kinder Morgan
+WMB|Williams Companies
+HAL|Halliburton
+BKR|Baker Hughes
+FANG|Diamondback Energy
+OKE|Oneok
+DVN|Devon Energy
+NEE|NextEra Energy
+SO|Southern Company
+AOS|A. O. Smith
+AES|AES Corporation
+A|Agilent Technologies
+APD|Air Products
+AKAM|Akamai Technologies
+ALB|Albemarle Corporation
+ARE|Alexandria Real Estate Equities
+ALGN|Align Technology
+ALLE|Allegion
+LNT|Alliant Energy
+GOOG|Alphabet Inc. (Class C)
+AMCR|Amcor
+AEE|Ameren
+AEP|American Electric Power
+AIG|American International Group
+AMT|American Tower
+AWK|American Water Works
+AMP|Ameriprise Financial
+AME|Ametek
+APH|Amphenol
+APA|APA Corporation
+APO|Apollo Global Management
+APP|AppLovin
+APTV|Aptiv
+ACGL|Arch Capital Group
+ARES|Ares Management
+AIZ|Assurant
+ATO|Atmos Energy
+ADSK|Autodesk
+AVB|AvalonBay Communities
+AVY|Avery Dennison
+BALL|Ball Corporation
+BAX|Baxter International
+BBY|Best Buy
+TECH|Bio-Techne
+BIIB|Biogen
+XYZ|Block, Inc.
+BK|BNY Mellon
+BR|Broadridge Financial Solutions
+BRO|Brown & Brown
+BF-B|Brown–Forman
+BLDR|Builders FirstSource
+BG|Bunge Global
+BXP|BXP, Inc.
+CHRW|C.H. Robinson
+CPT|Camden Property Trust
+CPB|Campbell's Company (The)
+CAH|Cardinal Health
+CVNA|Carvana
+CASY|Casey's
+CBOE|Cboe Global Markets
+CBRE|CBRE Group
+CDW|CDW Corporation
+CNC|Centene Corporation
+CNP|CenterPoint Energy
+CF|CF Industries
+CRL|Charles River Laboratories
+CHD|Church & Dwight
+CIEN|Ciena
+CINF|Cincinnati Financial
+CTAS|Cintas
+CFG|Citizens Financial Group
+CLX|Clorox
+CMS|CMS Energy
+CTSH|Cognizant
+COHR|Coherent Corp.
+COIN|Coinbase
+FIX|Comfort Systems USA
+CAG|Conagra Brands
+ED|Consolidated Edison
+CEG|Constellation Energy
+COO|Cooper Companies (The)
+CPRT|Copart
+GLW|Corning Inc.
+CPAY|Corpay
+CTVA|Corteva
+CSGP|CoStar Group
+CRH|CRH plc
+CCI|Crown Castle
+DDOG|Datadog
+DVA|DaVita
+DECK|Deckers Brands
+DAL|Delta Air Lines
+DXCM|Dexcom
+DLR|Digital Realty
+DLTR|Dollar Tree
+D|Dominion Energy
+DPZ|Domino's
+DOV|Dover Corporation
+DOW|Dow Inc.
+DHI|D. R. Horton
+DTE|DTE Energy
+DUK|Duke Energy
+DD|DuPont
+SATS|EchoStar
+ECL|Ecolab
+EIX|Edison International
+EME|Emcor
+ETR|Entergy
+EPAM|EPAM Systems
+EQT|EQT Corporation
+EFX|Equifax
+EQIX|Equinix
+EQR|Equity Residential
+ERIE|Erie Indemnity
+ESS|Essex Property Trust
+EG|Everest Group
+EVRG|Evergy
+ES|Eversource Energy
+EXC|Exelon
+EXE|Expand Energy
+EXPE|Expedia Group
+EXPD|Expeditors International
+EXR|Extra Space Storage
+FFIV|F5, Inc.
+FDS|FactSet
+FAST|Fastenal
+FRT|Federal Realty Investment Trust
+FIS|Fidelity National Information Services
+FITB|Fifth Third Bancorp
+FSLR|First Solar
+FE|FirstEnergy
+FISV|Fiserv
+FTV|Fortive
+FOXA|Fox Corporation (Class A)
+FOX|Fox Corporation (Class B)
+BEN|Franklin Resources
+FCX|Freeport-McMoRan
+GRMN|Garmin
+IT|Gartner
+GEHC|GE HealthCare
+GEN|Gen Digital
+GNRC|Generac
+GD|General Dynamics
+GPC|Genuine Parts Company
+GPN|Global Payments
+GL|Globe Life
+GDDY|GoDaddy
+HIG|Hartford (The)
+HAS|Hasbro
+DOC|Healthpeak Properties
+HSIC|Henry Schein
+HPE|Hewlett Packard Enterprise
+HRL|Hormel Foods
+HST|Host Hotels & Resorts
+HWM|Howmet Aerospace
+HPQ|HP Inc.
+HUBB|Hubbell Incorporated
+HBAN|Huntington Bancshares
+HII|Huntington Ingalls Industries
+IEX|IDEX Corporation
+IDXX|Idexx Laboratories
+INCY|Incyte
+IR|Ingersoll Rand
+PODD|Insulet Corporation
+IBKR|Interactive Brokers
+IFF|International Flavors & Fragrances
+IP|International Paper
+IVZ|Invesco
+INVH|Invitation Homes
+IRM|Iron Mountain
+JBHT|J.B. Hunt
+JBL|Jabil
+JKHY|Jack Henry & Associates
+J|Jacobs Solutions
+KVUE|Kenvue
+KEY|KeyCorp
+KEYS|Keysight Technologies
+KIM|Kimco Realty
+LHX|L3Harris
+LH|Labcorp
+LVS|Las Vegas Sands
+LDOS|Leidos
+LEN|Lennar
+LII|Lennox International
+LIN|Linde plc
+L|Loews Corporation
+LITE|Lumentum
+LYB|LyondellBasell
+MTB|M&T Bank
+MRSH|Marsh McLennan
+MLM|Martin Marietta Materials
+MAS|Masco
+MKC|McCormick & Company
+MET|MetLife
+MTD|Mettler Toledo
+MGM|MGM Resorts
+MAA|Mid-America Apartment Communities
+MRNA|Moderna
+TAP|Molson Coors Beverage Company
+MPWR|Monolithic Power Systems
+MCO|Moody's Corporation
+MOS|Mosaic Company (The)
+MSI|Motorola Solutions
+MSCI|MSCI Inc.
+NDAQ|Nasdaq, Inc.
+NTAP|NetApp
+NEM|Newmont
+NWSA|News Corp (Class A)
+NWS|News Corp (Class B)
+NI|NiSource
+NDSN|Nordson Corporation
+NTRS|Northern Trust
+NOC|Northrop Grumman
+NCLH|Norwegian Cruise Line Holdings
+NRG|NRG Energy
+NUE|Nucor
+NVR|NVR, Inc.
+ODFL|Old Dominion
+OMC|Omnicom Group
+ON|ON Semiconductor
+OTIS|Otis Worldwide
+PKG|Packaging Corporation of America
+PSKY|Paramount Skydance Corporation
+PAYX|Paychex
+PYPL|PayPal
+PNR|Pentair
+PCG|PG&E Corporation
+PNW|Pinnacle West Capital
+POOL|Pool Corporation
+PPG|PPG Industries
+PPL|PPL Corporation
+PFG|Principal Financial Group
+PLD|Prologis
+PRU|Prudential Financial
+PEG|Public Service Enterprise Group
+PSA|Public Storage
+PHM|PulteGroup
+PWR|Quanta Services
+DGX|Quest Diagnostics
+Q|Qnity Electronics
+RL|Ralph Lauren Corporation
+RJF|Raymond James Financial
+O|Realty Income
+REG|Regency Centers
+RF|Regions Financial Corporation
+RMD|ResMed
+RVTY|Revvity
+HOOD|Robinhood Markets
+ROK|Rockwell Automation
+ROL|Rollins, Inc.
+SNDK|Sandisk
+SBAC|SBA Communications
+SRE|Sempra
+SHW|Sherwin-Williams
+SPG|Simon Property Group
+SWKS|Skyworks Solutions
+SJM|J.M. Smucker Company (The)
+SW|Smurfit Westrock
+SNA|Snap-on
+SOLV|Solventum
+LUV|Southwest Airlines
+SWK|Stanley Black & Decker
+STT|State Street Corporation
+STLD|Steel Dynamics
+STE|Steris
+SMCI|Supermicro
+SYF|Synchrony Financial
+TROW|T. Rowe Price
+TPR|Tapestry, Inc.
+TRGP|Targa Resources
+TEL|TE Connectivity
+TDY|Teledyne Technologies
+TER|Teradyne
+TPL|Texas Pacific Land Corporation
+TXT|Textron
+TKO|TKO Group Holdings
+TTD|Trade Desk (The)
+TSCO|Tractor Supply
+TDG|TransDigm Group
+TRMB|Trimble Inc.
+TYL|Tyler Technologies
+TSN|Tyson Foods
+UBER|Uber
+UDR|UDR, Inc.
+ULTA|Ulta Beauty
+UAL|United Airlines Holdings
+URI|United Rentals
+UHS|Universal Health Services
+VEEV|Veeva Systems
+VTR|Ventas
+VLTO|Veralto
+VRSN|Verisign
+VRSK|Verisk Analytics
+VRT|Vertiv
+VTRS|Viatris
+VICI|Vici Properties
+VST|Vistra Corp.
+VMC|Vulcan Materials Company
+WRB|W. R. Berkley Corporation
+GWW|W. W. Grainger
+WAB|Wabtec
+WAT|Waters Corporation
+WEC|WEC Energy Group
+WST|West Pharmaceutical Services
+WY|Weyerhaeuser
+WSM|Williams-Sonoma, Inc.
+WTW|Willis Towers Watson
+WDAY|Workday, Inc.
+WYNN|Wynn Resorts
+XEL|Xcel Energy
+XYL|Xylem Inc.
+ZBRA|Zebra Technologies
+ZBH|Zimmer Biomet
+ALNY|Alnylam Pharmaceuticals
+ARM|Arm Holdings
+ASML|ASML Holding
+CCEP|Coca-Cola Europacific Partners
+FER|Ferrovial
+INSM|Insmed Incorporated
+MRVL|Marvell Technology
+MELI|Mercado Libre
+MSTR|MicroStrategy
+PDD|PDD Holdings
+SHOP|Shopify
+TRI|Thomson Reuters
+ZS|Zscaler
 `));
 
 const ETF_CORE_SYMBOLS = symbolList(`
@@ -1124,7 +1460,8 @@ const ETF_CORE_SYMBOLS = symbolList(`
   EFA EEM EWJ EWU EWG EWC EWA EWH EWT EWY MCHI FXI INDA EWW EWZ XLK XLF XLV XLY XLP XLE XLI XLU XLB
   XLRE XLC VGT VFH VHT VCR VDC VDE VIS VPU VAW VNQ IYR SMH SOXX XBI IBB KRE XRT ITB TAN ICLN URA
   XOP AGG BND BSV BIV BLV IEF SHY TLT GOVT TIP VTIP LQD HYG JNK MUB EMB BIL SGOV SHV ICSH MBB GLD
-  IAU SLV USO UNG DBA DBC CPER UUP
+  IAU SLV USO UNG DBA DBC CPER UUP SCHX SCHG SCHV VUG VTV IWF IWD MTUM QUAL USMV VIG VYM DGRO SCHD
+  HDV JEPI JEPQ BNDX MINT JPST
 `);
 
 const ETF_SYMBOL_NAMES = Object.fromEntries(symbolNameList(`
@@ -1228,6 +1565,26 @@ DBA|Invesco DB Agriculture Fund
 DBC|Invesco DB Commodity Index Tracking Fund
 CPER|United States Copper Index Fund
 UUP|Invesco DB US Dollar Index Bullish Fund
+SCHX|Schwab U.S. Large-Cap ETF
+SCHG|Schwab U.S. Large-Cap Growth ETF
+SCHV|Schwab U.S. Large-Cap Value ETF
+VUG|Vanguard Growth ETF
+VTV|Vanguard Value ETF
+IWF|iShares Russell 1000 Growth ETF
+IWD|iShares Russell 1000 Value ETF
+MTUM|iShares MSCI USA Momentum Factor ETF
+QUAL|iShares MSCI USA Quality Factor ETF
+USMV|iShares MSCI USA Min Vol Factor ETF
+VIG|Vanguard Dividend Appreciation ETF
+VYM|Vanguard High Dividend Yield ETF
+DGRO|iShares Core Dividend Growth ETF
+SCHD|Schwab U.S. Dividend Equity ETF
+HDV|iShares Core High Dividend ETF
+JEPI|JPMorgan Equity Premium Income ETF
+JEPQ|JPMorgan Nasdaq Equity Premium Income ETF
+BNDX|Vanguard Total International Bond ETF
+MINT|PIMCO Enhanced Short Maturity Active ETF
+JPST|JPMorgan Ultra-Short Income ETF
 `));
 
 const KOSPI200_SYMBOLS = symbolList(`
@@ -1249,10 +1606,10 @@ const KOSPI200_SYMBOLS = symbolList(`
 `);
 
 const KOSDAQ100_SYMBOLS = symbolList(`
-  000250 017000 019550 025900 028300 032190 032500 033640 035760 035900 036200 036540 036810 036830
+  000250 017000 195940 025900 028300 032190 032500 033640 035760 035900 036200 036540 036810 036830
   039030 039200 039440 041510 042000 277810 048410 048530 049070 050890 053030 053610 053800 058470
   058610 058970 060250 060720 061970 064240 064260 064290 064550 064760 067160 067310 067900 068760
-  069080 073570 078130 078340 078600 078890 079370 082270 084370 085660 086520 086900 088800 089030
+  069080 298380 078130 078340 078600 078890 079370 082270 084370 085660 086520 086900 088800 089030
   089790 089980 357780 092040 095340 095610 095660 095700 096530 099190 101490 108320 112040 121600
   122640 122870 131970 137400 140410 145020 178320 183300 196170 200130 214150 214370 214450 215200
   220260 222800 225570 226950 237690 240810 241710 247540 253450 263750 290650 293490 299030 299900
@@ -1538,6 +1895,7 @@ const KOREAN_SYMBOL_NAMES = Object.fromEntries(symbolNameList(`
 178320|서진시스템
 180640|한진칼
 183300|코미코
+195940|HK이노엔
 196170|알테오젠
 200130|콜마비앤에이치
 214150|클래시스
@@ -1556,6 +1914,7 @@ const KOREAN_SYMBOL_NAMES = Object.fromEntries(symbolNameList(`
 263750|펄어비스
 290650|엘앤씨바이오
 293490|카카오게임즈
+298380|에이비엘바이오
 299030|하나기술
 299900|위지윅스튜디오
 376300|디어유
@@ -1574,13 +1933,22 @@ const KOREAN_ETF_NAMES = Object.fromEntries(symbolNameList(`
 251340|KODEX 코스닥150선물인버스
 `));
 
-const CRYPTO_SYMBOLS = ["BTC-USD", "ETH-USD"];
+const CRYPTO_SYMBOLS = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "ADA-USD", "DOGE-USD", "AVAX-USD"];
 
 const GLOBAL_EQUITY_SYMBOLS = [
   "ASML.AS", "SHEL.L", "AZN.L", "BP.L", "RIO.L", "BHP.AX",
   "ULVR.L", "HSBA.L", "7203.T", "6758.T", "7267.T", "7974.T", "9984.T",
   "0700.HK", "9988.HK", "TSM", "NVO", "SAP", "SIE.DE", "BAS.DE", "SHOP.TO",
   "UBSG.SW", "NESN.SW", "NOVN.SW", "MC.PA", "OR.PA", "AIR.PA",
+  "RMS.PA", "SAN.PA", "SU.PA", "TTE.PA", "AI.PA", "BN.PA", "BNP.PA", "CS.PA",
+  "DTE.DE", "ALV.DE", "MBG.DE", "BMW.DE", "VOW3.DE", "MUV2.DE",
+  "GSK.L", "LSEG.L", "REL.L", "NG.L", "DGE.L",
+  "8306.T", "9432.T", "8035.T", "6861.T", "6098.T", "6501.T", "8058.T", "9983.T", "4519.T", "4568.T",
+  "1299.HK", "3690.HK", "1810.HK", "9618.HK", "2318.HK",
+  "RY.TO", "TD.TO", "CNR.TO", "ENB.TO", "CP.TO",
+  "CBA.AX", "CSL.AX", "WBC.AX", "NAB.AX",
+  "2330.TW", "2317.TW",
+  "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS",
 ];
 
 const SYMBOL_NAME_OVERRIDES = {
@@ -1630,12 +1998,67 @@ const SYMBOL_NAME_OVERRIDES = {
   "MC.PA": "LVMH (Euronext Paris)",
   "OR.PA": "L'Oreal S.A. (Euronext Paris)",
   "AIR.PA": "Airbus SE (Euronext Paris)",
+  "RMS.PA": "Hermes International SCA (Euronext Paris)",
+  "SAN.PA": "Sanofi S.A. (Euronext Paris)",
+  "SU.PA": "Schneider Electric SE (Euronext Paris)",
+  "TTE.PA": "TotalEnergies SE (Euronext Paris)",
+  "AI.PA": "Air Liquide S.A. (Euronext Paris)",
+  "BN.PA": "Danone S.A. (Euronext Paris)",
+  "BNP.PA": "BNP Paribas S.A. (Euronext Paris)",
+  "CS.PA": "AXA S.A. (Euronext Paris)",
+  "DTE.DE": "Deutsche Telekom AG (Xetra)",
+  "ALV.DE": "Allianz SE (Xetra)",
+  "MBG.DE": "Mercedes-Benz Group AG (Xetra)",
+  "BMW.DE": "Bayerische Motoren Werke AG (Xetra)",
+  "VOW3.DE": "Volkswagen AG Preference Shares (Xetra)",
+  "MUV2.DE": "Munich Re (Xetra)",
+  "GSK.L": "GSK plc (London)",
+  "LSEG.L": "London Stock Exchange Group plc (London)",
+  "REL.L": "RELX PLC (London)",
+  "NG.L": "National Grid plc (London)",
+  "DGE.L": "Diageo plc (London)",
+  "8306.T": "Mitsubishi UFJ Financial Group, Inc. (Tokyo)",
+  "9432.T": "Nippon Telegraph and Telephone Corporation (Tokyo)",
+  "8035.T": "Tokyo Electron Limited (Tokyo)",
+  "6861.T": "Keyence Corporation (Tokyo)",
+  "6098.T": "Recruit Holdings Co., Ltd. (Tokyo)",
+  "6501.T": "Hitachi, Ltd. (Tokyo)",
+  "8058.T": "Mitsubishi Corporation (Tokyo)",
+  "9983.T": "Fast Retailing Co., Ltd. (Tokyo)",
+  "4519.T": "Chugai Pharmaceutical Co., Ltd. (Tokyo)",
+  "4568.T": "Daiichi Sankyo Company, Limited (Tokyo)",
+  "1299.HK": "AIA Group Limited (Hong Kong)",
+  "3690.HK": "Meituan (Hong Kong)",
+  "1810.HK": "Xiaomi Corporation (Hong Kong)",
+  "9618.HK": "JD.com, Inc. (Hong Kong)",
+  "2318.HK": "Ping An Insurance (Group) Company of China, Ltd. (Hong Kong)",
+  "RY.TO": "Royal Bank of Canada (Toronto)",
+  "TD.TO": "The Toronto-Dominion Bank (Toronto)",
+  "CNR.TO": "Canadian National Railway Company (Toronto)",
+  "ENB.TO": "Enbridge Inc. (Toronto)",
+  "CP.TO": "Canadian Pacific Kansas City Limited (Toronto)",
+  "CBA.AX": "Commonwealth Bank of Australia (ASX)",
+  "CSL.AX": "CSL Limited (ASX)",
+  "WBC.AX": "Westpac Banking Corporation (ASX)",
+  "NAB.AX": "National Australia Bank Limited (ASX)",
+  "2330.TW": "Taiwan Semiconductor Manufacturing Company Limited (Taiwan)",
+  "2317.TW": "Hon Hai Precision Industry Co., Ltd. (Taiwan)",
+  "RELIANCE.NS": "Reliance Industries Limited (NSE India)",
+  "TCS.NS": "Tata Consultancy Services Limited (NSE India)",
+  "HDFCBANK.NS": "HDFC Bank Limited (NSE India)",
+  "INFY.NS": "Infosys Limited (NSE India)",
   "BTC-USD": "Bitcoin USD",
   "ETH-USD": "Ethereum USD",
+  "SOL-USD": "Solana USD",
+  "BNB-USD": "BNB USD",
+  "XRP-USD": "XRP USD",
+  "ADA-USD": "Cardano USD",
+  "DOGE-USD": "Dogecoin USD",
+  "AVAX-USD": "Avalanche USD",
 };
 
 const ETF_GROUPS = {
-  etf_bond: new Set(symbolList("AGG BND BSV BIV BLV IEF SHY TLT GOVT TIP VTIP LQD HYG JNK MUB EMB BIL SGOV SHV ICSH MBB")),
+  etf_bond: new Set(symbolList("AGG BND BNDX BSV BIV BLV IEF SHY TLT GOVT TIP VTIP LQD HYG JNK MUB EMB BIL SGOV SHV ICSH MBB MINT JPST")),
   etf_commodity: new Set(symbolList("GLD IAU SLV USO UNG DBA DBC CPER UUP")),
   etf_sector: new Set(symbolList("XLK XLF XLV XLY XLP XLE XLI XLU XLB XLRE XLC VGT VFH VHT VCR VDC VDE VIS VPU VAW VNQ IYR SMH SOXX XBI IBB KRE XRT ITB TAN ICLN URA XOP")),
 };
@@ -1668,7 +2091,7 @@ function buildSymbolCatalog() {
   const seen = new Set();
   US_LARGE_CAP_SYMBOLS.forEach((symbol, idx) => pushCatalogItem(rows, seen, {
     symbol,
-    name: SYMBOL_NAME_OVERRIDES[symbol] || US_SYMBOL_NAMES[symbol] || `${symbol} · S&P 500 상위 200`,
+    name: SYMBOL_NAME_OVERRIDES[symbol] || US_SYMBOL_NAMES[symbol] || `${symbol} · US equity core`,
     type: "stock",
     country: "US",
     sector: "us_large_cap",
@@ -1680,7 +2103,7 @@ function buildSymbolCatalog() {
     const scope = etfScope(symbol);
     pushCatalogItem(rows, seen, {
       symbol,
-      name: SYMBOL_NAME_OVERRIDES[symbol] || ETF_SYMBOL_NAMES[symbol] || `${symbol} · 주요 ETF 100`,
+      name: SYMBOL_NAME_OVERRIDES[symbol] || ETF_SYMBOL_NAMES[symbol] || `${symbol} · 주요 ETF`,
       type: "etf",
       country: "US",
       sector: scope,
@@ -5065,43 +5488,522 @@ const HEATMAP_DISPLAY_MAX = 96;
 const HEATMAP_DISPLAY_MIN = 24;
 
 const HEATMAP_CLASSIFICATION = {
-  MSFT: { sector: "TECHNOLOGY", industry: "SOFTWARE - INFRASTRUCTURE" },
-  ORCL: { sector: "TECHNOLOGY", industry: "SOFTWARE - INFRASTRUCTURE" },
-  CRM: { sector: "TECHNOLOGY", industry: "SOFTWARE - APPLICATION" },
-  AAPL: { sector: "TECHNOLOGY", industry: "CONSUMER ELECTRONICS" },
+  MSFT: { sector: "TECHNOLOGY", industry: "SYSTEMS SOFTWARE" },
+  AAPL: { sector: "TECHNOLOGY", industry: "TECHNOLOGY HARDWARE, STORAGE & PERIPHERALS" },
   NVDA: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
   AVGO: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  ORCL: { sector: "TECHNOLOGY", industry: "APPLICATION SOFTWARE" },
+  CRM: { sector: "TECHNOLOGY", industry: "APPLICATION SOFTWARE" },
   AMD: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
-  MU: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  CSCO: { sector: "TECHNOLOGY", industry: "COMMUNICATIONS EQUIPMENT" },
+  ACN: { sector: "TECHNOLOGY", industry: "IT CONSULTING & OTHER SERVICES" },
+  IBM: { sector: "TECHNOLOGY", industry: "IT CONSULTING & OTHER SERVICES" },
+  INTU: { sector: "TECHNOLOGY", industry: "APPLICATION SOFTWARE" },
+  NOW: { sector: "TECHNOLOGY", industry: "SYSTEMS SOFTWARE" },
+  PANW: { sector: "TECHNOLOGY", industry: "SYSTEMS SOFTWARE" },
+  PLTR: { sector: "TECHNOLOGY", industry: "APPLICATION SOFTWARE" },
+  SNPS: { sector: "TECHNOLOGY", industry: "APPLICATION SOFTWARE" },
+  CRWD: { sector: "TECHNOLOGY", industry: "SYSTEMS SOFTWARE" },
+  FTNT: { sector: "TECHNOLOGY", industry: "SYSTEMS SOFTWARE" },
+  ADBE: { sector: "TECHNOLOGY", industry: "APPLICATION SOFTWARE" },
+  ADP: { sector: "INDUSTRIALS", industry: "HUMAN RESOURCE & EMPLOYMENT SERVICES" },
+  ROP: { sector: "TECHNOLOGY", industry: "ELECTRONIC EQUIPMENT & INSTRUMENTS" },
+  CDNS: { sector: "TECHNOLOGY", industry: "APPLICATION SOFTWARE" },
+  PTC: { sector: "TECHNOLOGY", industry: "APPLICATION SOFTWARE" },
+  FICO: { sector: "TECHNOLOGY", industry: "APPLICATION SOFTWARE" },
+  TXN: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
   QCOM: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
-  CSCO: { sector: "TECHNOLOGY", industry: "COMMUNICATION EQUIPMENT" },
-  GOOGL: { sector: "COMMUNICATION SERVICES", industry: "INTERNET CONTENT & INFORMATION" },
-  META: { sector: "COMMUNICATION SERVICES", industry: "INTERNET CONTENT & INFORMATION" },
-  NFLX: { sector: "COMMUNICATION SERVICES", industry: "ENTERTAINMENT" },
-  AMZN: { sector: "CONSUMER CYCLICAL", industry: "INTERNET RETAIL" },
-  TSLA: { sector: "CONSUMER CYCLICAL", industry: "AUTO MANUFACTURERS" },
-  HD: { sector: "CONSUMER CYCLICAL", industry: "HOME IMPROVEMENT" },
+  MU: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  ADI: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  AMAT: { sector: "TECHNOLOGY", industry: "SEMICONDUCTOR MATERIALS & EQUIPMENT" },
+  LRCX: { sector: "TECHNOLOGY", industry: "SEMICONDUCTOR MATERIALS & EQUIPMENT" },
+  KLAC: { sector: "TECHNOLOGY", industry: "SEMICONDUCTOR MATERIALS & EQUIPMENT" },
+  INTC: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  MCHP: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  NXPI: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  ANET: { sector: "TECHNOLOGY", industry: "COMMUNICATIONS EQUIPMENT" },
+  DELL: { sector: "TECHNOLOGY", industry: "TECHNOLOGY HARDWARE, STORAGE & PERIPHERALS" },
+  WDC: { sector: "TECHNOLOGY", industry: "TECHNOLOGY HARDWARE, STORAGE & PERIPHERALS" },
+  STX: { sector: "TECHNOLOGY", industry: "TECHNOLOGY HARDWARE, STORAGE & PERIPHERALS" },
+  GOOGL: { sector: "COMMUNICATION SERVICES", industry: "INTERACTIVE MEDIA & SERVICES" },
+  META: { sector: "COMMUNICATION SERVICES", industry: "INTERACTIVE MEDIA & SERVICES" },
+  NFLX: { sector: "COMMUNICATION SERVICES", industry: "MOVIES & ENTERTAINMENT" },
+  DIS: { sector: "COMMUNICATION SERVICES", industry: "MOVIES & ENTERTAINMENT" },
+  TMUS: { sector: "COMMUNICATION SERVICES", industry: "WIRELESS TELECOMMUNICATION SERVICES" },
+  VZ: { sector: "COMMUNICATION SERVICES", industry: "INTEGRATED TELECOMMUNICATION SERVICES" },
+  T: { sector: "COMMUNICATION SERVICES", industry: "INTEGRATED TELECOMMUNICATION SERVICES" },
+  CMCSA: { sector: "COMMUNICATION SERVICES", industry: "CABLE & SATELLITE" },
+  EA: { sector: "COMMUNICATION SERVICES", industry: "INTERACTIVE HOME ENTERTAINMENT" },
+  TTWO: { sector: "COMMUNICATION SERVICES", industry: "INTERACTIVE HOME ENTERTAINMENT" },
+  LYV: { sector: "COMMUNICATION SERVICES", industry: "MOVIES & ENTERTAINMENT" },
+  WBD: { sector: "COMMUNICATION SERVICES", industry: "BROADCASTING" },
+  CHTR: { sector: "COMMUNICATION SERVICES", industry: "CABLE & SATELLITE" },
+  AMZN: { sector: "CONSUMER CYCLICAL", industry: "BROADLINE RETAIL" },
+  TSLA: { sector: "CONSUMER CYCLICAL", industry: "AUTOMOBILE MANUFACTURERS" },
+  HD: { sector: "CONSUMER CYCLICAL", industry: "HOME IMPROVEMENT RETAIL" },
   MCD: { sector: "CONSUMER CYCLICAL", industry: "RESTAURANTS" },
-  BKNG: { sector: "CONSUMER CYCLICAL", industry: "TRAVEL SERVICES" },
-  WMT: { sector: "CONSUMER DEFENSIVE", industry: "DISCOUNT STORES" },
-  COST: { sector: "CONSUMER DEFENSIVE", industry: "DISCOUNT STORES" },
-  PG: { sector: "CONSUMER DEFENSIVE", industry: "HOUSEHOLD & PERSONAL PRODUCTS" },
-  KO: { sector: "CONSUMER DEFENSIVE", industry: "BEVERAGES - NON-ALCOHOLIC" },
-  PEP: { sector: "CONSUMER DEFENSIVE", industry: "BEVERAGES - NON-ALCOHOLIC" },
-  "BRK-B": { sector: "FINANCIAL", industry: "INSURANCE - DIVERSIFIED" },
-  JPM: { sector: "FINANCIAL", industry: "BANKS - DIVERSIFIED" },
-  BAC: { sector: "FINANCIAL", industry: "BANKS - DIVERSIFIED" },
-  V: { sector: "FINANCIAL", industry: "CREDIT SERVICES" },
-  MA: { sector: "FINANCIAL", industry: "CREDIT SERVICES" },
-  LLY: { sector: "HEALTHCARE", industry: "DRUG MANUFACTURERS - GENERAL" },
-  JNJ: { sector: "HEALTHCARE", industry: "DRUG MANUFACTURERS - GENERAL" },
-  ABBV: { sector: "HEALTHCARE", industry: "DRUG MANUFACTURERS - GENERAL" },
-  UNH: { sector: "HEALTHCARE", industry: "HEALTHCARE PLANS" },
-  XOM: { sector: "ENERGY", industry: "OIL & GAS INTEGRATED" },
-  CVX: { sector: "ENERGY", industry: "OIL & GAS INTEGRATED" },
-  CAT: { sector: "INDUSTRIALS", industry: "FARM & HEAVY CONSTRUCTION" },
+  LOW: { sector: "CONSUMER CYCLICAL", industry: "HOME IMPROVEMENT RETAIL" },
+  SBUX: { sector: "CONSUMER CYCLICAL", industry: "RESTAURANTS" },
+  BKNG: { sector: "CONSUMER CYCLICAL", industry: "HOTELS, RESORTS & CRUISE LINES" },
+  RCL: { sector: "CONSUMER CYCLICAL", industry: "HOTELS, RESORTS & CRUISE LINES" },
+  CCL: { sector: "CONSUMER CYCLICAL", industry: "HOTELS, RESORTS & CRUISE LINES" },
+  ABNB: { sector: "CONSUMER CYCLICAL", industry: "HOTELS, RESORTS & CRUISE LINES" },
+  MAR: { sector: "CONSUMER CYCLICAL", industry: "HOTELS, RESORTS & CRUISE LINES" },
+  HLT: { sector: "CONSUMER CYCLICAL", industry: "HOTELS, RESORTS & CRUISE LINES" },
+  TJX: { sector: "CONSUMER CYCLICAL", industry: "APPAREL RETAIL" },
+  ROST: { sector: "CONSUMER CYCLICAL", industry: "APPAREL RETAIL" },
+  LULU: { sector: "CONSUMER CYCLICAL", industry: "APPAREL, ACCESSORIES & LUXURY GOODS" },
+  NKE: { sector: "CONSUMER CYCLICAL", industry: "APPAREL, ACCESSORIES & LUXURY GOODS" },
+  ORLY: { sector: "CONSUMER CYCLICAL", industry: "AUTOMOTIVE RETAIL" },
+  AZO: { sector: "CONSUMER CYCLICAL", industry: "AUTOMOTIVE RETAIL" },
+  GM: { sector: "CONSUMER CYCLICAL", industry: "AUTOMOBILE MANUFACTURERS" },
+  F: { sector: "CONSUMER CYCLICAL", industry: "AUTOMOBILE MANUFACTURERS" },
+  CMG: { sector: "CONSUMER CYCLICAL", industry: "RESTAURANTS" },
+  YUM: { sector: "CONSUMER CYCLICAL", industry: "RESTAURANTS" },
+  DRI: { sector: "CONSUMER CYCLICAL", industry: "RESTAURANTS" },
+  EBAY: { sector: "CONSUMER CYCLICAL", industry: "BROADLINE RETAIL" },
+  DASH: { sector: "CONSUMER CYCLICAL", industry: "SPECIALIZED CONSUMER SERVICES" },
+  WMT: { sector: "CONSUMER DEFENSIVE", industry: "CONSUMER STAPLES MERCHANDISE RETAIL" },
+  COST: { sector: "CONSUMER DEFENSIVE", industry: "CONSUMER STAPLES MERCHANDISE RETAIL" },
+  PG: { sector: "CONSUMER DEFENSIVE", industry: "PERSONAL CARE PRODUCTS" },
+  KO: { sector: "CONSUMER DEFENSIVE", industry: "SOFT DRINKS & NON-ALCOHOLIC BEVERAGES" },
+  PEP: { sector: "CONSUMER DEFENSIVE", industry: "SOFT DRINKS & NON-ALCOHOLIC BEVERAGES" },
+  PM: { sector: "CONSUMER DEFENSIVE", industry: "TOBACCO" },
+  MO: { sector: "CONSUMER DEFENSIVE", industry: "TOBACCO" },
+  CL: { sector: "CONSUMER DEFENSIVE", industry: "HOUSEHOLD PRODUCTS" },
+  KMB: { sector: "CONSUMER DEFENSIVE", industry: "HOUSEHOLD PRODUCTS" },
+  MDLZ: { sector: "CONSUMER DEFENSIVE", industry: "PACKAGED FOODS & MEATS" },
+  MNST: { sector: "CONSUMER DEFENSIVE", industry: "SOFT DRINKS & NON-ALCOHOLIC BEVERAGES" },
+  KDP: { sector: "CONSUMER DEFENSIVE", industry: "SOFT DRINKS & NON-ALCOHOLIC BEVERAGES" },
+  EL: { sector: "CONSUMER DEFENSIVE", industry: "PERSONAL CARE PRODUCTS" },
+  TGT: { sector: "CONSUMER DEFENSIVE", industry: "CONSUMER STAPLES MERCHANDISE RETAIL" },
+  DG: { sector: "CONSUMER DEFENSIVE", industry: "CONSUMER STAPLES MERCHANDISE RETAIL" },
+  KR: { sector: "CONSUMER DEFENSIVE", industry: "FOOD RETAIL" },
+  ADM: { sector: "CONSUMER DEFENSIVE", industry: "AGRICULTURAL PRODUCTS & SERVICES" },
+  GIS: { sector: "CONSUMER DEFENSIVE", industry: "PACKAGED FOODS & MEATS" },
+  HSY: { sector: "CONSUMER DEFENSIVE", industry: "PACKAGED FOODS & MEATS" },
+  SYY: { sector: "CONSUMER DEFENSIVE", industry: "FOOD DISTRIBUTORS" },
+  KHC: { sector: "CONSUMER DEFENSIVE", industry: "PACKAGED FOODS & MEATS" },
+  STZ: { sector: "CONSUMER DEFENSIVE", industry: "DISTILLERS & VINTNERS" },
+  "BRK-B": { sector: "FINANCIAL", industry: "MULTI-SECTOR HOLDINGS" },
+  JPM: { sector: "FINANCIAL", industry: "DIVERSIFIED BANKS" },
+  V: { sector: "FINANCIAL", industry: "TRANSACTION & PAYMENT PROCESSING SERVICES" },
+  MA: { sector: "FINANCIAL", industry: "TRANSACTION & PAYMENT PROCESSING SERVICES" },
+  BAC: { sector: "FINANCIAL", industry: "DIVERSIFIED BANKS" },
+  WFC: { sector: "FINANCIAL", industry: "DIVERSIFIED BANKS" },
+  C: { sector: "FINANCIAL", industry: "DIVERSIFIED BANKS" },
+  AXP: { sector: "FINANCIAL", industry: "CONSUMER FINANCE" },
+  GS: { sector: "FINANCIAL", industry: "INVESTMENT BANKING & BROKERAGE" },
+  MS: { sector: "FINANCIAL", industry: "INVESTMENT BANKING & BROKERAGE" },
+  BLK: { sector: "FINANCIAL", industry: "ASSET MANAGEMENT & CUSTODY BANKS" },
+  SCHW: { sector: "FINANCIAL", industry: "INVESTMENT BANKING & BROKERAGE" },
+  SPGI: { sector: "FINANCIAL", industry: "FINANCIAL EXCHANGES & DATA" },
+  ICE: { sector: "FINANCIAL", industry: "FINANCIAL EXCHANGES & DATA" },
+  CME: { sector: "FINANCIAL", industry: "FINANCIAL EXCHANGES & DATA" },
+  COF: { sector: "FINANCIAL", industry: "CONSUMER FINANCE" },
+  USB: { sector: "FINANCIAL", industry: "DIVERSIFIED BANKS" },
+  PNC: { sector: "FINANCIAL", industry: "DIVERSIFIED BANKS" },
+  TFC: { sector: "FINANCIAL", industry: "DIVERSIFIED BANKS" },
+  CB: { sector: "FINANCIAL", industry: "PROPERTY & CASUALTY INSURANCE" },
+  PGR: { sector: "FINANCIAL", industry: "PROPERTY & CASUALTY INSURANCE" },
+  TRV: { sector: "FINANCIAL", industry: "PROPERTY & CASUALTY INSURANCE" },
+  AON: { sector: "FINANCIAL", industry: "INSURANCE BROKERS" },
+  AFL: { sector: "FINANCIAL", industry: "LIFE & HEALTH INSURANCE" },
+  WELL: { sector: "REAL ESTATE", industry: "HEALTH CARE REITS" },
+  AJG: { sector: "FINANCIAL", industry: "INSURANCE BROKERS" },
+  ALL: { sector: "FINANCIAL", industry: "PROPERTY & CASUALTY INSURANCE" },
+  KKR: { sector: "FINANCIAL", industry: "ASSET MANAGEMENT & CUSTODY BANKS" },
+  BX: { sector: "FINANCIAL", industry: "ASSET MANAGEMENT & CUSTODY BANKS" },
+  LLY: { sector: "HEALTHCARE", industry: "PHARMACEUTICALS" },
+  JNJ: { sector: "HEALTHCARE", industry: "PHARMACEUTICALS" },
+  UNH: { sector: "HEALTHCARE", industry: "MANAGED HEALTH CARE" },
+  ABBV: { sector: "HEALTHCARE", industry: "BIOTECHNOLOGY" },
+  MRK: { sector: "HEALTHCARE", industry: "PHARMACEUTICALS" },
+  TMO: { sector: "HEALTHCARE", industry: "LIFE SCIENCES TOOLS & SERVICES" },
+  ABT: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  ISRG: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  DHR: { sector: "HEALTHCARE", industry: "LIFE SCIENCES TOOLS & SERVICES" },
+  PFE: { sector: "HEALTHCARE", industry: "PHARMACEUTICALS" },
+  AMGN: { sector: "HEALTHCARE", industry: "BIOTECHNOLOGY" },
+  MDT: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  BSX: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  SYK: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  CVS: { sector: "HEALTHCARE", industry: "HEALTH CARE SERVICES" },
+  CI: { sector: "HEALTHCARE", industry: "HEALTH CARE SERVICES" },
+  HUM: { sector: "HEALTHCARE", industry: "MANAGED HEALTH CARE" },
+  BMY: { sector: "HEALTHCARE", industry: "PHARMACEUTICALS" },
+  GILD: { sector: "HEALTHCARE", industry: "BIOTECHNOLOGY" },
+  REGN: { sector: "HEALTHCARE", industry: "BIOTECHNOLOGY" },
+  VRTX: { sector: "HEALTHCARE", industry: "BIOTECHNOLOGY" },
+  MCK: { sector: "HEALTHCARE", industry: "HEALTH CARE DISTRIBUTORS" },
+  COR: { sector: "HEALTHCARE", industry: "HEALTH CARE DISTRIBUTORS" },
+  HCA: { sector: "HEALTHCARE", industry: "HEALTH CARE FACILITIES" },
+  ELV: { sector: "HEALTHCARE", industry: "MANAGED HEALTH CARE" },
+  BDX: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  EW: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  IQV: { sector: "HEALTHCARE", industry: "LIFE SCIENCES TOOLS & SERVICES" },
+  ZTS: { sector: "HEALTHCARE", industry: "PHARMACEUTICALS" },
   GE: { sector: "INDUSTRIALS", industry: "AEROSPACE & DEFENSE" },
   RTX: { sector: "INDUSTRIALS", industry: "AEROSPACE & DEFENSE" },
+  CAT: { sector: "INDUSTRIALS", industry: "CONSTRUCTION MACHINERY & HEAVY TRANSPORTATION EQUIPMENT" },
+  DE: { sector: "INDUSTRIALS", industry: "AGRICULTURAL & FARM MACHINERY" },
+  BA: { sector: "INDUSTRIALS", industry: "AEROSPACE & DEFENSE" },
+  LMT: { sector: "INDUSTRIALS", industry: "AEROSPACE & DEFENSE" },
+  HON: { sector: "INDUSTRIALS", industry: "INDUSTRIAL CONGLOMERATES" },
+  UPS: { sector: "INDUSTRIALS", industry: "AIR FREIGHT & LOGISTICS" },
+  ETN: { sector: "INDUSTRIALS", industry: "ELECTRICAL COMPONENTS & EQUIPMENT" },
+  PH: { sector: "INDUSTRIALS", industry: "INDUSTRIAL MACHINERY & SUPPLIES & COMPONENTS" },
+  MMM: { sector: "INDUSTRIALS", industry: "INDUSTRIAL CONGLOMERATES" },
+  UNP: { sector: "INDUSTRIALS", industry: "RAIL TRANSPORTATION" },
+  CSX: { sector: "INDUSTRIALS", industry: "RAIL TRANSPORTATION" },
+  NSC: { sector: "INDUSTRIALS", industry: "RAIL TRANSPORTATION" },
+  WM: { sector: "INDUSTRIALS", industry: "ENVIRONMENTAL & FACILITIES SERVICES" },
+  RSG: { sector: "INDUSTRIALS", industry: "ENVIRONMENTAL & FACILITIES SERVICES" },
+  ITW: { sector: "INDUSTRIALS", industry: "INDUSTRIAL MACHINERY & SUPPLIES & COMPONENTS" },
+  EMR: { sector: "INDUSTRIALS", industry: "ELECTRICAL COMPONENTS & EQUIPMENT" },
+  PCAR: { sector: "INDUSTRIALS", industry: "CONSTRUCTION MACHINERY & HEAVY TRANSPORTATION EQUIPMENT" },
+  CMI: { sector: "INDUSTRIALS", industry: "CONSTRUCTION MACHINERY & HEAVY TRANSPORTATION EQUIPMENT" },
+  FDX: { sector: "INDUSTRIALS", industry: "AIR FREIGHT & LOGISTICS" },
+  JCI: { sector: "INDUSTRIALS", industry: "BUILDING PRODUCTS" },
+  TT: { sector: "INDUSTRIALS", industry: "BUILDING PRODUCTS" },
+  AXON: { sector: "INDUSTRIALS", industry: "AEROSPACE & DEFENSE" },
+  GEV: { sector: "INDUSTRIALS", industry: "HEAVY ELECTRICAL EQUIPMENT" },
+  CARR: { sector: "INDUSTRIALS", industry: "BUILDING PRODUCTS" },
+  XOM: { sector: "ENERGY", industry: "INTEGRATED OIL & GAS" },
+  CVX: { sector: "ENERGY", industry: "INTEGRATED OIL & GAS" },
+  COP: { sector: "ENERGY", industry: "OIL & GAS EXPLORATION & PRODUCTION" },
+  EOG: { sector: "ENERGY", industry: "OIL & GAS EXPLORATION & PRODUCTION" },
+  SLB: { sector: "ENERGY", industry: "OIL & GAS EQUIPMENT & SERVICES" },
+  OXY: { sector: "ENERGY", industry: "OIL & GAS EXPLORATION & PRODUCTION" },
+  MPC: { sector: "ENERGY", industry: "OIL & GAS REFINING & MARKETING" },
+  PSX: { sector: "ENERGY", industry: "OIL & GAS REFINING & MARKETING" },
+  VLO: { sector: "ENERGY", industry: "OIL & GAS REFINING & MARKETING" },
+  KMI: { sector: "ENERGY", industry: "OIL & GAS STORAGE & TRANSPORTATION" },
+  WMB: { sector: "ENERGY", industry: "OIL & GAS STORAGE & TRANSPORTATION" },
+  HAL: { sector: "ENERGY", industry: "OIL & GAS EQUIPMENT & SERVICES" },
+  BKR: { sector: "ENERGY", industry: "OIL & GAS EQUIPMENT & SERVICES" },
+  FANG: { sector: "ENERGY", industry: "OIL & GAS EXPLORATION & PRODUCTION" },
+  OKE: { sector: "ENERGY", industry: "OIL & GAS STORAGE & TRANSPORTATION" },
+  DVN: { sector: "ENERGY", industry: "OIL & GAS EXPLORATION & PRODUCTION" },
+  NEE: { sector: "UTILITIES", industry: "MULTI-UTILITIES" },
+  SO: { sector: "UTILITIES", industry: "ELECTRIC UTILITIES" },
+  AOS: { sector: "INDUSTRIALS", industry: "BUILDING PRODUCTS" },
+  AES: { sector: "UTILITIES", industry: "INDEPENDENT POWER PRODUCERS & ENERGY TRADERS" },
+  A: { sector: "HEALTHCARE", industry: "LIFE SCIENCES TOOLS & SERVICES" },
+  APD: { sector: "BASIC MATERIALS", industry: "INDUSTRIAL GASES" },
+  AKAM: { sector: "TECHNOLOGY", industry: "INTERNET SERVICES & INFRASTRUCTURE" },
+  ALB: { sector: "BASIC MATERIALS", industry: "SPECIALTY CHEMICALS" },
+  ARE: { sector: "REAL ESTATE", industry: "OFFICE REITS" },
+  ALGN: { sector: "HEALTHCARE", industry: "HEALTH CARE SUPPLIES" },
+  ALLE: { sector: "INDUSTRIALS", industry: "BUILDING PRODUCTS" },
+  LNT: { sector: "UTILITIES", industry: "ELECTRIC UTILITIES" },
+  GOOG: { sector: "COMMUNICATION SERVICES", industry: "INTERACTIVE MEDIA & SERVICES" },
+  AMCR: { sector: "BASIC MATERIALS", industry: "PAPER & PLASTIC PACKAGING PRODUCTS & MATERIALS" },
+  AEE: { sector: "UTILITIES", industry: "MULTI-UTILITIES" },
+  AEP: { sector: "UTILITIES", industry: "ELECTRIC UTILITIES" },
+  AIG: { sector: "FINANCIAL", industry: "MULTI-LINE INSURANCE" },
+  AMT: { sector: "REAL ESTATE", industry: "TELECOM TOWER REITS" },
+  AWK: { sector: "UTILITIES", industry: "WATER UTILITIES" },
+  AMP: { sector: "FINANCIAL", industry: "ASSET MANAGEMENT & CUSTODY BANKS" },
+  AME: { sector: "INDUSTRIALS", industry: "ELECTRICAL COMPONENTS & EQUIPMENT" },
+  APH: { sector: "TECHNOLOGY", industry: "ELECTRONIC COMPONENTS" },
+  APA: { sector: "ENERGY", industry: "OIL & GAS EXPLORATION & PRODUCTION" },
+  APO: { sector: "FINANCIAL", industry: "ASSET MANAGEMENT & CUSTODY BANKS" },
+  APP: { sector: "TECHNOLOGY", industry: "APPLICATION SOFTWARE" },
+  APTV: { sector: "CONSUMER CYCLICAL", industry: "AUTOMOTIVE PARTS & EQUIPMENT" },
+  ACGL: { sector: "FINANCIAL", industry: "PROPERTY & CASUALTY INSURANCE" },
+  ARES: { sector: "FINANCIAL", industry: "ASSET MANAGEMENT & CUSTODY BANKS" },
+  AIZ: { sector: "FINANCIAL", industry: "MULTI-LINE INSURANCE" },
+  ATO: { sector: "UTILITIES", industry: "GAS UTILITIES" },
+  ADSK: { sector: "TECHNOLOGY", industry: "APPLICATION SOFTWARE" },
+  AVB: { sector: "REAL ESTATE", industry: "MULTI-FAMILY RESIDENTIAL REITS" },
+  AVY: { sector: "BASIC MATERIALS", industry: "PAPER & PLASTIC PACKAGING PRODUCTS & MATERIALS" },
+  BALL: { sector: "BASIC MATERIALS", industry: "METAL, GLASS & PLASTIC CONTAINERS" },
+  BAX: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  BBY: { sector: "CONSUMER CYCLICAL", industry: "COMPUTER & ELECTRONICS RETAIL" },
+  TECH: { sector: "HEALTHCARE", industry: "LIFE SCIENCES TOOLS & SERVICES" },
+  BIIB: { sector: "HEALTHCARE", industry: "BIOTECHNOLOGY" },
+  XYZ: { sector: "FINANCIAL", industry: "TRANSACTION & PAYMENT PROCESSING SERVICES" },
+  BK: { sector: "FINANCIAL", industry: "ASSET MANAGEMENT & CUSTODY BANKS" },
+  BR: { sector: "INDUSTRIALS", industry: "DATA PROCESSING & OUTSOURCED SERVICES" },
+  BRO: { sector: "FINANCIAL", industry: "INSURANCE BROKERS" },
+  "BF-B": { sector: "CONSUMER DEFENSIVE", industry: "DISTILLERS & VINTNERS" },
+  BLDR: { sector: "INDUSTRIALS", industry: "BUILDING PRODUCTS" },
+  BG: { sector: "CONSUMER DEFENSIVE", industry: "AGRICULTURAL PRODUCTS & SERVICES" },
+  BXP: { sector: "REAL ESTATE", industry: "OFFICE REITS" },
+  CHRW: { sector: "INDUSTRIALS", industry: "AIR FREIGHT & LOGISTICS" },
+  CPT: { sector: "REAL ESTATE", industry: "MULTI-FAMILY RESIDENTIAL REITS" },
+  CPB: { sector: "CONSUMER DEFENSIVE", industry: "PACKAGED FOODS & MEATS" },
+  CAH: { sector: "HEALTHCARE", industry: "HEALTH CARE DISTRIBUTORS" },
+  CVNA: { sector: "CONSUMER CYCLICAL", industry: "AUTOMOTIVE RETAIL" },
+  CASY: { sector: "CONSUMER DEFENSIVE", industry: "FOOD RETAIL" },
+  CBOE: { sector: "FINANCIAL", industry: "FINANCIAL EXCHANGES & DATA" },
+  CBRE: { sector: "REAL ESTATE", industry: "REAL ESTATE SERVICES" },
+  CDW: { sector: "TECHNOLOGY", industry: "TECHNOLOGY DISTRIBUTORS" },
+  CNC: { sector: "HEALTHCARE", industry: "MANAGED HEALTH CARE" },
+  CNP: { sector: "UTILITIES", industry: "MULTI-UTILITIES" },
+  CF: { sector: "BASIC MATERIALS", industry: "FERTILIZERS & AGRICULTURAL CHEMICALS" },
+  CRL: { sector: "HEALTHCARE", industry: "LIFE SCIENCES TOOLS & SERVICES" },
+  CHD: { sector: "CONSUMER DEFENSIVE", industry: "HOUSEHOLD PRODUCTS" },
+  CIEN: { sector: "TECHNOLOGY", industry: "COMMUNICATIONS EQUIPMENT" },
+  CINF: { sector: "FINANCIAL", industry: "PROPERTY & CASUALTY INSURANCE" },
+  CTAS: { sector: "INDUSTRIALS", industry: "DIVERSIFIED SUPPORT SERVICES" },
+  CFG: { sector: "FINANCIAL", industry: "REGIONAL BANKS" },
+  CLX: { sector: "CONSUMER DEFENSIVE", industry: "HOUSEHOLD PRODUCTS" },
+  CMS: { sector: "UTILITIES", industry: "MULTI-UTILITIES" },
+  CTSH: { sector: "TECHNOLOGY", industry: "IT CONSULTING & OTHER SERVICES" },
+  COHR: { sector: "TECHNOLOGY", industry: "ELECTRONIC COMPONENTS" },
+  COIN: { sector: "FINANCIAL", industry: "FINANCIAL EXCHANGES & DATA" },
+  FIX: { sector: "INDUSTRIALS", industry: "CONSTRUCTION & ENGINEERING" },
+  CAG: { sector: "CONSUMER DEFENSIVE", industry: "PACKAGED FOODS & MEATS" },
+  ED: { sector: "UTILITIES", industry: "MULTI-UTILITIES" },
+  CEG: { sector: "UTILITIES", industry: "ELECTRIC UTILITIES" },
+  COO: { sector: "HEALTHCARE", industry: "HEALTH CARE SUPPLIES" },
+  CPRT: { sector: "INDUSTRIALS", industry: "DIVERSIFIED SUPPORT SERVICES" },
+  GLW: { sector: "TECHNOLOGY", industry: "ELECTRONIC COMPONENTS" },
+  CPAY: { sector: "FINANCIAL", industry: "TRANSACTION & PAYMENT PROCESSING SERVICES" },
+  CTVA: { sector: "BASIC MATERIALS", industry: "FERTILIZERS & AGRICULTURAL CHEMICALS" },
+  CSGP: { sector: "REAL ESTATE", industry: "REAL ESTATE SERVICES" },
+  CRH: { sector: "BASIC MATERIALS", industry: "CONSTRUCTION MATERIALS" },
+  CCI: { sector: "REAL ESTATE", industry: "TELECOM TOWER REITS" },
+  DDOG: { sector: "TECHNOLOGY", industry: "APPLICATION SOFTWARE" },
+  DVA: { sector: "HEALTHCARE", industry: "HEALTH CARE SERVICES" },
+  DECK: { sector: "CONSUMER CYCLICAL", industry: "FOOTWEAR" },
+  DAL: { sector: "INDUSTRIALS", industry: "PASSENGER AIRLINES" },
+  DXCM: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  DLR: { sector: "REAL ESTATE", industry: "DATA CENTER REITS" },
+  DLTR: { sector: "CONSUMER DEFENSIVE", industry: "CONSUMER STAPLES MERCHANDISE RETAIL" },
+  D: { sector: "UTILITIES", industry: "MULTI-UTILITIES" },
+  DPZ: { sector: "CONSUMER CYCLICAL", industry: "RESTAURANTS" },
+  DOV: { sector: "INDUSTRIALS", industry: "INDUSTRIAL MACHINERY & SUPPLIES & COMPONENTS" },
+  DOW: { sector: "BASIC MATERIALS", industry: "COMMODITY CHEMICALS" },
+  DHI: { sector: "CONSUMER CYCLICAL", industry: "HOMEBUILDING" },
+  DTE: { sector: "UTILITIES", industry: "MULTI-UTILITIES" },
+  DUK: { sector: "UTILITIES", industry: "ELECTRIC UTILITIES" },
+  DD: { sector: "BASIC MATERIALS", industry: "SPECIALTY CHEMICALS" },
+  SATS: { sector: "COMMUNICATION SERVICES", industry: "WIRELESS TELECOMMUNICATION SERVICES" },
+  ECL: { sector: "BASIC MATERIALS", industry: "SPECIALTY CHEMICALS" },
+  EIX: { sector: "UTILITIES", industry: "ELECTRIC UTILITIES" },
+  EME: { sector: "INDUSTRIALS", industry: "CONSTRUCTION & ENGINEERING" },
+  ETR: { sector: "UTILITIES", industry: "ELECTRIC UTILITIES" },
+  EPAM: { sector: "TECHNOLOGY", industry: "IT CONSULTING & OTHER SERVICES" },
+  EQT: { sector: "ENERGY", industry: "OIL & GAS EXPLORATION & PRODUCTION" },
+  EFX: { sector: "INDUSTRIALS", industry: "RESEARCH & CONSULTING SERVICES" },
+  EQIX: { sector: "REAL ESTATE", industry: "DATA CENTER REITS" },
+  EQR: { sector: "REAL ESTATE", industry: "MULTI-FAMILY RESIDENTIAL REITS" },
+  ERIE: { sector: "FINANCIAL", industry: "INSURANCE BROKERS" },
+  ESS: { sector: "REAL ESTATE", industry: "MULTI-FAMILY RESIDENTIAL REITS" },
+  EG: { sector: "FINANCIAL", industry: "REINSURANCE" },
+  EVRG: { sector: "UTILITIES", industry: "ELECTRIC UTILITIES" },
+  ES: { sector: "UTILITIES", industry: "ELECTRIC UTILITIES" },
+  EXC: { sector: "UTILITIES", industry: "ELECTRIC UTILITIES" },
+  EXE: { sector: "ENERGY", industry: "OIL & GAS EXPLORATION & PRODUCTION" },
+  EXPE: { sector: "CONSUMER CYCLICAL", industry: "HOTELS, RESORTS & CRUISE LINES" },
+  EXPD: { sector: "INDUSTRIALS", industry: "AIR FREIGHT & LOGISTICS" },
+  EXR: { sector: "REAL ESTATE", industry: "SELF-STORAGE REITS" },
+  FFIV: { sector: "TECHNOLOGY", industry: "COMMUNICATIONS EQUIPMENT" },
+  FDS: { sector: "FINANCIAL", industry: "FINANCIAL EXCHANGES & DATA" },
+  FAST: { sector: "INDUSTRIALS", industry: "TRADING COMPANIES & DISTRIBUTORS" },
+  FRT: { sector: "REAL ESTATE", industry: "RETAIL REITS" },
+  FIS: { sector: "FINANCIAL", industry: "TRANSACTION & PAYMENT PROCESSING SERVICES" },
+  FITB: { sector: "FINANCIAL", industry: "REGIONAL BANKS" },
+  FSLR: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  FE: { sector: "UTILITIES", industry: "ELECTRIC UTILITIES" },
+  FISV: { sector: "FINANCIAL", industry: "TRANSACTION & PAYMENT PROCESSING SERVICES" },
+  FTV: { sector: "INDUSTRIALS", industry: "INDUSTRIAL MACHINERY & SUPPLIES & COMPONENTS" },
+  FOXA: { sector: "COMMUNICATION SERVICES", industry: "BROADCASTING" },
+  FOX: { sector: "COMMUNICATION SERVICES", industry: "BROADCASTING" },
+  BEN: { sector: "FINANCIAL", industry: "ASSET MANAGEMENT & CUSTODY BANKS" },
+  FCX: { sector: "BASIC MATERIALS", industry: "COPPER" },
+  GRMN: { sector: "CONSUMER CYCLICAL", industry: "CONSUMER ELECTRONICS" },
+  IT: { sector: "TECHNOLOGY", industry: "IT CONSULTING & OTHER SERVICES" },
+  GEHC: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  GEN: { sector: "TECHNOLOGY", industry: "SYSTEMS SOFTWARE" },
+  GNRC: { sector: "INDUSTRIALS", industry: "ELECTRICAL COMPONENTS & EQUIPMENT" },
+  GD: { sector: "INDUSTRIALS", industry: "AEROSPACE & DEFENSE" },
+  GPC: { sector: "CONSUMER CYCLICAL", industry: "DISTRIBUTORS" },
+  GPN: { sector: "FINANCIAL", industry: "TRANSACTION & PAYMENT PROCESSING SERVICES" },
+  GL: { sector: "FINANCIAL", industry: "LIFE & HEALTH INSURANCE" },
+  GDDY: { sector: "TECHNOLOGY", industry: "INTERNET SERVICES & INFRASTRUCTURE" },
+  HIG: { sector: "FINANCIAL", industry: "PROPERTY & CASUALTY INSURANCE" },
+  HAS: { sector: "CONSUMER CYCLICAL", industry: "LEISURE PRODUCTS" },
+  DOC: { sector: "REAL ESTATE", industry: "HEALTH CARE REITS" },
+  HSIC: { sector: "HEALTHCARE", industry: "HEALTH CARE DISTRIBUTORS" },
+  HPE: { sector: "TECHNOLOGY", industry: "TECHNOLOGY HARDWARE, STORAGE & PERIPHERALS" },
+  HRL: { sector: "CONSUMER DEFENSIVE", industry: "PACKAGED FOODS & MEATS" },
+  HST: { sector: "REAL ESTATE", industry: "HOTEL & RESORT REITS" },
+  HWM: { sector: "INDUSTRIALS", industry: "AEROSPACE & DEFENSE" },
+  HPQ: { sector: "TECHNOLOGY", industry: "TECHNOLOGY HARDWARE, STORAGE & PERIPHERALS" },
+  HUBB: { sector: "INDUSTRIALS", industry: "INDUSTRIAL MACHINERY & SUPPLIES & COMPONENTS" },
+  HBAN: { sector: "FINANCIAL", industry: "REGIONAL BANKS" },
+  HII: { sector: "INDUSTRIALS", industry: "AEROSPACE & DEFENSE" },
+  IEX: { sector: "INDUSTRIALS", industry: "INDUSTRIAL MACHINERY & SUPPLIES & COMPONENTS" },
+  IDXX: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  INCY: { sector: "HEALTHCARE", industry: "BIOTECHNOLOGY" },
+  IR: { sector: "INDUSTRIALS", industry: "INDUSTRIAL MACHINERY & SUPPLIES & COMPONENTS" },
+  PODD: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  IBKR: { sector: "FINANCIAL", industry: "INVESTMENT BANKING & BROKERAGE" },
+  IFF: { sector: "BASIC MATERIALS", industry: "SPECIALTY CHEMICALS" },
+  IP: { sector: "BASIC MATERIALS", industry: "PAPER & PLASTIC PACKAGING PRODUCTS & MATERIALS" },
+  IVZ: { sector: "FINANCIAL", industry: "ASSET MANAGEMENT & CUSTODY BANKS" },
+  INVH: { sector: "REAL ESTATE", industry: "SINGLE-FAMILY RESIDENTIAL REITS" },
+  IRM: { sector: "REAL ESTATE", industry: "OTHER SPECIALIZED REITS" },
+  JBHT: { sector: "INDUSTRIALS", industry: "CARGO GROUND TRANSPORTATION" },
+  JBL: { sector: "TECHNOLOGY", industry: "ELECTRONIC MANUFACTURING SERVICES" },
+  JKHY: { sector: "FINANCIAL", industry: "TRANSACTION & PAYMENT PROCESSING SERVICES" },
+  J: { sector: "INDUSTRIALS", industry: "CONSTRUCTION & ENGINEERING" },
+  KVUE: { sector: "CONSUMER DEFENSIVE", industry: "PERSONAL CARE PRODUCTS" },
+  KEY: { sector: "FINANCIAL", industry: "REGIONAL BANKS" },
+  KEYS: { sector: "TECHNOLOGY", industry: "ELECTRONIC EQUIPMENT & INSTRUMENTS" },
+  KIM: { sector: "REAL ESTATE", industry: "RETAIL REITS" },
+  LHX: { sector: "INDUSTRIALS", industry: "AEROSPACE & DEFENSE" },
+  LH: { sector: "HEALTHCARE", industry: "HEALTH CARE SERVICES" },
+  LVS: { sector: "CONSUMER CYCLICAL", industry: "CASINOS & GAMING" },
+  LDOS: { sector: "INDUSTRIALS", industry: "DIVERSIFIED SUPPORT SERVICES" },
+  LEN: { sector: "CONSUMER CYCLICAL", industry: "HOMEBUILDING" },
+  LII: { sector: "INDUSTRIALS", industry: "BUILDING PRODUCTS" },
+  LIN: { sector: "BASIC MATERIALS", industry: "INDUSTRIAL GASES" },
+  L: { sector: "FINANCIAL", industry: "MULTI-LINE INSURANCE" },
+  LITE: { sector: "TECHNOLOGY", industry: "COMMUNICATIONS EQUIPMENT" },
+  LYB: { sector: "BASIC MATERIALS", industry: "SPECIALTY CHEMICALS" },
+  MTB: { sector: "FINANCIAL", industry: "REGIONAL BANKS" },
+  MRSH: { sector: "FINANCIAL", industry: "INSURANCE BROKERS" },
+  MLM: { sector: "BASIC MATERIALS", industry: "CONSTRUCTION MATERIALS" },
+  MAS: { sector: "INDUSTRIALS", industry: "BUILDING PRODUCTS" },
+  MKC: { sector: "CONSUMER DEFENSIVE", industry: "PACKAGED FOODS & MEATS" },
+  MET: { sector: "FINANCIAL", industry: "LIFE & HEALTH INSURANCE" },
+  MTD: { sector: "HEALTHCARE", industry: "LIFE SCIENCES TOOLS & SERVICES" },
+  MGM: { sector: "CONSUMER CYCLICAL", industry: "CASINOS & GAMING" },
+  MAA: { sector: "REAL ESTATE", industry: "MULTI-FAMILY RESIDENTIAL REITS" },
+  MRNA: { sector: "HEALTHCARE", industry: "BIOTECHNOLOGY" },
+  TAP: { sector: "CONSUMER DEFENSIVE", industry: "BREWERS" },
+  MPWR: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  MCO: { sector: "FINANCIAL", industry: "FINANCIAL EXCHANGES & DATA" },
+  MOS: { sector: "BASIC MATERIALS", industry: "FERTILIZERS & AGRICULTURAL CHEMICALS" },
+  MSI: { sector: "TECHNOLOGY", industry: "COMMUNICATIONS EQUIPMENT" },
+  MSCI: { sector: "FINANCIAL", industry: "FINANCIAL EXCHANGES & DATA" },
+  NDAQ: { sector: "FINANCIAL", industry: "FINANCIAL EXCHANGES & DATA" },
+  NTAP: { sector: "TECHNOLOGY", industry: "TECHNOLOGY HARDWARE, STORAGE & PERIPHERALS" },
+  NEM: { sector: "BASIC MATERIALS", industry: "GOLD" },
+  NWSA: { sector: "COMMUNICATION SERVICES", industry: "PUBLISHING" },
+  NWS: { sector: "COMMUNICATION SERVICES", industry: "PUBLISHING" },
+  NI: { sector: "UTILITIES", industry: "MULTI-UTILITIES" },
+  NDSN: { sector: "INDUSTRIALS", industry: "INDUSTRIAL MACHINERY & SUPPLIES & COMPONENTS" },
+  NTRS: { sector: "FINANCIAL", industry: "ASSET MANAGEMENT & CUSTODY BANKS" },
+  NOC: { sector: "INDUSTRIALS", industry: "AEROSPACE & DEFENSE" },
+  NCLH: { sector: "CONSUMER CYCLICAL", industry: "HOTELS, RESORTS & CRUISE LINES" },
+  NRG: { sector: "UTILITIES", industry: "INDEPENDENT POWER PRODUCERS & ENERGY TRADERS" },
+  NUE: { sector: "BASIC MATERIALS", industry: "STEEL" },
+  NVR: { sector: "CONSUMER CYCLICAL", industry: "HOMEBUILDING" },
+  ODFL: { sector: "INDUSTRIALS", industry: "CARGO GROUND TRANSPORTATION" },
+  OMC: { sector: "COMMUNICATION SERVICES", industry: "ADVERTISING" },
+  ON: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  OTIS: { sector: "INDUSTRIALS", industry: "INDUSTRIAL MACHINERY & SUPPLIES & COMPONENTS" },
+  PKG: { sector: "BASIC MATERIALS", industry: "PAPER & PLASTIC PACKAGING PRODUCTS & MATERIALS" },
+  PSKY: { sector: "COMMUNICATION SERVICES", industry: "MOVIES & ENTERTAINMENT" },
+  PAYX: { sector: "INDUSTRIALS", industry: "HUMAN RESOURCE & EMPLOYMENT SERVICES" },
+  PYPL: { sector: "FINANCIAL", industry: "TRANSACTION & PAYMENT PROCESSING SERVICES" },
+  PNR: { sector: "INDUSTRIALS", industry: "INDUSTRIAL MACHINERY & SUPPLIES & COMPONENTS" },
+  PCG: { sector: "UTILITIES", industry: "MULTI-UTILITIES" },
+  PNW: { sector: "UTILITIES", industry: "MULTI-UTILITIES" },
+  POOL: { sector: "CONSUMER CYCLICAL", industry: "DISTRIBUTORS" },
+  PPG: { sector: "BASIC MATERIALS", industry: "SPECIALTY CHEMICALS" },
+  PPL: { sector: "UTILITIES", industry: "ELECTRIC UTILITIES" },
+  PFG: { sector: "FINANCIAL", industry: "LIFE & HEALTH INSURANCE" },
+  PLD: { sector: "REAL ESTATE", industry: "INDUSTRIAL REITS" },
+  PRU: { sector: "FINANCIAL", industry: "LIFE & HEALTH INSURANCE" },
+  PEG: { sector: "UTILITIES", industry: "ELECTRIC UTILITIES" },
+  PSA: { sector: "REAL ESTATE", industry: "SELF-STORAGE REITS" },
+  PHM: { sector: "CONSUMER CYCLICAL", industry: "HOMEBUILDING" },
+  PWR: { sector: "INDUSTRIALS", industry: "CONSTRUCTION & ENGINEERING" },
+  DGX: { sector: "HEALTHCARE", industry: "HEALTH CARE SERVICES" },
+  Q: { sector: "TECHNOLOGY", industry: "SEMICONDUCTOR MATERIALS & EQUIPMENT" },
+  RL: { sector: "CONSUMER CYCLICAL", industry: "APPAREL, ACCESSORIES & LUXURY GOODS" },
+  RJF: { sector: "FINANCIAL", industry: "INVESTMENT BANKING & BROKERAGE" },
+  O: { sector: "REAL ESTATE", industry: "RETAIL REITS" },
+  REG: { sector: "REAL ESTATE", industry: "RETAIL REITS" },
+  RF: { sector: "FINANCIAL", industry: "REGIONAL BANKS" },
+  RMD: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  RVTY: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  HOOD: { sector: "FINANCIAL", industry: "INVESTMENT BANKING & BROKERAGE" },
+  ROK: { sector: "INDUSTRIALS", industry: "ELECTRICAL COMPONENTS & EQUIPMENT" },
+  ROL: { sector: "INDUSTRIALS", industry: "ENVIRONMENTAL & FACILITIES SERVICES" },
+  SNDK: { sector: "TECHNOLOGY", industry: "TECHNOLOGY HARDWARE, STORAGE & PERIPHERALS" },
+  SBAC: { sector: "REAL ESTATE", industry: "TELECOM TOWER REITS" },
+  SRE: { sector: "UTILITIES", industry: "MULTI-UTILITIES" },
+  SHW: { sector: "BASIC MATERIALS", industry: "SPECIALTY CHEMICALS" },
+  SPG: { sector: "REAL ESTATE", industry: "RETAIL REITS" },
+  SWKS: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  SJM: { sector: "CONSUMER DEFENSIVE", industry: "PACKAGED FOODS & MEATS" },
+  SW: { sector: "BASIC MATERIALS", industry: "PAPER & PLASTIC PACKAGING PRODUCTS & MATERIALS" },
+  SNA: { sector: "INDUSTRIALS", industry: "INDUSTRIAL MACHINERY & SUPPLIES & COMPONENTS" },
+  SOLV: { sector: "HEALTHCARE", industry: "HEALTH CARE TECHNOLOGY" },
+  LUV: { sector: "INDUSTRIALS", industry: "PASSENGER AIRLINES" },
+  SWK: { sector: "INDUSTRIALS", industry: "INDUSTRIAL MACHINERY & SUPPLIES & COMPONENTS" },
+  STT: { sector: "FINANCIAL", industry: "ASSET MANAGEMENT & CUSTODY BANKS" },
+  STLD: { sector: "BASIC MATERIALS", industry: "STEEL" },
+  STE: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  SMCI: { sector: "TECHNOLOGY", industry: "TECHNOLOGY HARDWARE, STORAGE & PERIPHERALS" },
+  SYF: { sector: "FINANCIAL", industry: "CONSUMER FINANCE" },
+  TROW: { sector: "FINANCIAL", industry: "ASSET MANAGEMENT & CUSTODY BANKS" },
+  TPR: { sector: "CONSUMER CYCLICAL", industry: "APPAREL, ACCESSORIES & LUXURY GOODS" },
+  TRGP: { sector: "ENERGY", industry: "OIL & GAS STORAGE & TRANSPORTATION" },
+  TEL: { sector: "TECHNOLOGY", industry: "ELECTRONIC MANUFACTURING SERVICES" },
+  TDY: { sector: "TECHNOLOGY", industry: "ELECTRONIC EQUIPMENT & INSTRUMENTS" },
+  TER: { sector: "TECHNOLOGY", industry: "SEMICONDUCTOR MATERIALS & EQUIPMENT" },
+  TPL: { sector: "ENERGY", industry: "OIL & GAS EXPLORATION & PRODUCTION" },
+  TXT: { sector: "INDUSTRIALS", industry: "AEROSPACE & DEFENSE" },
+  TKO: { sector: "COMMUNICATION SERVICES", industry: "MOVIES & ENTERTAINMENT" },
+  TTD: { sector: "COMMUNICATION SERVICES", industry: "ADVERTISING" },
+  TSCO: { sector: "CONSUMER CYCLICAL", industry: "OTHER SPECIALTY RETAIL" },
+  TDG: { sector: "INDUSTRIALS", industry: "AEROSPACE & DEFENSE" },
+  TRMB: { sector: "TECHNOLOGY", industry: "APPLICATION SOFTWARE" },
+  TYL: { sector: "TECHNOLOGY", industry: "APPLICATION SOFTWARE" },
+  TSN: { sector: "CONSUMER DEFENSIVE", industry: "PACKAGED FOODS & MEATS" },
+  UBER: { sector: "INDUSTRIALS", industry: "PASSENGER GROUND TRANSPORTATION" },
+  UDR: { sector: "REAL ESTATE", industry: "MULTI-FAMILY RESIDENTIAL REITS" },
+  ULTA: { sector: "CONSUMER CYCLICAL", industry: "OTHER SPECIALTY RETAIL" },
+  UAL: { sector: "INDUSTRIALS", industry: "PASSENGER AIRLINES" },
+  URI: { sector: "INDUSTRIALS", industry: "TRADING COMPANIES & DISTRIBUTORS" },
+  UHS: { sector: "HEALTHCARE", industry: "HEALTH CARE FACILITIES" },
+  VEEV: { sector: "HEALTHCARE", industry: "HEALTH CARE TECHNOLOGY" },
+  VTR: { sector: "REAL ESTATE", industry: "HEALTH CARE REITS" },
+  VLTO: { sector: "INDUSTRIALS", industry: "ENVIRONMENTAL & FACILITIES SERVICES" },
+  VRSN: { sector: "TECHNOLOGY", industry: "INTERNET SERVICES & INFRASTRUCTURE" },
+  VRSK: { sector: "INDUSTRIALS", industry: "RESEARCH & CONSULTING SERVICES" },
+  VRT: { sector: "INDUSTRIALS", industry: "ELECTRICAL COMPONENTS & EQUIPMENT" },
+  VTRS: { sector: "HEALTHCARE", industry: "PHARMACEUTICALS" },
+  VICI: { sector: "REAL ESTATE", industry: "HOTEL & RESORT REITS" },
+  VST: { sector: "UTILITIES", industry: "ELECTRIC UTILITIES" },
+  VMC: { sector: "BASIC MATERIALS", industry: "CONSTRUCTION MATERIALS" },
+  WRB: { sector: "FINANCIAL", industry: "PROPERTY & CASUALTY INSURANCE" },
+  GWW: { sector: "INDUSTRIALS", industry: "INDUSTRIAL MACHINERY & SUPPLIES & COMPONENTS" },
+  WAB: { sector: "INDUSTRIALS", industry: "CONSTRUCTION MACHINERY & HEAVY TRANSPORTATION EQUIPMENT" },
+  WAT: { sector: "HEALTHCARE", industry: "LIFE SCIENCES TOOLS & SERVICES" },
+  WEC: { sector: "UTILITIES", industry: "ELECTRIC UTILITIES" },
+  WST: { sector: "HEALTHCARE", industry: "HEALTH CARE SUPPLIES" },
+  WY: { sector: "REAL ESTATE", industry: "TIMBER REITS" },
+  WSM: { sector: "CONSUMER CYCLICAL", industry: "HOMEFURNISHING RETAIL" },
+  WTW: { sector: "FINANCIAL", industry: "INSURANCE BROKERS" },
+  WDAY: { sector: "TECHNOLOGY", industry: "APPLICATION SOFTWARE" },
+  WYNN: { sector: "CONSUMER CYCLICAL", industry: "CASINOS & GAMING" },
+  XEL: { sector: "UTILITIES", industry: "MULTI-UTILITIES" },
+  XYL: { sector: "INDUSTRIALS", industry: "INDUSTRIAL MACHINERY & SUPPLIES & COMPONENTS" },
+  ZBRA: { sector: "TECHNOLOGY", industry: "ELECTRONIC EQUIPMENT & INSTRUMENTS" },
+  ZBH: { sector: "HEALTHCARE", industry: "HEALTH CARE EQUIPMENT" },
+  ALNY: { sector: "HEALTHCARE", industry: "BIOTECHNOLOGY" },
+  ARM: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  ASML: { sector: "TECHNOLOGY", industry: "INDUSTRIAL MACHINERY" },
+  CCEP: { sector: "CONSUMER DEFENSIVE", industry: "SOFT DRINKS" },
+  FER: { sector: "INDUSTRIALS", industry: "MILITARY, GOVERNMENT, TECHNICAL" },
+  INSM: { sector: "HEALTHCARE", industry: "BIOTECHNOLOGY" },
+  MRVL: { sector: "TECHNOLOGY", industry: "SEMICONDUCTORS" },
+  MELI: { sector: "CONSUMER CYCLICAL", industry: "CATALOG/SPECIALTY DISTRIBUTION" },
+  MSTR: { sector: "TECHNOLOGY", industry: "COMPUTER SOFTWARE" },
+  PDD: { sector: "TECHNOLOGY", industry: "EDP SERVICES" },
+  SHOP: { sector: "TECHNOLOGY", industry: "COMPUTER SOFTWARE" },
+  TRI: { sector: "TECHNOLOGY", industry: "COMPUTER SOFTWARE" },
+  ZS: { sector: "TECHNOLOGY", industry: "EDP SERVICES" },
 };
 
 function isDecisionUsableMarketItem(item) {
@@ -10073,10 +10975,13 @@ const AI_PORTFOLIO_UNIVERSE_LABELS = {
   default_multi_asset: "프리셋 · 기본 멀티에셋",
   quant_lab_default: "프리셋 · Quant Lab 기본",
   sp500_top_200: "프리셋 · 미국 대형주 200",
+  us_equity_core: "프리셋 · 미국 주식 코어",
   etf_core_100: "프리셋 · 주요 ETF 100",
+  etf_core_120: "프리셋 · 주요 ETF 120",
   kr_300: "프리셋 · 한국 300",
-  crypto_core: "프리셋 · 암호화폐 2",
-  all_supported: "프리셋 · 전체 지원 602",
+  global_equity_core: "프리셋 · 글로벌 주식 코어",
+  crypto_core: "프리셋 · 암호화폐 8",
+  all_supported: "프리셋 · 전체 지원",
   custom: "직접 입력 · 쉼표 구분 심볼",
 };
 

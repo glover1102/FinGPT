@@ -240,6 +240,8 @@ def _normalize_ticker_token(raw: object) -> str:
     ticker = str(raw or "").strip().upper().removeprefix("$")
     class_match = _CLASS_SHARE_DOT_RE.fullmatch(ticker)
     if class_match:
+        if ticker in _KNOWN_TICKERS:
+            return ticker
         return f"{class_match.group('root')}-{class_match.group('class')}"
     return ticker
 

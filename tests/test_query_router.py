@@ -137,9 +137,10 @@ class QueryRouterTests(unittest.TestCase):
             "AI: \ubc18\ub3c4\uccb4 \uc218\uc694\ub294 \uc5b4\ub5a4\uac00?",
             "ETF \uc2dc\uc7a5 \ub9ac\uc2a4\ud06c",
             "GDP\uac00 \uc8fc\uc2dd\uc5d0 \ubbf8\uce58\ub294 \uc601\ud5a5",
-            "7203.T \uc804\ub9dd",
         ]:
             self.assertEqual(query_router.extract_explicit_tickers(question), [])
+
+        self.assertEqual(query_router.extract_explicit_tickers("7203.T \uc804\ub9dd"), ["7203.T"])
 
     def test_class_share_dot_ticker_normalizes_to_yahoo_dash_symbol(self):
         cases = [

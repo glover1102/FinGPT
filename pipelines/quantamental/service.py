@@ -11,6 +11,7 @@ from core.schemas.quantamental import (
     QuantamentalScoreScreenRequest,
     QuantamentalScreenRequest,
 )
+from core.utils.symbol_registry import symbol_identities
 from pipelines.quantamental.ai_service import build_context, generate_report
 from pipelines.quantamental.cache import quantamental_cache
 from pipelines.quantamental.factor_engine import calculate_factors
@@ -45,65 +46,26 @@ SCREEN_TOP_LIMIT = 5
 DEFAULT_SCREEN_CANDIDATE_LIMIT = 6
 FRESHNESS_RETRYABLE_STATUSES = {"stale", "missing", "failed", "unknown"}
 STRICT_SIGNAL_FRESHNESS_SECTIONS = ("company", "fundamentals", "prices")
+
+
+def _registry_screening_universe(*, market: str | None = None, asset_class: str | None = None, limit: int = 250) -> list[str]:
+    out: list[str] = []
+    for ticker, identity in symbol_identities().items():
+        if market and identity.market != market:
+            continue
+        if asset_class and identity.asset_class != asset_class:
+            continue
+        out.append(ticker)
+        if limit and len(out) >= limit:
+            break
+    return out
+
+
 DEFAULT_SCREENING_UNIVERSES = {
-    "default_us_large_cap": [
-        "AAPL",
-        "MSFT",
-        "NVDA",
-        "GOOGL",
-        "AMZN",
-        "META",
-        "AVGO",
-        "TSLA",
-        "LLY",
-        "JPM",
-        "V",
-        "MA",
-        "UNH",
-        "COST",
-        "HD",
-        "PG",
-        "NFLX",
-        "AMD",
-        "CRM",
-        "ORCL",
-        "ADBE",
-        "NOW",
-        "INTC",
-        "QCOM",
-        "TXN",
-        "INTU",
-        "IBM",
-        "PLTR",
-        "PANW",
-        "UBER",
-        "GE",
-        "XOM",
-        "CVX",
-        "COP",
-        "WMT",
-        "MCD",
-        "KO",
-        "PEP",
-        "NKE",
-        "DIS",
-        "BAC",
-        "WFC",
-        "GS",
-        "MS",
-        "AXP",
-        "JNJ",
-        "MRK",
-        "ABBV",
-        "PFE",
-        "TMO",
-        "LIN",
-        "CAT",
-        "RTX",
-        "LMT",
-        "UPS",
-        "NEE",
-    ],
+    "default_us_large_cap": _registry_screening_universe(market="US", asset_class="stock", limit=250),
+    "us_equity_core": _registry_screening_universe(market="US", asset_class="stock", limit=500),
+    "global_equity_core": _registry_screening_universe(market="GLOBAL", asset_class="stock", limit=100),
+    "crypto_core": _registry_screening_universe(asset_class="crypto", limit=25),
     "mega_cap_tech": ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "AVGO", "TSLA", "AMD", "NFLX"],
 }
 

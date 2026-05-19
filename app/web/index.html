@@ -1176,7 +1176,7 @@
             </div>
             <div id="aiPortfolioCreateForm" class="decision-form ai-portfolio-form">
               <label><span>포트폴리오 이름</span><input id="aiPortfolioName" type="text" value="Balanced Growth AI Portfolio" maxlength="80" /></label>
-              <label class="ai-universe-preset"><span>유니버스 프리셋</span><select id="aiPortfolioUniverse"><option value="default_multi_asset">프리셋 · 기본 멀티에셋</option><option value="quant_lab_default">프리셋 · Quant Lab 기본</option><option value="sp500_top_200">프리셋 · 미국 대형주 200</option><option value="etf_core_100">프리셋 · 주요 ETF 100</option><option value="kr_300">프리셋 · 한국 300</option><option value="crypto_core">프리셋 · 암호화폐 2</option><option value="all_supported">프리셋 · 전체 지원 602</option><option value="custom">직접 입력 · 쉼표 구분 심볼</option></select></label>
+              <label class="ai-universe-preset"><span>유니버스 프리셋</span><select id="aiPortfolioUniverse"><option value="default_multi_asset">프리셋 · 기본 멀티에셋</option><option value="quant_lab_default">프리셋 · Quant Lab 기본</option><option value="sp500_top_200">프리셋 · 미국 대형주 200</option><option value="us_equity_core">프리셋 · 미국 주식 코어</option><option value="etf_core_100">프리셋 · 주요 ETF 100</option><option value="etf_core_120">프리셋 · 주요 ETF 120</option><option value="kr_300">프리셋 · 한국 300</option><option value="global_equity_core">프리셋 · 글로벌 주식 코어</option><option value="crypto_core">프리셋 · 암호화폐 8</option><option value="all_supported">프리셋 · 전체 지원</option><option value="custom">직접 입력 · 쉼표 구분 심볼</option></select></label>
               <label id="aiPortfolioCustomUniverseWrap" class="ai-custom-universe"><span>직접 입력 심볼 목록</span><div class="input-action-row"><input id="aiPortfolioCustomUniverse" type="text" value="SPY,TLT,GLD,SGOV" maxlength="12000" placeholder="직접 입력 선택 시 예: SPY,TLT,GLD,005930.KS" /><button type="button" id="aiPortfolioCustomUniverseOpen" class="ghost-btn">찾기</button></div><div id="aiPortfolioCustomUniverseChips" class="selected-symbol-chips" aria-live="polite"></div><small>프리셋 선택 시 이 입력값은 무시됩니다.</small></label>
               <div id="aiPortfolioUniverseStatus" class="ai-universe-status decision-summary ok">현재 사용: 프리셋 · 기본 멀티에셋</div>
               <label><span>초기 투자금</span><input id="aiPortfolioInitialCapital" type="number" value="10000000" min="0" step="100000" /></label>
@@ -1614,6 +1614,6 @@
   <script src="modules/quant-ui.js?v=20260514-domain-modules"></script>
   <script src="modules/ai-portfolio-ui.js?v=20260514-domain-modules"></script>
   <script src="modules/quantamental-ui.js?v=20260519-quantamental-v22"></script>
-  <script src="app.js?v=20260519-continuous-enhancement-v11"></script>
+  <script src="app.js?v=20260520-universe-v1"></script>
 </body>
 </html>

@@ -62,6 +62,11 @@ def test_universe_presets_distinguish_direct_input_from_presets(tmp_path, monkey
     items = {item["id"]: item for item in response.json()["items"]}
     assert items["sp500_top_200"]["source_type"] == "preset"
     assert items["sp500_top_200"]["asset_count"] == 200
+    assert items["us_equity_core"]["asset_count"] >= 500
+    assert items["etf_core_120"]["asset_count"] == 120
+    assert items["global_equity_core"]["asset_count"] >= 70
+    assert items["crypto_core"]["asset_count"] == 8
+    assert items["all_supported"]["asset_count"] >= 900
     assert items["custom"]["source_type"] == "direct_input"
     assert items["custom"]["request_hint"].startswith("custom:")
 

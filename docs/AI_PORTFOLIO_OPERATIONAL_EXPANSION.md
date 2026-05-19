@@ -282,6 +282,17 @@ Operational notes:
 - SEC fair-access behavior still depends on a valid `SEC_USER_AGENT`; replace the default contact string before sustained automated use.
 - ETF, crypto, cash, and non-US exchange assets are recorded as skipped where SEC company 10-K/10-Q/8-K data is not applicable.
 
+## 2026-05-20 Universe Refresh And Freshness Gate
+
+Status: `DONE`
+
+| Area | Change | Verification |
+|---|---|---|
+| US equity universe | Added `scripts/refresh_symbol_universe.py` and regenerated the US equity catalog from current S&P 500 plus Nasdaq-100 component tables. The compatible `sp500_top_200` preset remains 200 names; `us_equity_core` now exposes 516 US stock symbols. | `reports/universe_source_refresh_latest.json` recorded `sp500_count=503`, `nasdaq100_count=101`, `combined_us_equity_count=516`. |
+| Expanded presets | Added `us_equity_core`, `etf_core_120`, and `global_equity_core`; expanded `crypto_core` from 2 to 8 tickers; `all_supported` now resolves to 1,023 symbols. | Direct load smoke: `sp500_top_200=200`, `us_equity_core=516`, `etf_core_120=120`, `kr_300=300`, `global_equity_core=76`, `crypto_core=8`, `all_supported=1023`. |
+| Quantamental screen universe | Rewired the default and optional Quantamental screener universes to use the shared symbol registry instead of a stale hardcoded list, while keeping bounded request limits. | `DEFAULT_SCREENING_UNIVERSES`: `default_us_large_cap=250`, `us_equity_core=500`, `global_equity_core=76`, `crypto_core=8`. |
+| Data freshness validation | Added `scripts/verify_universe_freshness.py` for provider-backed latest daily price checks and removed two stale KOSDAQ entries from the supported universe. | `python scripts\verify_universe_freshness.py --universe-id all_supported --max-assets 0 --max-age-days 5 --period 14d --chunk-size 80 --output reports\universe_freshness_latest.json --fail-on-stale` passed: 1,023/1,023 fresh, no stale/missing rows. |
+
 Remaining production-only work:
 
 - Remote PostgreSQL/Supabase migration is still not implemented because the current app is a local single-user workstation and no remote DB credentials or deployment target were provided.

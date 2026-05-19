@@ -200,6 +200,12 @@ equity universes may be exposed to survivorship bias.
   returns as if it were survivorship-free.
 - Mark results as exploratory unless delisted coverage and point-in-time
   membership are verified.
+- Refresh current static US constituents with
+  `python scripts\refresh_symbol_universe.py` when the supported universe is
+  intentionally updated.
+- Before promoting a refreshed universe, run
+  `python scripts\verify_universe_freshness.py --universe-id all_supported --max-assets 0 --max-age-days 5 --fail-on-stale`
+  and keep the JSON report under `reports/`.
 
 ### Report labeling
 

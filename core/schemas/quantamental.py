@@ -276,7 +276,7 @@ class QuantamentalCompareRequest(BaseModel):
 
 class QuantamentalScreenRequest(BaseModel):
     tickers: list[str] = Field(default_factory=list)
-    universe: Literal["default_us_large_cap", "mega_cap_tech", "custom"] = "default_us_large_cap"
+    universe: Literal["default_us_large_cap", "mega_cap_tech", "us_equity_core", "global_equity_core", "crypto_core", "custom"] = "default_us_large_cap"
     market: QuantamentalMarket = "US"
     period: QuantamentalPeriod = "annual"
     years: int = Field(default=5, ge=1, le=10)
@@ -312,7 +312,7 @@ class QuantamentalScreenRequest(BaseModel):
 
 class QuantamentalScoreScreenRequest(BaseModel):
     tickers: list[str] = Field(default_factory=list)
-    universe: Literal["default_us_large_cap", "mega_cap_tech", "custom"] = "default_us_large_cap"
+    universe: Literal["default_us_large_cap", "mega_cap_tech", "us_equity_core", "global_equity_core", "crypto_core", "custom"] = "default_us_large_cap"
     market: QuantamentalMarket = "US"
     period: QuantamentalPeriod = "annual"
     years: int = Field(default=5, ge=1, le=10)

@@ -203,7 +203,9 @@ def _name_aliases(*names: str) -> list[str]:
 def _aliases_for(ticker: str, display_name: str, raw_name: str = "") -> tuple[str, ...]:
     aliases: list[str] = [ticker]
     if "." in ticker:
-        aliases.append(ticker.split(".", 1)[0])
+        base_ticker = ticker.split(".", 1)[0]
+        if len(base_ticker) >= 3 or re.fullmatch(r"\d{6}", base_ticker):
+            aliases.append(base_ticker)
     aliases.extend(_name_aliases(display_name, raw_name))
     aliases.extend(_SPECIAL_ALIASES.get(ticker, ()))
 
@@ -318,6 +320,14 @@ def symbol_identities() -> dict[str, SymbolIdentity]:
             overrides.get(symbol) or symbol,
             market="GLOBAL",
             asset_class="crypto",
+        )
+    for symbol in _array_symbols(source, "GLOBAL_EQUITY_SYMBOLS"):
+        _add_identity(
+            identities,
+            symbol,
+            overrides.get(symbol) or symbol,
+            market="GLOBAL",
+            asset_class="stock",
         )
 
     for ticker, aliases in _SPECIAL_ALIASES.items():
