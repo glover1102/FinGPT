@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 
-FORECASTER_DIR = Path(__file__).resolve().parents[1] / "fingpt" / "FinGPT_Forecaster"
+FORECASTER_DIR = Path(__file__).resolve().parents[2] / "archive" / "fingpt" / "FinGPT_Forecaster"
 if str(FORECASTER_DIR) not in sys.path:
     sys.path.insert(0, str(FORECASTER_DIR))
 
