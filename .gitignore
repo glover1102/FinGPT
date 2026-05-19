@@ -103,9 +103,12 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
+!.env.example
 .venv
 env/
 venv/
+venv311/
 ENV/
 env.bak/
 venv.bak/
@@ -139,3 +142,31 @@ FinGPT_Training_LoRA_with_Chatglm2_6b_for_beginners.ipynb
 
 # Benchmark data
 fingpt/FinGPT_Benchmark/data/*/**
+
+# FinGPT local runtime artifacts
+data/outputs/
+data/raw/
+data/runs.db
+data/research_mart.db*
+data/research_mart.duckdb*
+data/quant_lab/backtests/
+data/quant_lab/strategies/
+data/watchlist.json
+data/ai_portfolio/
+data/ai_portfolio_smoke/
+data/ai_portfolio_browser_smoke/
+data/forecast_lab/experiments/
+data/forecast_lab/data_snapshots/
+data/forecast_lab/macro_regime/
+data/forecast_lab/model_artifacts/
+data/forecast_lab/model_registry.json
+data/forecast_lab/model_registry.sqlite3*
+data/forecast_lab/jobs.sqlite3*
+data/forecast_lab/.artifact_signing_key.json
+data/quantamental/*.sqlite3*
+data/quantamental/compare_watchlists.json
+reports/
+test-results/
+.playwright-cli/
+.ruff_cache/
+scratch/

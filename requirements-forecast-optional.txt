@@ -1,0 +1,8 @@
+# Optional ML Forecast model families.
+#
+# The core app runs without these packages. Install this file when the
+# workstation should expose XGBoost/LightGBM and lightweight PyTorch sequence
+# models as selectable ML Forecast models.
+xgboost>=2.0.0,<4.0.0
+lightgbm>=4.0.0,<5.0.0
+torch>=2.2,<3.0
