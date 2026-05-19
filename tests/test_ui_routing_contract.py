@@ -132,8 +132,8 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn('src="modules/quant-ui.js?v=20260514-domain-modules"', html)
         self.assertIn('src="modules/ai-portfolio-ui.js?v=20260514-domain-modules"', html)
         self.assertIn('src="modules/quantamental-ui.js?v=20260519-quantamental-v12"', html)
-        self.assertIn('href="styles.css?v=20260519-continuous-enhancement-v2"', html)
-        self.assertIn('src="app.js?v=20260519-continuous-enhancement-v2"', html)
+        self.assertIn('href="styles.css?v=20260519-continuous-enhancement-v3"', html)
+        self.assertIn('src="app.js?v=20260519-continuous-enhancement-v3"', html)
         self.assertIn('id="dashboardContextStrip"', html)
         self.assertIn("dashboardDecisionCards", self.source)
         self.assertIn("function loadDashboardDecisionCards", self.source)
@@ -154,7 +154,7 @@ class UiRoutingContractTests(unittest.TestCase):
         smoke_source = AI_PORTFOLIO_UI_SMOKE.read_text(encoding="utf-8")
         self.assertIn('DOMAIN_BUNDLE_VERSION = "20260514-domain-modules"', smoke_source)
         self.assertIn('QUANTAMENTAL_BUNDLE_VERSION = "20260519-quantamental-v12"', smoke_source)
-        self.assertIn('APP_BUNDLE_VERSION = "20260519-continuous-enhancement-v2"', smoke_source)
+        self.assertIn('APP_BUNDLE_VERSION = "20260519-continuous-enhancement-v3"', smoke_source)
         self.assertIn("def _normalize_base_url", smoke_source)
         self.assertIn("modules/quantamental-ui.js", smoke_source)
         self.assertIn("FinGPTQuantamentalUi?.topSignals", smoke_source)
@@ -612,6 +612,9 @@ class UiRoutingContractTests(unittest.TestCase):
             'id="dashboardRangeSelect"',
             'id="dashboardRangeStart"',
             'id="dashboardRangeEnd"',
+            'id="quantamentalAiModel"',
+            'id="quantamentalAiModelStatus"',
+            'data-testid="quantamental-ai-model-control"',
             'data-summary-field="observations"',
             'data-summary-field="missing"',
             'data-summary-field="ai-snapshot"',
@@ -629,6 +632,7 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn(".global-quality-summary", css)
         self.assertIn(".quality-context-summary", css)
         self.assertIn(".dashboard-range-controls", css)
+        self.assertIn(".quantamental-ai-control", css)
         self.assertIn('.dashboard-surface-grid[data-panel-view="all"] [data-panel-tier="primary"] .home-card-head::before', css)
         self.assertIn(".dashboard-range-controls.range-warning", css)
         self.assertIn("DEFAULT_DASHBOARD_PANEL_VIEWS", self.source)
@@ -641,6 +645,9 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn("function globalRangeSupportSummary", self.source)
         self.assertIn("function updateGlobalQualitySummary", self.source)
         self.assertIn("function markGlobalQualityRangePending", self.source)
+        self.assertIn("function renderQuantamentalAiModelOptions", self.source)
+        self.assertIn("function quantamentalAiRequestOptions", self.source)
+        self.assertIn("model: aiOptions.model", self.source)
         self.assertIn("기간 변경 후 데이터 재계산 대기", self.source)
         self.assertIn("function renderGlobalQualityContextSummary", self.source)
         self.assertIn("function displayMissingSummary", self.source)

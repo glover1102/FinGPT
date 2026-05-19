@@ -720,6 +720,8 @@ const els = {
   quantamentalYears: document.getElementById("quantamentalYears"),
   quantamentalLookback: document.getElementById("quantamentalLookback"),
   quantamentalStyle: document.getElementById("quantamentalStyle"),
+  quantamentalAiModel: document.getElementById("quantamentalAiModel"),
+  quantamentalAiModelStatus: document.getElementById("quantamentalAiModelStatus"),
   quantamentalAnalyze: document.getElementById("quantamentalAnalyze"),
   quantamentalStatus: document.getElementById("quantamentalStatus"),
   quantamentalCompanySurface: document.getElementById("quantamentalCompanySurface"),
@@ -875,6 +877,7 @@ const state = {
   quantamentalAnalysis: null,
   quantamentalComparison: null,
   quantamentalCompareWatchlists: [],
+  quantamentalAiModels: [],
   quantamentalLastSnapshotId: "",
   quantamentalActiveTab: "overview",
   quantamentalScreen: null,
@@ -3197,6 +3200,7 @@ async function loadConfig() {
       state.outputLanguage = normalizeOutputLanguage(state.config.output_language || "ko");
     }
     renderModelOptions(state.config.models || []);
+    renderQuantamentalAiModelOptions(state.config.models || []);
     renderPresets(state.config.presets || []);
     applyLimits(state.config.limits || {});
     renderFinGPTStatus(state.config);
@@ -3204,6 +3208,7 @@ async function loadConfig() {
   } catch (e) {
     console.warn("config fetch failed", e);
     renderModelOptions([]);
+    renderQuantamentalAiModelOptions([]);
     renderPresets([]);
     renderFinGPTStatus(null);
   }
@@ -3640,6 +3645,7 @@ function applyUiLanguage(language, options = {}) {
   updateDashboardHero(state.activeDashboardTab || "market");
   renderGlobalQualitySummary();
   applyQuantamentalUiLanguage(copy);
+  updateQuantamentalAiModelStatus();
   if (state.quantamentalAnalysis) renderQuantamentalAnalysis(state.quantamentalAnalysis);
   if (state.quantamentalScreen) renderQuantamentalScreen(state.quantamentalScreen);
   if (state.quantamentalScoreScreen) renderQuantamentalScoreScreen(state.quantamentalScoreScreen);
@@ -3692,8 +3698,97 @@ function renderModelOptions(models) {
         : String(availability);
       opt.dataset.availability = availability;
       els.model.appendChild(opt);
-    });
+  });
   els.model.value = Array.from(els.model.options).some((opt) => opt.value === current) ? current : "qwen";
+}
+
+function normalizeQuantamentalAiModels(models) {
+  const runtimeModels = (Array.isArray(models) ? models : [])
+    .map((m) => (typeof m === "string" ? { id: m, model: m, label: m } : m))
+    .filter((m) => (
+      m
+      && m.id
+      && m.enabled !== false
+      && (m.id === "qwen" || String(m.id).toLowerCase().includes("gemma") || m.role === "experimental" || m.role === "fallback")
+    ))
+    .map((m) => ({
+      id: String(m.id),
+      model: String(m.model || m.model_name || m.id),
+      label: String(m.label || m.model || m.id),
+      role: String(m.role || "runtime"),
+      availability: String(m.availability || "runtime_checked"),
+      note: String(m.availability_note || "Model availability is checked when the AI request runs."),
+    }));
+  return [
+    {
+      id: "deterministic",
+      model: "",
+      label: "Deterministic guardrail",
+      role: "guardrail",
+      availability: "always_available",
+      note: "Uses the deterministic Quantamental interpreter and does not call a local LLM.",
+    },
+    ...runtimeModels,
+  ];
+}
+
+function quantamentalAiModelStatusText(option) {
+  const isEnglish = selectedOutputLanguage() === "en";
+  if (!option || option.id === "deterministic") {
+    return isEnglish
+      ? "Deterministic guardrail active. No local LLM call is made."
+      : "Deterministic 해석이 활성화되어 로컬 LLM을 호출하지 않습니다.";
+  }
+  const role = option.role === "primary" ? "primary" : option.role;
+  const availability = option.availability === "runtime_checked"
+    ? (isEnglish ? "runtime checked" : "실행 시 확인")
+    : option.availability;
+  return isEnglish
+    ? `${option.label} · ${role} · ${availability}; fallback remains deterministic if the provider fails.`
+    : `${option.label} · ${role} · ${availability}; 공급자 실패 시 deterministic fallback을 유지합니다.`;
+}
+
+function selectedQuantamentalAiModelOption() {
+  const options = state.quantamentalAiModels?.length
+    ? state.quantamentalAiModels
+    : normalizeQuantamentalAiModels(state.config?.models || []);
+  const selected = els.quantamentalAiModel?.value || "deterministic";
+  return options.find((option) => option.id === selected) || options[0];
+}
+
+function quantamentalAiRequestOptions() {
+  const option = selectedQuantamentalAiModelOption();
+  return {
+    use_llm: option?.id !== "deterministic",
+    model: option?.id === "deterministic" ? null : option?.model,
+  };
+}
+
+function updateQuantamentalAiModelStatus() {
+  if (!els.quantamentalAiModelStatus) return;
+  els.quantamentalAiModelStatus.textContent = quantamentalAiModelStatusText(selectedQuantamentalAiModelOption());
+}
+
+function renderQuantamentalAiModelOptions(models) {
+  state.quantamentalAiModels = normalizeQuantamentalAiModels(models);
+  if (!els.quantamentalAiModel) return;
+  const current = els.quantamentalAiModel.value || "deterministic";
+  els.quantamentalAiModel.innerHTML = "";
+  state.quantamentalAiModels.forEach((model) => {
+    const opt = document.createElement("option");
+    opt.value = model.id;
+    opt.textContent = model.id === "deterministic"
+      ? model.label
+      : `${model.label} · ${model.availability === "runtime_checked" ? "runtime checked" : model.availability}`;
+    opt.title = model.note;
+    opt.dataset.model = model.model || "";
+    opt.dataset.availability = model.availability;
+    els.quantamentalAiModel.appendChild(opt);
+  });
+  els.quantamentalAiModel.value = state.quantamentalAiModels.some((model) => model.id === current)
+    ? current
+    : "deterministic";
+  updateQuantamentalAiModelStatus();
 }
 
 function renderFinGPTStatus(config) {
@@ -12336,10 +12431,16 @@ async function refreshQuantamentalAiReport() {
   const q = UI_LANGUAGE_COPY[selectedOutputLanguage()]?.quantamental || UI_LANGUAGE_COPY.en.quantamental;
   setButtonBusy(els.quantamentalAiRefresh, true, "AI", q.buttons.aiReport);
   try {
+    const aiOptions = quantamentalAiRequestOptions();
     const report = await quantamentalFetchJson(API.quantamentalAiReport, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ context: state.quantamentalAnalysis, use_llm: false, output_language: selectedOutputLanguage() }),
+      body: JSON.stringify({
+        context: state.quantamentalAnalysis,
+        use_llm: aiOptions.use_llm,
+        model: aiOptions.model,
+        output_language: selectedOutputLanguage(),
+      }),
     });
     state.quantamentalAnalysis = { ...state.quantamentalAnalysis, ai_report: report };
     state.quantamentalActiveTab = "ai";
@@ -12369,10 +12470,17 @@ async function askQuantamentalQuestion() {
   setButtonBusy(button, true, selectedOutputLanguage() === "en" ? "Asking" : "질문 중", q.buttons.ask || "Ask");
   if (surface) surface.innerHTML = quantamentalUi().loading ? quantamentalUi().loading(q.messages.qaLoading) : decisionEmpty(q.messages.qaLoading);
   try {
+    const aiOptions = quantamentalAiRequestOptions();
     const answer = await quantamentalFetchJson(API.quantamentalAiQa, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, context: state.quantamentalAnalysis, use_llm: false, output_language: selectedOutputLanguage() }),
+      body: JSON.stringify({
+        question,
+        context: state.quantamentalAnalysis,
+        use_llm: aiOptions.use_llm,
+        model: aiOptions.model,
+        output_language: selectedOutputLanguage(),
+      }),
     });
     if (surface) surface.innerHTML = quantamentalUi().qaAnswer ? quantamentalUi().qaAnswer(answer) : `<pre>${escapeHtml(JSON.stringify(answer, null, 2))}</pre>`;
   } catch (err) {
@@ -15831,6 +15939,7 @@ function bindInputs() {
   }
   if (els.quantamentalTickerOpen) els.quantamentalTickerOpen.addEventListener("click", () => openSymbolPicker("quantamentalTicker"));
   if (els.quantamentalAiRefresh) els.quantamentalAiRefresh.addEventListener("click", refreshQuantamentalAiReport);
+  if (els.quantamentalAiModel) els.quantamentalAiModel.addEventListener("change", updateQuantamentalAiModelStatus);
   if (els.quantamentalCompareRun) els.quantamentalCompareRun.addEventListener("click", runQuantamentalCompare);
   if (els.quantamentalScreenRun) els.quantamentalScreenRun.addEventListener("click", () => loadQuantamentalScreen(true));
   if (els.quantamentalScoreScreenRun) els.quantamentalScoreScreenRun.addEventListener("click", runQuantamentalScoreScreen);

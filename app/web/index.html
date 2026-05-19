@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FinGPT Local Research Assistant</title>
-  <link rel="stylesheet" href="styles.css?v=20260519-continuous-enhancement-v2" />
+  <link rel="stylesheet" href="styles.css?v=20260519-continuous-enhancement-v3" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='48' font-size='48'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E" />
 </head>
 <body>
@@ -1316,6 +1316,15 @@
               <h3>분석 리포트</h3>
               <button type="button" id="quantamentalAiRefresh" class="linkish" data-testid="quantamental-ai-report">AI 해석</button>
             </div>
+            <div class="quantamental-ai-control" data-testid="quantamental-ai-model-control">
+              <label>
+                <span>AI 모델</span>
+                <select id="quantamentalAiModel" aria-label="Quantamental AI interpretation model">
+                  <option value="deterministic" selected>Deterministic guardrail</option>
+                </select>
+              </label>
+              <span id="quantamentalAiModelStatus" class="form-notice subtle" role="status">기본값은 deterministic 해석입니다. Qwen/Gemma는 실행 시 가용성을 확인합니다.</span>
+            </div>
             <div id="quantamentalMainSurface" class="decision-surface"><div class="home-news-empty">가격, 재무, 리스크, 피어 비교, AI 해석, Q&amp;A 결과가 여기에 표시됩니다.</div></div>
           </section>
 
@@ -1604,6 +1613,6 @@
   <script src="modules/quant-ui.js?v=20260514-domain-modules"></script>
   <script src="modules/ai-portfolio-ui.js?v=20260514-domain-modules"></script>
   <script src="modules/quantamental-ui.js?v=20260519-quantamental-v12"></script>
-  <script src="app.js?v=20260519-continuous-enhancement-v2"></script>
+  <script src="app.js?v=20260519-continuous-enhancement-v3"></script>
 </body>
 </html>

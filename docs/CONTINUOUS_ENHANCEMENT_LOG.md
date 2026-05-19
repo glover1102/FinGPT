@@ -228,6 +228,220 @@
 - [x] PR summary includes changed files
 - [x] PR summary includes validation result
 
+## 2026-05-19 Continuous Enhancement Run 09:20 Final
+
+- Branch: `automation/continuous-enhancement-20260519-0920`.
+- Current project summary: the project remains a FastAPI-served local financial research workstation with static `app/web` UI, Python API routers/services, deterministic Quantamental engines, runtime-checked local LLM routes, and Python/Playwright validation.
+- Scope selected: previous runs already completed All-default filtering, top-right quality summaries, global range controls, range-support copy, and Quantamental AI used-data sections. This slice focused on truthful model selection for Quantamental AI report/Q&A.
+- Compatibility: no API contract was broken; `/api/v1/config` only adds a `model` field to each UI model option while preserving existing `id`, `label`, `role`, `enabled`, `availability`, and `availability_note`.
+- UI/UX: Quantamental analysis report now has an `AI 모델` selector. The default remains `Deterministic guardrail`; Qwen/Gemma options are populated from `/api/v1/config` and labeled as runtime-checked.
+- AI briefing: explicit AI report/Q&A refreshes now send `use_llm=true` and the concrete configured model only when the user selects a runtime-checked model. Initial Quantamental analysis still uses deterministic interpretation by default.
+- Translation: Korean status text explains that Qwen/Gemma are checked at execution time and deterministic fallback remains active if the provider fails.
+- Performance: no background LLM call or polling was added; LLM use remains explicit user action only.
+- Cache safety: `styles.css` and `app.js` bundle query versions were bumped to `20260519-continuous-enhancement-v3`.
+
+### 09:20 Final Validation Results
+
+| Check | Command / Tool | Result | Notes |
+|---|---|---|---|
+| JS syntax | `node --check app/web/app.js` | Passed | Static UI controller syntax. |
+| Python syntax | `python -m py_compile app/api/routers/system.py scripts/check_ui_contract.py scripts/ai_portfolio_ui_smoke.py` | Passed | API router and smoke scripts importable. |
+| UI contract | `python scripts/check_ui_contract.py` | Passed | New Quantamental AI model markers and JS markers included. |
+| API/UI targeted tests | `python -m pytest tests/test_ui_routing_contract.py tests/test_api_routing_contract.py -q` | Passed | `52 passed, 4 subtests passed`. |
+| Quantamental AI guard tests | `python -m pytest tests/test_quantamental_api.py tests/test_quantamental_ui_ai_panel.py tests/test_ui_modules.py -q` | Passed | `23 passed`; used-data and advisory guardrails preserved. |
+| Full test suite | `python -m pytest -q` | Passed | `691 passed, 9 subtests passed in 140.47s`. |
+| Diff hygiene | `git diff --check -- ...` | Passed | No whitespace errors in touched files. |
+| Live server | `scripts/run_web.ps1` on `http://127.0.0.1:8395` | Passed | `/api/v1/health` and `/ui/?range=1Y#quantamental` returned 200. |
+| Quantamental browser smoke | `python scripts/quantamental_ui_smoke.py --base-url http://127.0.0.1:8395 --output reports/quantamental_ui_smoke_continuous_20260519_0920.json` | Passed | Required tickers, invalid ticker, GLOBAL resolver, Top 5, score screen, overview axes, comparison, Q&A, and audit smoke passed. |
+| AI Portfolio browser smoke | `python scripts/ai_portfolio_ui_smoke.py --base-url http://127.0.0.1:8395 --timeout-s 180 --output reports/ai_portfolio_ui_smoke_continuous_20260519_0920_retry.json` | Passed on retry | First parallel run timed out on Macro series search; standalone retry passed with no console errors. |
+| Model selector DOM | Playwright inline DOM check | Passed | Deterministic, Qwen, and Gemma runtime-checked options visible; no desktop/mobile horizontal overflow. |
+| Model request payload | Playwright intercepted AI report POST | Passed | Selecting Qwen sent `use_llm=true`, `model=qwen2.5:7b`, `output_language=ko`. |
+| npm/pnpm build/lint/test | Not run | Excluded | Repo root has no `package.json`/`pnpm-lock.yaml`; static UI is validated through Python/Playwright. |
+
+### 09:20 Final Completion Checklist
+
+#### Compatibility
+- [x] Existing features still work
+- [x] Existing API contracts are not broken
+- [x] Existing UI flow is preserved
+- [x] No unauthorized strategy logic change
+- [x] No secret or env file exposure
+
+#### Data
+- [x] Date range selection works
+- [x] KPI/chart/table use the same selected period where supported
+- [x] Data source and 기준일 are displayed
+- [x] Missing data is handled
+- [x] Data quality summary is visible at top-right
+- [x] Cache/fresh data distinction is clear
+
+#### UI
+- [x] Default view is All
+- [x] Core/Diagnostics/Operations filters still exist
+- [x] Font sizes are readable
+- [x] Layout spacing is consistent
+- [x] Cards/tables/charts are aligned
+- [x] Mobile layout is acceptable
+- [x] Loading state exists
+- [x] Empty state exists
+- [x] Error state exists
+
+#### Visualization
+- [x] Chart titles are meaningful
+- [x] Axis labels are readable
+- [x] Tooltips are useful
+- [x] Legends are not confusing
+- [x] Period selection updates charts
+- [x] No chart overflow or label collision
+
+#### AI Briefing
+- [x] Gemma/Qwen availability is checked as runtime-checked config, not claimed as preinstalled
+- [x] Model selection is not fake
+- [x] AI output includes used data period
+- [x] AI output includes 기준일/source/observation count
+- [x] AI does not invent unsupported numbers
+- [x] Unverified facts are marked as 확인 불가 or unavailable
+- [x] Translation preserves numbers/dates/units
+
+#### Validation
+- [x] Lint executed or reason documented
+- [x] Build executed or reason documented
+- [x] Tests executed or reason documented
+- [x] UI validation executed or reason documented
+- [x] Data validation executed or reason documented
+- [x] AI briefing validation executed or reason documented
+
+#### Documentation
+- [x] docs/CONTINUOUS_ENHANCEMENT_LOG.md updated
+- [x] README updated if needed
+- [x] PR summary includes changed files
+- [x] PR summary includes validation result
+
+### 09:20 Implementation Results
+
+- Branch: `automation/continuous-enhancement-20260519-0920`.
+- Scope selected: previous runs already completed All-default filtering, top-right quality summaries, global range controls, range-support copy, and Quantamental AI used-data sections. This slice focused on truthful model selection for Quantamental AI report/Q&A.
+- Compatibility: no API contract was broken; `/api/v1/config` only adds a `model` field to each UI model option while preserving existing `id`, `label`, `role`, `enabled`, `availability`, and `availability_note`.
+- UI/UX: Quantamental analysis report now has an `AI 모델` selector. The default remains `Deterministic guardrail`; Qwen/Gemma options are populated from `/api/v1/config` and labeled as runtime-checked.
+- AI briefing: explicit AI report/Q&A refreshes now send `use_llm=true` and the concrete configured model only when the user selects a runtime-checked model. Initial Quantamental analysis still uses deterministic interpretation by default.
+- Translation: Korean status text explains that Qwen/Gemma are checked at execution time and deterministic fallback remains active if the provider fails.
+- Performance: no background LLM call or polling was added; LLM use remains explicit user action only.
+- Cache safety: `styles.css` and `app.js` bundle query versions were bumped to `20260519-continuous-enhancement-v3`.
+
+### 09:20 Validation Results
+
+| Check | Command / Tool | Result | Notes |
+|---|---|---|---|
+| JS syntax | `node --check app/web/app.js` | Passed | Static UI controller syntax. |
+| Python syntax | `python -m py_compile app/api/routers/system.py scripts/check_ui_contract.py scripts/ai_portfolio_ui_smoke.py` | Passed | API router and smoke scripts importable. |
+| UI contract | `python scripts/check_ui_contract.py` | Passed | New Quantamental AI model markers and JS markers included. |
+| API/UI targeted tests | `python -m pytest tests/test_ui_routing_contract.py tests/test_api_routing_contract.py -q` | Passed | `52 passed, 4 subtests passed`. |
+| Quantamental AI guard tests | `python -m pytest tests/test_quantamental_api.py tests/test_quantamental_ui_ai_panel.py tests/test_ui_modules.py -q` | Passed | `23 passed`; used-data and advisory guardrails preserved. |
+| Full test suite | `python -m pytest -q` | Passed | `691 passed, 9 subtests passed in 140.47s`. |
+| Diff hygiene | `git diff --check -- ...` | Passed | No whitespace errors in touched files. |
+| Live server | `scripts/run_web.ps1` on `http://127.0.0.1:8395` | Passed | `/api/v1/health` and `/ui/?range=1Y#quantamental` returned 200. |
+| Quantamental browser smoke | `python scripts/quantamental_ui_smoke.py --base-url http://127.0.0.1:8395 --output reports/quantamental_ui_smoke_continuous_20260519_0920.json` | Passed | Required tickers, invalid ticker, GLOBAL resolver, Top 5, score screen, overview axes, comparison, Q&A, and audit smoke passed. |
+| AI Portfolio browser smoke | `python scripts/ai_portfolio_ui_smoke.py --base-url http://127.0.0.1:8395 --timeout-s 180 --output reports/ai_portfolio_ui_smoke_continuous_20260519_0920_retry.json` | Passed on retry | First parallel run timed out on Macro series search; standalone retry passed with no console errors. |
+| Model selector DOM | Playwright inline DOM check | Passed | Deterministic, Qwen, and Gemma runtime-checked options visible; no desktop/mobile horizontal overflow. |
+| Model request payload | Playwright intercepted AI report POST | Passed | Selecting Qwen sent `use_llm=true`, `model=qwen2.5:7b`, `output_language=ko`. |
+| npm/pnpm build/lint/test | Not run | Excluded | Repo root has no `package.json`/`pnpm-lock.yaml`; static UI is validated through Python/Playwright. |
+
+### 09:20 Completion Checklist
+
+#### Compatibility
+- [x] Existing features still work
+- [x] Existing API contracts are not broken
+- [x] Existing UI flow is preserved
+- [x] No unauthorized strategy logic change
+- [x] No secret or env file exposure
+
+#### Data
+- [x] Date range selection works
+- [x] KPI/chart/table use the same selected period where supported
+- [x] Data source and 기준일 are displayed
+- [x] Missing data is handled
+- [x] Data quality summary is visible at top-right
+- [x] Cache/fresh data distinction is clear
+
+#### UI
+- [x] Default view is All
+- [x] Core/Diagnostics/Operations filters still exist
+- [x] Font sizes are readable
+- [x] Layout spacing is consistent
+- [x] Cards/tables/charts are aligned
+- [x] Mobile layout is acceptable
+- [x] Loading state exists
+- [x] Empty state exists
+- [x] Error state exists
+
+#### Visualization
+- [x] Chart titles are meaningful
+- [x] Axis labels are readable
+- [x] Tooltips are useful
+- [x] Legends are not confusing
+- [x] Period selection updates charts
+- [x] No chart overflow or label collision
+
+#### AI Briefing
+- [x] Gemma/Qwen availability is checked as runtime-checked config, not claimed as preinstalled
+- [x] Model selection is not fake
+- [x] AI output includes used data period
+- [x] AI output includes 기준일/source/observation count
+- [x] AI does not invent unsupported numbers
+- [x] Unverified facts are marked as 확인 불가 or unavailable
+- [x] Translation preserves numbers/dates/units
+
+#### Validation
+- [x] Lint executed or reason documented
+- [x] Build executed or reason documented
+- [x] Tests executed or reason documented
+- [x] UI validation executed or reason documented
+- [x] Data validation executed or reason documented
+- [x] AI briefing validation executed or reason documented
+
+#### Documentation
+- [x] docs/CONTINUOUS_ENHANCEMENT_LOG.md updated
+- [x] README updated if needed
+- [x] PR summary includes changed files
+- [x] PR summary includes validation result
+
+## 2026-05-19 Continuous Enhancement Run 09:20
+
+## Current Project Summary
+- Project purpose: FastAPI-served local financial research workstation for market, macro, Quant Lab, Quantamental, ML Forecast, AI Portfolio, and grounded AI briefing workflows.
+- Main frontend structure: Static UI in `app/web/index.html`, `app/web/app.js`, `app/web/styles.css`, plus domain renderers in `app/web/modules/`.
+- Main backend structure: FastAPI routers under `app/api/routers/`, shared schemas under `core/schemas/`, and services/pipelines under `pipelines/`.
+- Data flow: UI controls call `/api/v1/*`; routers delegate to deterministic services and data stores; UI renders quality/range context from returned payloads.
+- AI/LLM flow: Qwen is the primary configured route; Gemma-family routes are experimental/runtime-checked. Quantamental AI must interpret deterministic engine output and preserve scores/signals.
+- Visualization flow: Static HTML/SVG/table components render charts and status surfaces; global range state is mapped to exact-date or lookback-bucket surfaces.
+- Testing flow: Python contract tests, Node syntax checks, FastAPI API tests, and browser smoke scripts validate the static UI and API behavior.
+
+## Current Problems
+- Compatibility: The branch already contains prior automation commits and unrelated dirty workspace files, so this run must avoid broad rewrites.
+- Data consistency: Global range and quality summaries exist; this run does not change data calculations.
+- UI consistency: Quantamental AI exposed used-data evidence, but the UI still hardcoded deterministic AI calls even though backend request models already support `model` and `use_llm`.
+- Visualization: No chart renderer gap selected for this slice.
+- AI briefing: Qwen/Gemma availability was documented in config, but Quantamental AI report/Q&A controls did not let the user intentionally choose a runtime-checked model.
+- Data freshness: Existing top-right quality badge and detail panel remain the source of truth.
+- Translation quality: New UI copy must keep Korean/English concise and avoid changing ticker/date/number values.
+- Performance: Model selection must not add background LLM calls; non-deterministic models should run only on explicit AI report/Q&A actions.
+- Code structure: Keep model routing as a small adapter around existing `/api/v1/config` and Quantamental AI request paths.
+- User experience: The selector must clearly say that Qwen/Gemma availability is checked at request time and deterministic fallback remains active.
+
+## Enhancement Plan
+- Priority 1: Add explicit runtime-checked model metadata (`model`) to `/api/v1/config` so UI does not infer model names from labels.
+- Priority 2: Add a Quantamental AI model selector with deterministic default, Qwen/Gemma options from config, and user-readable fallback status.
+- Priority 3: Wire selected model only into explicit AI report/Q&A requests, preserving deterministic initial analysis and existing guardrails.
+
+## Validation Plan
+- Build: Run JS/Python syntax checks; no npm/pnpm package build exists in repo root.
+- Lint: Use existing UI contract and diff hygiene checks because no JS linter is configured.
+- Unit test: Run targeted API/UI contract tests.
+- Integration test: Run Quantamental API guard regression.
+- UI test: Start the local FastAPI UI and verify the selector/status in desktop/mobile DOM if the server starts cleanly.
+- Data quality test: Verify top-right quality/range contracts remain present.
+- AI hallucination guard test: Verify Quantamental AI report tests still preserve used-data and deterministic guardrails.
+
 ## 2026-05-19 Continuous Enhancement Run 09:02
 
 - Branch: `automation/continuous-enhancement-20260519-0902`.
@@ -497,3 +711,10 @@
 - [x] README updated if needed
 - [x] PR summary includes changed files
 - [x] PR summary includes validation result
+
+## 2026-05-19 Continuous Enhancement Run 09:20 Closure
+
+- Branch: `automation/continuous-enhancement-20260519-0920`.
+- Final scope: added truthful Quantamental AI model selection without changing strategy logic, data providers, schemas, secrets, or default deterministic analysis behavior.
+- Final validation: `node --check app/web/app.js`, `python -m py_compile app/api/routers/system.py scripts/check_ui_contract.py scripts/ai_portfolio_ui_smoke.py`, `python scripts/check_ui_contract.py`, targeted UI/API/Quantamental tests, full `python -m pytest -q`, Quantamental browser smoke, AI Portfolio browser smoke retry, and Playwright DOM/payload checks all passed.
+- Remaining limit: Qwen/Gemma options are runtime-checked and not claimed as locally installed; provider failure still falls back to deterministic interpretation.
