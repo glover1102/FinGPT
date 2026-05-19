@@ -145,6 +145,15 @@ def calculate_quant(payload: dict[str, Any]) -> dict[str, Any]:
         drawdown=drawdown,
         liquidity=liquidity,
     )
+    tail_risk_momentum_algorithm = _tail_risk_adjusted_momentum_algorithm(
+        rows=rows,
+        returns=returns,
+        risk=risk,
+        volatility=volatility,
+        drawdown=drawdown,
+        risk_adjusted=risk_adjusted,
+        liquidity=liquidity,
+    )
     chart_data = {
         "price": _price_chart(rows),
         "cumulative_return": _cumulative_return_chart(rows),
@@ -169,6 +178,7 @@ def calculate_quant(payload: dict[str, Any]) -> dict[str, Any]:
             "liquidity_participation_stability": liquidity_stability_algorithm,
             "trend_efficiency_stability": trend_efficiency_algorithm,
             "market_relative_resilience": market_resilience_algorithm,
+            "tail_risk_adjusted_momentum": tail_risk_momentum_algorithm,
         },
     }
     return {
@@ -1065,6 +1075,108 @@ def _market_relative_resilience_algorithm(
     }
 
 
+def _tail_risk_adjusted_momentum_algorithm(
+    *,
+    rows: list[dict[str, Any]],
+    returns: list[float],
+    risk: dict[str, Any],
+    volatility: dict[str, Any],
+    drawdown: dict[str, Any],
+    risk_adjusted: dict[str, Any],
+    liquidity: dict[str, Any],
+) -> dict[str, Any]:
+    closes = [_price(row) for row in rows]
+    available_observations = len(rows)
+    required_observations = 120
+    warnings: list[str] = []
+    if available_observations < required_observations:
+        warnings.append("insufficient_price_history_for_tail_risk_adjusted_momentum")
+
+    return_63d = _window_return(closes, 63)
+    return_120d = _window_return(closes, 120)
+    base_momentum = _first_numeric(return_120d, return_63d)
+    positive_share_63d = _positive_return_share(returns, 63)
+    var_95 = _finite(risk.get("var_95"))
+    cvar_95 = _finite(risk.get("cvar_95"))
+    var_95_abs = abs(var_95) if var_95 is not None else None
+    cvar_95_abs = abs(cvar_95) if cvar_95 is not None else None
+    current_drawdown_abs = abs(drawdown.get("current_drawdown")) if drawdown.get("current_drawdown") is not None else None
+    max_drawdown_abs = abs(drawdown.get("max_drawdown")) if drawdown.get("max_drawdown") is not None else None
+
+    momentum_score = _score_high(base_momentum, -0.15, 0.35)
+    short_momentum_score = _score_high(return_63d, -0.10, 0.25)
+    tail_loss_score = _avg([
+        _score_low(var_95_abs, 0.01, 0.10),
+        _score_low(cvar_95_abs, 0.015, 0.16),
+        _score_low(volatility.get("downside_volatility"), 0.08, 0.65),
+    ])
+    drawdown_score = _avg([
+        _score_low(current_drawdown_abs, 0.0, 0.30),
+        _score_low(max_drawdown_abs, 0.05, 0.60),
+    ])
+    consistency_score = _score_high(positive_share_63d, 0.42, 0.64)
+    risk_adjusted_score = _avg([
+        _score_high(risk_adjusted.get("sharpe_ratio"), -0.5, 2.0),
+        _score_high(risk_adjusted.get("sortino_ratio"), -0.5, 3.0),
+    ])
+    liquidity_score = _score_high(
+        math.log10(liquidity.get("average_dollar_volume")) if liquidity.get("average_dollar_volume") else None,
+        6.0,
+        9.0,
+    )
+    score = _weighted_score(
+        [
+            (momentum_score, 0.24),
+            (tail_loss_score, 0.20),
+            (drawdown_score, 0.16),
+            (risk_adjusted_score, 0.14),
+            (consistency_score, 0.12),
+            (short_momentum_score, 0.09),
+            (liquidity_score, 0.05),
+        ],
+        min_components=5,
+    )
+    if available_observations < required_observations:
+        score = None
+
+    return {
+        "algorithm_id": "tail_risk_adjusted_momentum_v1",
+        "tail_risk_adjusted_momentum_score": score,
+        "classification": _tail_risk_adjusted_momentum_classification(score, base_momentum, cvar_95_abs),
+        "score_direction": "higher means momentum remains constructive after tail-loss, downside volatility, drawdown, and liquidity checks",
+        "required_observations": required_observations,
+        "available_observations": available_observations,
+        "return_63d": return_63d,
+        "return_120d": return_120d,
+        "base_momentum": base_momentum,
+        "positive_return_share_63d": positive_share_63d,
+        "var_95_abs": var_95_abs,
+        "cvar_95_abs": cvar_95_abs,
+        "downside_volatility": volatility.get("downside_volatility"),
+        "current_drawdown_abs": current_drawdown_abs,
+        "max_drawdown_abs": max_drawdown_abs,
+        "component_scores": {
+            "momentum": momentum_score,
+            "short_momentum": short_momentum_score,
+            "tail_loss": tail_loss_score,
+            "drawdown": drawdown_score,
+            "consistency": consistency_score,
+            "risk_adjusted": risk_adjusted_score,
+            "liquidity": liquidity_score,
+        },
+        "inputs": {
+            "momentum_window": "120d_preferred_else_63d",
+            "tail_loss_basis": "var_95_cvar_95_downside_volatility",
+            "consistency_window": "63d",
+            "drawdown_basis": "current_and_max_drawdown",
+            "liquidity_basis": "average_dollar_volume_60d",
+        },
+        "warnings": warnings,
+        "not_investment_advice": True,
+        "used_in_composite_score": False,
+    }
+
+
 def _rolling_prior_high(closes: list[float | None], window: int) -> float | None:
     if len(closes) <= window:
         return None
@@ -1152,6 +1264,26 @@ def _market_relative_resilience_classification(
     if score >= 45:
         return "mixed_market_relative_resilience"
     return "weak_market_relative_resilience"
+
+
+def _tail_risk_adjusted_momentum_classification(
+    score: float | None,
+    base_momentum: float | None,
+    cvar_95_abs: float | None,
+) -> str:
+    if score is None:
+        return "insufficient_data"
+    if base_momentum is not None and base_momentum < 0 and score < 60:
+        return "negative_tail_risk_momentum"
+    if cvar_95_abs is not None and cvar_95_abs >= 0.12 and score < 60:
+        return "tail_loss_fragile_momentum"
+    if score >= 75:
+        return "strong_tail_risk_adjusted_momentum"
+    if score >= 60:
+        return "constructive_tail_risk_adjusted_momentum"
+    if score >= 45:
+        return "mixed_tail_risk_adjusted_momentum"
+    return "weak_tail_risk_adjusted_momentum"
 
 
 def _first_numeric(*values: Any) -> float | None:
@@ -1305,6 +1437,7 @@ def _component_scores(metrics: dict[str, Any]) -> dict[str, float | None]:
     liquidity_stability_algorithm = algorithms.get("liquidity_participation_stability") or {}
     trend_efficiency_algorithm = algorithms.get("trend_efficiency_stability") or {}
     market_resilience_algorithm = algorithms.get("market_relative_resilience") or {}
+    tail_risk_momentum_algorithm = algorithms.get("tail_risk_adjusted_momentum") or {}
     return {
         "momentum": _avg([
             _score_high(momentum.get("momentum_3m"), -0.10, 0.20),
@@ -1338,6 +1471,7 @@ def _component_scores(metrics: dict[str, Any]) -> dict[str, float | None]:
         "liquidity_participation_stability": _finite(liquidity_stability_algorithm.get("liquidity_participation_stability_score")),
         "trend_efficiency_stability": _finite(trend_efficiency_algorithm.get("trend_efficiency_stability_score")),
         "market_relative_resilience": _finite(market_resilience_algorithm.get("market_relative_resilience_score")),
+        "tail_risk_adjusted_momentum": _finite(tail_risk_momentum_algorithm.get("tail_risk_adjusted_momentum_score")),
     }
 
 

@@ -217,6 +217,12 @@ const quantamentalMain = context.window.FinGPTQuantamentalUi.mainPanel({
           classification: "constructive_market_relative_resilience",
           used_in_composite_score: false,
         },
+        tail_risk_adjusted_momentum: {
+          algorithm_id: "tail_risk_adjusted_momentum_v1",
+          tail_risk_adjusted_momentum_score: 71.8,
+          classification: "constructive_tail_risk_adjusted_momentum",
+          used_in_composite_score: false,
+        },
       },
     },
     chart_data: {
@@ -251,6 +257,8 @@ assert.match(quantamentalMain, /trend_efficiency_stability_v1/);
 assert.match(quantamentalMain, /constructive_trend_efficiency/);
 assert.match(quantamentalMain, /market_relative_resilience_v1/);
 assert.match(quantamentalMain, /constructive_market_relative_resilience/);
+assert.match(quantamentalMain, /tail_risk_adjusted_momentum_v1/);
+assert.match(quantamentalMain, /constructive_tail_risk_adjusted_momentum/);
 
 const quantamentalTopSignals = context.window.FinGPTQuantamentalUi.topSignals({
   status: "ok",
@@ -346,6 +354,12 @@ const quantamentalKorean = context.window.FinGPTQuantamentalUi.mainPanel({
           classification: "constructive_market_relative_resilience",
           used_in_composite_score: false,
         },
+        tail_risk_adjusted_momentum: {
+          algorithm_id: "tail_risk_adjusted_momentum_v1",
+          tail_risk_adjusted_momentum_score: 71.8,
+          classification: "constructive_tail_risk_adjusted_momentum",
+          used_in_composite_score: false,
+        },
       },
     },
     chart_data: {
@@ -369,6 +383,7 @@ assert.match(quantamentalKorean, /최근 가격/);
 assert.match(quantamentalKorean, /커버리지/);
 assert.match(quantamentalKorean, /Y: 가격/);
 assert.match(quantamentalKorean, /QAM 점수/);
+assert.match(quantamentalKorean, /TRM 점수/);
 
 const quantamentalKoreanTopSignals = context.window.FinGPTQuantamentalUi.topSignals({
   status: "ok",

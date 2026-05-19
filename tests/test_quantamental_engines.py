@@ -210,6 +210,11 @@ def test_quant_engine_handles_insufficient_price_history_without_crash():
     assert market_resilience["market_relative_resilience_score"] is None
     assert market_resilience["classification"] == "insufficient_data"
     assert market_resilience["used_in_composite_score"] is False
+    tail_risk_momentum = result["metrics"]["algorithms"]["tail_risk_adjusted_momentum"]
+    assert tail_risk_momentum["algorithm_id"] == "tail_risk_adjusted_momentum_v1"
+    assert tail_risk_momentum["tail_risk_adjusted_momentum_score"] is None
+    assert tail_risk_momentum["classification"] == "insufficient_data"
+    assert tail_risk_momentum["used_in_composite_score"] is False
 
 
 def test_factor_risk_hybrid_and_signal_are_deterministic():
@@ -223,6 +228,7 @@ def test_factor_risk_hybrid_and_signal_are_deterministic():
     assert quant["component_scores"]["liquidity_participation_stability"] is not None
     assert quant["component_scores"]["trend_efficiency_stability"] is not None
     assert quant["component_scores"]["market_relative_resilience"] is not None
+    assert quant["component_scores"]["tail_risk_adjusted_momentum"] is not None
     assert quant["metrics"]["algorithm"]["algorithm_id"] == "quality_adjusted_momentum_v1"
     assert quant["metrics"]["algorithm"]["not_investment_advice"] is True
     assert quant["metrics"]["algorithm"]["used_in_composite_score"] is False
@@ -246,6 +252,10 @@ def test_factor_risk_hybrid_and_signal_are_deterministic():
     assert market_resilience["algorithm_id"] == "market_relative_resilience_v1"
     assert market_resilience["not_investment_advice"] is True
     assert market_resilience["used_in_composite_score"] is False
+    tail_risk_momentum = quant["metrics"]["algorithms"]["tail_risk_adjusted_momentum"]
+    assert tail_risk_momentum["algorithm_id"] == "tail_risk_adjusted_momentum_v1"
+    assert tail_risk_momentum["not_investment_advice"] is True
+    assert tail_risk_momentum["used_in_composite_score"] is False
     assert factors["score_method"] == "deterministic_rule_based_v1"
     assert risk["risk_level"] in {"low risk", "medium risk", "elevated risk", "high risk", "unknown"}
     assert composite["score_explanation"]["method"] == "deterministic_weighted_average_v1"
@@ -648,6 +658,7 @@ def test_ai_and_qa_interpret_without_overriding_signal_or_giving_orders():
     assert context["quant_snapshot"]["liquidity_participation_stability"]["algorithm_id"] == "liquidity_participation_stability_v1"
     assert context["quant_snapshot"]["trend_efficiency_stability"]["algorithm_id"] == "trend_efficiency_stability_v1"
     assert context["quant_snapshot"]["market_relative_resilience"]["algorithm_id"] == "market_relative_resilience_v1"
+    assert context["quant_snapshot"]["tail_risk_adjusted_momentum"]["algorithm_id"] == "tail_risk_adjusted_momentum_v1"
     report = generate_report(context, use_llm=False)
     answer = answer_question("why Buy Candidate?", context, use_llm=False)
 
@@ -660,6 +671,7 @@ def test_ai_and_qa_interpret_without_overriding_signal_or_giving_orders():
     assert "liquidity_participation_stability_v1" in str(report["report"]["key_changes"])
     assert "trend_efficiency_stability_v1" in str(report["report"]["key_changes"])
     assert "market_relative_resilience_v1" in str(report["report"]["key_changes"])
+    assert "tail_risk_adjusted_momentum_v1" in str(report["report"]["key_changes"])
     assert "buy now" not in str(report).lower()
     assert answer["not_investment_advice"] is True
     assert "must buy" not in answer["answer"].lower()

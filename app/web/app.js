@@ -3340,6 +3340,7 @@ const UI_LANGUAGE_COPY = {
         liquidity_stability: "유동성 안정성",
         trend_efficiency: "추세 효율",
         market_resilience: "시장 회복력",
+        tail_risk_momentum: "꼬리위험 모멘텀",
       },
     },
   },
@@ -3452,6 +3453,7 @@ const UI_LANGUAGE_COPY = {
         liquidity_stability: "Liquidity Stability",
         trend_efficiency: "Trend Efficiency",
         market_resilience: "Market Resilience",
+        tail_risk_momentum: "Tail Risk Momentum",
       },
     },
   },
@@ -12250,7 +12252,7 @@ function quantamentalScoreScreenLimit() {
 
 function quantamentalScoreScreenMetric() {
   const raw = String(els.quantamentalScoreMetric?.value || "composite");
-  return ["composite", "value", "quality", "growth", "momentum", "low_volatility", "liquidity", "drawdown_resilience", "liquidity_stability", "trend_efficiency", "market_resilience"].includes(raw) ? raw : "composite";
+  return ["composite", "value", "quality", "growth", "momentum", "low_volatility", "liquidity", "drawdown_resilience", "liquidity_stability", "trend_efficiency", "market_resilience", "tail_risk_momentum"].includes(raw) ? raw : "composite";
 }
 
 function quantamentalScoreMetricLabel(scoreKey) {

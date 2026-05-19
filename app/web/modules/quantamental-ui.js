@@ -5,6 +5,7 @@
   const LIQUIDITY_PARTICIPATION_STABILITY_ID = "liquidity_participation_stability_v1";
   const TREND_EFFICIENCY_STABILITY_ID = "trend_efficiency_stability_v1";
   const MARKET_RELATIVE_RESILIENCE_ID = "market_relative_resilience_v1";
+  const TAIL_RISK_ADJUSTED_MOMENTUM_ID = "tail_risk_adjusted_momentum_v1";
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -89,6 +90,9 @@
       mrrScore: "MRR Score",
       mrrClass: "MRR Class",
       mrrNotInComposite: "Market-relative resilience is a benchmark-aware quant diagnostic and is not used in the composite score.",
+      trmScore: "TRM Score",
+      trmClass: "TRM Class",
+      trmNotInComposite: "Tail risk momentum is a tail-loss-aware quant diagnostic and is not used in the composite score.",
       maxDrawdown: "Max Drawdown",
       latestFiling: "Latest Filing",
       revenue: "Revenue",
@@ -213,6 +217,7 @@
         liquidityStability: "Liquidity Stability",
         trendEfficiency: "Trend Efficiency",
         marketResilience: "Market Resilience",
+        tailRiskMomentum: "Tail Risk Momentum",
       },
       chart: {
         priceTitle: "Price + SMA",
@@ -320,6 +325,9 @@
       mrrScore: "MRR 점수",
       mrrClass: "MRR 분류",
       mrrNotInComposite: "시장 대비 회복력은 벤치마크 기반 보조 퀀트 진단 지표이며 복합 점수에는 반영하지 않습니다.",
+      trmScore: "TRM 점수",
+      trmClass: "TRM 분류",
+      trmNotInComposite: "꼬리위험 모멘텀은 급락 손실과 하방 변동성을 반영한 보조 퀀트 진단 지표이며 복합 점수에는 반영하지 않습니다.",
       maxDrawdown: "최대 낙폭",
       latestFiling: "최근 공시",
       revenue: "매출",
@@ -444,6 +452,7 @@
         liquidityStability: "유동성 안정성",
         trendEfficiency: "추세 효율",
         marketResilience: "시장 회복력",
+        tailRiskMomentum: "꼬리위험 모멘텀",
       },
       chart: {
         priceTitle: "가격 + SMA",
@@ -605,7 +614,7 @@
     if (key.includes("confirmed")) return "ok";
     if (key.includes("resilient")) return "ok";
     if (key.includes("strong") || key.includes("constructive")) return "ok";
-    if (key.includes("weak") || key.includes("fragile")) return "fail";
+    if (key.includes("weak") || key.includes("fragile") || key.includes("negative")) return "fail";
     if (key.includes("mixed") || key.includes("insufficient")) return "warn";
     return "neutral";
   }
@@ -646,13 +655,15 @@
     const liquidityStability = algorithms.liquidity_participation_stability || metrics.liquidity_participation_stability || {};
     const trendEfficiency = algorithms.trend_efficiency_stability || metrics.trend_efficiency_stability || {};
     const marketResilience = algorithms.market_relative_resilience || metrics.market_relative_resilience || {};
-    if (!algorithm.algorithm_id && !breakout.algorithm_id && !resilience.algorithm_id && !liquidityStability.algorithm_id && !trendEfficiency.algorithm_id && !marketResilience.algorithm_id) return "";
+    const tailRiskMomentum = algorithms.tail_risk_adjusted_momentum || metrics.tail_risk_adjusted_momentum || {};
+    if (!algorithm.algorithm_id && !breakout.algorithm_id && !resilience.algorithm_id && !liquidityStability.algorithm_id && !trendEfficiency.algorithm_id && !marketResilience.algorithm_id && !tailRiskMomentum.algorithm_id) return "";
     const algorithmId = algorithm.algorithm_id || QUALITY_ADJUSTED_MOMENTUM_ID;
     const breakoutId = breakout.algorithm_id || VOLATILITY_ADJUSTED_BREAKOUT_ID;
     const resilienceId = resilience.algorithm_id || DRAWDOWN_RECOVERY_RESILIENCE_ID;
     const liquidityStabilityId = liquidityStability.algorithm_id || LIQUIDITY_PARTICIPATION_STABILITY_ID;
     const trendEfficiencyId = trendEfficiency.algorithm_id || TREND_EFFICIENCY_STABILITY_ID;
     const marketResilienceId = marketResilience.algorithm_id || MARKET_RELATIVE_RESILIENCE_ID;
+    const tailRiskMomentumId = tailRiskMomentum.algorithm_id || TAIL_RISK_ADJUSTED_MOMENTUM_ID;
     return `
       ${algorithm.algorithm_id ? `
         <div class="decision-summary ${escapeHtml(algorithmStatusClass(algorithm.classification))}" data-testid="quantamental-quant-algorithm">
@@ -688,6 +699,12 @@
         <div class="decision-summary ${escapeHtml(algorithmStatusClass(marketResilience.classification))}" data-testid="quantamental-market-resilience-algorithm">
           ${escapeHtml(marketResilienceId)} / ${escapeHtml(cpy.mrrScore)} ${escapeHtml(fmt(marketResilience.market_relative_resilience_score))} / ${escapeHtml(cpy.mrrClass)} ${escapeHtml(marketResilience.classification || cpy.unavailable)}
           <br /><span class="muted">${escapeHtml(cpy.mrrNotInComposite)}</span>
+        </div>
+      ` : ""}
+      ${tailRiskMomentum.algorithm_id ? `
+        <div class="decision-summary ${escapeHtml(algorithmStatusClass(tailRiskMomentum.classification))}" data-testid="quantamental-tail-risk-momentum-algorithm">
+          ${escapeHtml(tailRiskMomentumId)} / ${escapeHtml(cpy.trmScore)} ${escapeHtml(fmt(tailRiskMomentum.tail_risk_adjusted_momentum_score))} / ${escapeHtml(cpy.trmClass)} ${escapeHtml(tailRiskMomentum.classification || cpy.unavailable)}
+          <br /><span class="muted">${escapeHtml(cpy.trmNotInComposite)}</span>
         </div>
       ` : ""}
     `;
@@ -751,6 +768,7 @@
     const liquidityStability = qMetrics?.algorithms?.liquidity_participation_stability || {};
     const trendEfficiency = qMetrics?.algorithms?.trend_efficiency_stability || {};
     const marketResilience = qMetrics?.algorithms?.market_relative_resilience || {};
+    const tailRiskMomentum = qMetrics?.algorithms?.tail_risk_adjusted_momentum || {};
     return `
       <div data-testid="quantamental-overview-tab">
         <div class="quantamental-overview-brief">
@@ -771,6 +789,8 @@
             ${metric(cpy.tesClass, trendEfficiency.classification || "-", algorithmStatusClass(trendEfficiency.classification))}
             ${metric(cpy.mrrScore, fmt(marketResilience.market_relative_resilience_score), scoreClass(marketResilience.market_relative_resilience_score))}
             ${metric(cpy.mrrClass, marketResilience.classification || "-", algorithmStatusClass(marketResilience.classification))}
+            ${metric(cpy.trmScore, fmt(tailRiskMomentum.tail_risk_adjusted_momentum_score), scoreClass(tailRiskMomentum.tail_risk_adjusted_momentum_score))}
+            ${metric(cpy.trmClass, tailRiskMomentum.classification || "-", algorithmStatusClass(tailRiskMomentum.classification))}
             ${metric(cpy.maxDrawdown, fmtPct(qMetrics?.drawdown?.max_drawdown), "warn")}
             ${metric(cpy.latestFiling, latestStatement?.date || "-", statusClass(freshness?.sections?.fundamentals?.status))}
             ${metric(cpy.revenue, compact(latestStatement?.revenue), "neutral")}
@@ -1108,6 +1128,7 @@
       liquidity_stability: labels.liquidityStability,
       trend_efficiency: labels.trendEfficiency,
       market_resilience: labels.marketResilience,
+      tail_risk_momentum: labels.tailRiskMomentum,
     }[String(scoreKey || "composite")] || copy().composite;
   }
 

@@ -139,6 +139,12 @@ SCORE_SCREEN_REGISTRY: dict[str, dict[str, str]] = {
         "algorithm_key": "market_relative_resilience",
         "algorithm_score_field": "market_relative_resilience_score",
     },
+    "tail_risk_momentum": {
+        "label": "Tail Risk Momentum",
+        "row_field": "tail_risk_momentum_score",
+        "algorithm_key": "tail_risk_adjusted_momentum",
+        "algorithm_score_field": "tail_risk_adjusted_momentum_score",
+    },
 }
 
 
@@ -180,6 +186,7 @@ def health() -> dict[str, Any]:
             "liquidity_participation_stability_v1",
             "trend_efficiency_stability_v1",
             "market_relative_resilience_v1",
+            "tail_risk_adjusted_momentum_v1",
         ],
         "score_screen_keys": [
             {
