@@ -174,6 +174,8 @@ def test_quantamental_analysis_endpoint_shape(monkeypatch):
     assert body["quant"]["metrics"]["algorithms"]["gap_risk_stability"]["used_in_composite_score"] is False
     assert body["quant"]["metrics"]["algorithms"]["range_discipline"]["algorithm_id"] == "range_discipline_v1"
     assert body["quant"]["metrics"]["algorithms"]["range_discipline"]["used_in_composite_score"] is False
+    assert body["quant"]["metrics"]["algorithms"]["volatility_compression_readiness"]["algorithm_id"] == "volatility_compression_readiness_v1"
+    assert body["quant"]["metrics"]["algorithms"]["volatility_compression_readiness"]["used_in_composite_score"] is False
     assert body["execution_policy"] == "scores_and_signal_from_deterministic_engines_ai_interprets_only"
 
 
@@ -758,6 +760,63 @@ def test_quantamental_score_screen_supports_range_discipline_score(monkeypatch):
     assert all(row["range_discipline_score"] >= 70 for row in body["matches"])
 
 
+def test_quantamental_score_screen_supports_volatility_compression_score(monkeypatch):
+    quantamental_cache.clear()
+    compression_scores = {"AAA": 84.0, "BBB": 55.0, "CCC": 78.0}
+
+    def fake_analysis(request):
+        score = compression_scores[request.ticker]
+        return {
+            "status": "ok",
+            "ticker": request.ticker,
+            "market": request.market,
+            "company": {"ticker": request.ticker, "name": f"{request.ticker} Corp"},
+            "composite": {"final_score": score - 2, "fundamental_score": score - 4, "quant_score": score, "risk_score": score - 6},
+            "factors": {
+                "value_score": 55.0,
+                "quality_score": 60.0,
+                "growth_score": 58.0,
+                "momentum_score": 62.0,
+                "low_volatility_score": 66.0,
+                "liquidity_score": 72.0,
+            },
+            "quant": {
+                "metrics": {
+                    "algorithms": {
+                        "volatility_compression_readiness": {
+                            "algorithm_id": "volatility_compression_readiness_v1",
+                            "volatility_compression_readiness_score": score,
+                            "classification": "constructive_volatility_compression",
+                            "used_in_composite_score": False,
+                        }
+                    }
+                }
+            },
+            "signal": {"signal_label": "Accumulate Watch", "signal_confidence": "medium"},
+            "data_quality": {"data_quality_score": 0.92, "quality_level": "good", "missing_sections": []},
+            "freshness": {"status": "fresh", "freshness_score": 1.0, "stale_sections": [], "warnings": []},
+            "data_integrity": {"status": "usable", "usable_for_signal": True, "blocking_sections": []},
+            "warnings": [],
+        }
+
+    monkeypatch.setattr(service, "analysis", fake_analysis)
+    client = TestClient(api_server.app)
+
+    resp = client.get(
+        "/api/v1/quantamental/screen/by-score"
+        "?tickers=AAA%20BBB%20CCC&score_key=volatility_compression&min_score=70&limit=10&include_ai=false"
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["score_key"] == "volatility_compression"
+    assert body["score_label"] == "Volatility Compression"
+    assert [row["ticker"] for row in body["matches"]] == ["AAA", "CCC"]
+    assert all(row["screen_score_key"] == "volatility_compression" for row in body["matches"])
+    assert all(row["volatility_compression_score"] >= 70 for row in body["matches"])
+
+
 def test_quantamental_score_screen_default_universe_respects_limit(monkeypatch):
     quantamental_cache.clear()
     tickers = [f"T{i:02d}" for i in range(12)]
@@ -838,11 +897,13 @@ def test_quantamental_health_lists_global_as_supported_and_quant_uses_global_ben
     assert "volume_accumulation_quality_v1" in health["enhancements"]
     assert "gap_risk_stability_v1" in health["enhancements"]
     assert "range_discipline_v1" in health["enhancements"]
+    assert "volatility_compression_readiness_v1" in health["enhancements"]
     assert any(item["key"] == "market_resilience" for item in health["score_screen_keys"])
     assert any(item["key"] == "tail_risk_momentum" for item in health["score_screen_keys"])
     assert any(item["key"] == "accumulation_quality" for item in health["score_screen_keys"])
     assert any(item["key"] == "gap_risk_stability" for item in health["score_screen_keys"])
     assert any(item["key"] == "range_discipline" for item in health["score_screen_keys"])
+    assert any(item["key"] == "volatility_compression" for item in health["score_screen_keys"])
     assert captured["benchmark"] == "ACWI"
     assert quant["market"] == "GLOBAL"
     assert quant["benchmark_ticker"] == "ACWI"

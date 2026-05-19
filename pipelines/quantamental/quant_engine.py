@@ -176,6 +176,14 @@ def calculate_quant(payload: dict[str, Any]) -> dict[str, Any]:
         drawdown=drawdown,
         liquidity=liquidity,
     )
+    volatility_compression_algorithm = _volatility_compression_readiness_algorithm(
+        rows=rows,
+        returns=returns,
+        trend=trend,
+        volatility=volatility,
+        drawdown=drawdown,
+        liquidity=liquidity,
+    )
     chart_data = {
         "price": _price_chart(rows),
         "cumulative_return": _cumulative_return_chart(rows),
@@ -204,6 +212,7 @@ def calculate_quant(payload: dict[str, Any]) -> dict[str, Any]:
             "volume_accumulation_quality": accumulation_quality_algorithm,
             "gap_risk_stability": gap_risk_stability_algorithm,
             "range_discipline": range_discipline_algorithm,
+            "volatility_compression_readiness": volatility_compression_algorithm,
         },
     }
     return {
@@ -1479,6 +1488,118 @@ def _range_discipline_algorithm(
     }
 
 
+def _volatility_compression_readiness_algorithm(
+    *,
+    rows: list[dict[str, Any]],
+    returns: list[float],
+    trend: dict[str, Any],
+    volatility: dict[str, Any],
+    drawdown: dict[str, Any],
+    liquidity: dict[str, Any],
+) -> dict[str, Any]:
+    closes = [_price(row) for row in rows]
+    volumes = [_finite(row.get("volume")) for row in rows]
+    available_observations = len(rows)
+    required_observations = 90
+    warnings: list[str] = []
+    if available_observations < required_observations:
+        warnings.append("insufficient_price_history_for_volatility_compression_readiness")
+
+    realized_volatility_20d = volatility.get("realized_volatility_20d")
+    realized_volatility_60d = volatility.get("realized_volatility_60d")
+    compression_ratio_20d_vs_60d = safe_divide(realized_volatility_20d, realized_volatility_60d)
+    range_metrics = _range_discipline_metrics(rows, returns, 63)
+    avg_intraday_range_63d = range_metrics["avg_intraday_range"]
+    close_location_63d = _close_location_in_range(closes, 63)
+    return_20d = _window_return(closes, 20)
+    return_63d = _window_return(closes, 63)
+    positive_share_63d = _positive_return_share(returns, 63)
+    volume_cv_60d = _coefficient_of_variation_tail(volumes, 60)
+    current_drawdown_abs = abs(drawdown.get("current_drawdown")) if drawdown.get("current_drawdown") is not None else None
+
+    compression_score = _score_low(compression_ratio_20d_vs_60d, 0.35, 1.25)
+    absolute_volatility_score = _score_low(realized_volatility_20d, 0.08, 0.65)
+    range_control_score = _score_low(avg_intraday_range_63d, 0.010, 0.070)
+    location_score = _score_high(close_location_63d, 0.35, 0.85)
+    trend_score = _avg([
+        _score_high(return_20d, -0.08, 0.15),
+        _score_high(return_63d, -0.12, 0.25),
+        _trend_regime_score(trend.get("trend_regime")),
+        100.0 if trend.get("price_above_sma_50") is True else 30.0 if trend.get("price_above_sma_50") is False else None,
+    ])
+    participation_score = _avg([
+        _score_high(positive_share_63d, 0.42, 0.64),
+        _score_low(volume_cv_60d, 0.25, 2.0),
+        _score_high(liquidity.get("volume_trend"), -0.25, 0.45),
+    ])
+    drawdown_score = _score_low(current_drawdown_abs, 0.0, 0.35)
+    liquidity_score = _score_high(
+        math.log10(liquidity.get("average_dollar_volume")) if liquidity.get("average_dollar_volume") else None,
+        6.0,
+        9.0,
+    )
+    score = _weighted_score(
+        [
+            (compression_score, 0.22),
+            (absolute_volatility_score, 0.16),
+            (range_control_score, 0.14),
+            (location_score, 0.14),
+            (trend_score, 0.14),
+            (participation_score, 0.10),
+            (drawdown_score, 0.06),
+            (liquidity_score, 0.04),
+        ],
+        min_components=5,
+    )
+    if available_observations < required_observations:
+        score = None
+
+    return {
+        "algorithm_id": "volatility_compression_readiness_v1",
+        "volatility_compression_readiness_score": score,
+        "classification": _volatility_compression_readiness_classification(
+            score,
+            compression_ratio_20d_vs_60d,
+            close_location_63d,
+        ),
+        "score_direction": "higher means recent volatility and intraday ranges are compressing while price location, trend, participation, drawdown, and liquidity remain constructive",
+        "required_observations": required_observations,
+        "available_observations": available_observations,
+        "realized_volatility_20d": realized_volatility_20d,
+        "realized_volatility_60d": realized_volatility_60d,
+        "compression_ratio_20d_vs_60d": compression_ratio_20d_vs_60d,
+        "avg_intraday_range_63d": avg_intraday_range_63d,
+        "close_location_63d": close_location_63d,
+        "return_20d": return_20d,
+        "return_63d": return_63d,
+        "positive_return_share_63d": positive_share_63d,
+        "volume_coefficient_of_variation_60d": volume_cv_60d,
+        "current_drawdown_abs": current_drawdown_abs,
+        "average_dollar_volume_60d": liquidity.get("average_dollar_volume"),
+        "component_scores": {
+            "compression": compression_score,
+            "absolute_volatility": absolute_volatility_score,
+            "range_control": range_control_score,
+            "price_location": location_score,
+            "trend": trend_score,
+            "participation": participation_score,
+            "drawdown": drawdown_score,
+            "liquidity": liquidity_score,
+        },
+        "inputs": {
+            "compression_basis": "realized_volatility_20d_divided_by_realized_volatility_60d",
+            "range_basis": "avg_intraday_range_63d_and_latest_close_location_within_63d_range",
+            "trend_windows": "20d_and_63d",
+            "participation_basis": "positive_return_share_volume_stability_and_volume_trend",
+            "risk_window": "60d",
+            "liquidity_basis": "average_dollar_volume_60d",
+        },
+        "warnings": warnings,
+        "not_investment_advice": True,
+        "used_in_composite_score": False,
+    }
+
+
 def _rolling_prior_high(closes: list[float | None], window: int) -> float | None:
     if len(closes) <= window:
         return None
@@ -1777,6 +1898,26 @@ def _range_discipline_classification(
     return "fragile_range_discipline"
 
 
+def _volatility_compression_readiness_classification(
+    score: float | None,
+    compression_ratio_20d_vs_60d: float | None,
+    close_location_63d: float | None,
+) -> str:
+    if score is None:
+        return "insufficient_data"
+    if compression_ratio_20d_vs_60d is not None and compression_ratio_20d_vs_60d > 1.20 and score < 60:
+        return "volatility_expanding_not_compressed"
+    if close_location_63d is not None and close_location_63d < 0.35 and score < 60:
+        return "compression_without_constructive_position"
+    if score >= 75:
+        return "high_volatility_compression_readiness"
+    if score >= 60:
+        return "constructive_volatility_compression"
+    if score >= 45:
+        return "mixed_volatility_compression"
+    return "weak_volatility_compression"
+
+
 def _first_numeric(*values: Any) -> float | None:
     for value in values:
         parsed = _finite(value)
@@ -1932,6 +2073,7 @@ def _component_scores(metrics: dict[str, Any]) -> dict[str, float | None]:
     accumulation_quality_algorithm = algorithms.get("volume_accumulation_quality") or {}
     gap_risk_stability_algorithm = algorithms.get("gap_risk_stability") or {}
     range_discipline_algorithm = algorithms.get("range_discipline") or {}
+    volatility_compression_algorithm = algorithms.get("volatility_compression_readiness") or {}
     return {
         "momentum": _avg([
             _score_high(momentum.get("momentum_3m"), -0.10, 0.20),
@@ -1969,6 +2111,7 @@ def _component_scores(metrics: dict[str, Any]) -> dict[str, float | None]:
         "volume_accumulation_quality": _finite(accumulation_quality_algorithm.get("volume_accumulation_quality_score")),
         "gap_risk_stability": _finite(gap_risk_stability_algorithm.get("gap_risk_stability_score")),
         "range_discipline": _finite(range_discipline_algorithm.get("range_discipline_score")),
+        "volatility_compression_readiness": _finite(volatility_compression_algorithm.get("volatility_compression_readiness_score")),
     }
 
 

@@ -230,6 +230,11 @@ def test_quant_engine_handles_insufficient_price_history_without_crash():
     assert range_discipline["range_discipline_score"] is None
     assert range_discipline["classification"] == "insufficient_data"
     assert range_discipline["used_in_composite_score"] is False
+    volatility_compression = result["metrics"]["algorithms"]["volatility_compression_readiness"]
+    assert volatility_compression["algorithm_id"] == "volatility_compression_readiness_v1"
+    assert volatility_compression["volatility_compression_readiness_score"] is None
+    assert volatility_compression["classification"] == "insufficient_data"
+    assert volatility_compression["used_in_composite_score"] is False
 
 
 def test_factor_risk_hybrid_and_signal_are_deterministic():
@@ -247,6 +252,7 @@ def test_factor_risk_hybrid_and_signal_are_deterministic():
     assert quant["component_scores"]["volume_accumulation_quality"] is not None
     assert quant["component_scores"]["gap_risk_stability"] is not None
     assert quant["component_scores"]["range_discipline"] is not None
+    assert quant["component_scores"]["volatility_compression_readiness"] is not None
     assert quant["metrics"]["algorithm"]["algorithm_id"] == "quality_adjusted_momentum_v1"
     assert quant["metrics"]["algorithm"]["not_investment_advice"] is True
     assert quant["metrics"]["algorithm"]["used_in_composite_score"] is False
@@ -286,6 +292,10 @@ def test_factor_risk_hybrid_and_signal_are_deterministic():
     assert range_discipline["algorithm_id"] == "range_discipline_v1"
     assert range_discipline["not_investment_advice"] is True
     assert range_discipline["used_in_composite_score"] is False
+    volatility_compression = quant["metrics"]["algorithms"]["volatility_compression_readiness"]
+    assert volatility_compression["algorithm_id"] == "volatility_compression_readiness_v1"
+    assert volatility_compression["not_investment_advice"] is True
+    assert volatility_compression["used_in_composite_score"] is False
     assert factors["score_method"] == "deterministic_rule_based_v1"
     assert risk["risk_level"] in {"low risk", "medium risk", "elevated risk", "high risk", "unknown"}
     assert composite["score_explanation"]["method"] == "deterministic_weighted_average_v1"
@@ -692,6 +702,7 @@ def test_ai_and_qa_interpret_without_overriding_signal_or_giving_orders():
     assert context["quant_snapshot"]["volume_accumulation_quality"]["algorithm_id"] == "volume_accumulation_quality_v1"
     assert context["quant_snapshot"]["gap_risk_stability"]["algorithm_id"] == "gap_risk_stability_v1"
     assert context["quant_snapshot"]["range_discipline"]["algorithm_id"] == "range_discipline_v1"
+    assert context["quant_snapshot"]["volatility_compression_readiness"]["algorithm_id"] == "volatility_compression_readiness_v1"
     report = generate_report(context, use_llm=False)
     answer = answer_question("why Buy Candidate?", context, use_llm=False)
 
@@ -708,6 +719,7 @@ def test_ai_and_qa_interpret_without_overriding_signal_or_giving_orders():
     assert "volume_accumulation_quality_v1" in str(report["report"]["key_changes"])
     assert "gap_risk_stability_v1" in str(report["report"]["key_changes"])
     assert "range_discipline_v1" in str(report["report"]["key_changes"])
+    assert "volatility_compression_readiness_v1" in str(report["report"]["key_changes"])
     assert "buy now" not in str(report).lower()
     assert answer["not_investment_advice"] is True
     assert "must buy" not in answer["answer"].lower()

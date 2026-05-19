@@ -9,6 +9,7 @@
   const VOLUME_ACCUMULATION_QUALITY_ID = "volume_accumulation_quality_v1";
   const GAP_RISK_STABILITY_ID = "gap_risk_stability_v1";
   const RANGE_DISCIPLINE_ID = "range_discipline_v1";
+  const VOLATILITY_COMPRESSION_READINESS_ID = "volatility_compression_readiness_v1";
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -105,6 +106,9 @@
       rdScore: "RD Score",
       rdClass: "RD Class",
       rdNotInComposite: "Range discipline is an intraday range and close-location diagnostic and is not used in the composite score.",
+      vcrScore: "VCR Score",
+      vcrClass: "VCR Class",
+      vcrNotInComposite: "Volatility compression readiness is a volatility/range compression diagnostic and is not used in the composite score.",
       maxDrawdown: "Max Drawdown",
       latestFiling: "Latest Filing",
       revenue: "Revenue",
@@ -233,6 +237,7 @@
         accumulationQuality: "Accumulation Quality",
         gapRiskStability: "Gap Risk Stability",
         rangeDiscipline: "Range Discipline",
+        volatilityCompression: "Volatility Compression",
       },
       chart: {
         priceTitle: "Price + SMA",
@@ -352,6 +357,9 @@
       rdScore: "RD 점수",
       rdClass: "RD 분류",
       rdNotInComposite: "Range discipline은 당일 변동성과 마감 위치를 함께 보는 보조 퀀트 진단 지표이며 복합 점수에는 반영하지 않습니다.",
+      vcrScore: "VCR 점수",
+      vcrClass: "VCR 분류",
+      vcrNotInComposite: "변동성 수축 준비도는 변동성/범위 수축을 보는 보조 퀀트 진단 지표이며 복합 점수에는 반영하지 않습니다.",
       maxDrawdown: "최대 낙폭",
       latestFiling: "최근 공시",
       revenue: "매출",
@@ -480,6 +488,7 @@
         accumulationQuality: "누적 품질",
         gapRiskStability: "갭 리스크 안정성",
         rangeDiscipline: "범위 규율",
+        volatilityCompression: "변동성 수축",
       },
       chart: {
         priceTitle: "가격 + SMA",
@@ -687,7 +696,8 @@
     const accumulationQuality = algorithms.volume_accumulation_quality || metrics.volume_accumulation_quality || {};
     const gapRiskStability = algorithms.gap_risk_stability || metrics.gap_risk_stability || {};
     const rangeDiscipline = algorithms.range_discipline || metrics.range_discipline || {};
-    if (!algorithm.algorithm_id && !breakout.algorithm_id && !resilience.algorithm_id && !liquidityStability.algorithm_id && !trendEfficiency.algorithm_id && !marketResilience.algorithm_id && !tailRiskMomentum.algorithm_id && !accumulationQuality.algorithm_id && !gapRiskStability.algorithm_id && !rangeDiscipline.algorithm_id) return "";
+    const volatilityCompression = algorithms.volatility_compression_readiness || metrics.volatility_compression_readiness || {};
+    if (!algorithm.algorithm_id && !breakout.algorithm_id && !resilience.algorithm_id && !liquidityStability.algorithm_id && !trendEfficiency.algorithm_id && !marketResilience.algorithm_id && !tailRiskMomentum.algorithm_id && !accumulationQuality.algorithm_id && !gapRiskStability.algorithm_id && !rangeDiscipline.algorithm_id && !volatilityCompression.algorithm_id) return "";
     const algorithmId = algorithm.algorithm_id || QUALITY_ADJUSTED_MOMENTUM_ID;
     const breakoutId = breakout.algorithm_id || VOLATILITY_ADJUSTED_BREAKOUT_ID;
     const resilienceId = resilience.algorithm_id || DRAWDOWN_RECOVERY_RESILIENCE_ID;
@@ -698,6 +708,7 @@
     const accumulationQualityId = accumulationQuality.algorithm_id || VOLUME_ACCUMULATION_QUALITY_ID;
     const gapRiskStabilityId = gapRiskStability.algorithm_id || GAP_RISK_STABILITY_ID;
     const rangeDisciplineId = rangeDiscipline.algorithm_id || RANGE_DISCIPLINE_ID;
+    const volatilityCompressionId = volatilityCompression.algorithm_id || VOLATILITY_COMPRESSION_READINESS_ID;
     return `
       ${algorithm.algorithm_id ? `
         <div class="decision-summary ${escapeHtml(algorithmStatusClass(algorithm.classification))}" data-testid="quantamental-quant-algorithm">
@@ -757,6 +768,12 @@
         <div class="decision-summary ${escapeHtml(algorithmStatusClass(rangeDiscipline.classification))}" data-testid="quantamental-range-discipline-algorithm">
           ${escapeHtml(rangeDisciplineId)} / ${escapeHtml(cpy.rdScore)} ${escapeHtml(fmt(rangeDiscipline.range_discipline_score))} / ${escapeHtml(cpy.rdClass)} ${escapeHtml(rangeDiscipline.classification || cpy.unavailable)}
           <br /><span class="muted">${escapeHtml(cpy.rdNotInComposite)}</span>
+        </div>
+      ` : ""}
+      ${volatilityCompression.algorithm_id ? `
+        <div class="decision-summary ${escapeHtml(algorithmStatusClass(volatilityCompression.classification))}" data-testid="quantamental-volatility-compression-algorithm">
+          ${escapeHtml(volatilityCompressionId)} / ${escapeHtml(cpy.vcrScore)} ${escapeHtml(fmt(volatilityCompression.volatility_compression_readiness_score))} / ${escapeHtml(cpy.vcrClass)} ${escapeHtml(volatilityCompression.classification || cpy.unavailable)}
+          <br /><span class="muted">${escapeHtml(cpy.vcrNotInComposite)}</span>
         </div>
       ` : ""}
     `;
@@ -824,6 +841,7 @@
     const accumulationQuality = qMetrics?.algorithms?.volume_accumulation_quality || {};
     const gapRiskStability = qMetrics?.algorithms?.gap_risk_stability || {};
     const rangeDiscipline = qMetrics?.algorithms?.range_discipline || {};
+    const volatilityCompression = qMetrics?.algorithms?.volatility_compression_readiness || {};
     return `
       <div data-testid="quantamental-overview-tab">
         <div class="quantamental-overview-brief">
@@ -852,6 +870,8 @@
             ${metric(cpy.grsClass, gapRiskStability.classification || "-", algorithmStatusClass(gapRiskStability.classification))}
             ${metric(cpy.rdScore, fmt(rangeDiscipline.range_discipline_score), scoreClass(rangeDiscipline.range_discipline_score))}
             ${metric(cpy.rdClass, rangeDiscipline.classification || "-", algorithmStatusClass(rangeDiscipline.classification))}
+            ${metric(cpy.vcrScore, fmt(volatilityCompression.volatility_compression_readiness_score), scoreClass(volatilityCompression.volatility_compression_readiness_score))}
+            ${metric(cpy.vcrClass, volatilityCompression.classification || "-", algorithmStatusClass(volatilityCompression.classification))}
             ${metric(cpy.maxDrawdown, fmtPct(qMetrics?.drawdown?.max_drawdown), "warn")}
             ${metric(cpy.latestFiling, latestStatement?.date || "-", statusClass(freshness?.sections?.fundamentals?.status))}
             ${metric(cpy.revenue, compact(latestStatement?.revenue), "neutral")}
@@ -1193,6 +1213,7 @@
       accumulation_quality: labels.accumulationQuality,
       gap_risk_stability: labels.gapRiskStability,
       range_discipline: labels.rangeDiscipline,
+      volatility_compression: labels.volatilityCompression,
     }[String(scoreKey || "composite")] || copy().composite;
   }
 

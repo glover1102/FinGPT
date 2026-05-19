@@ -241,6 +241,12 @@ const quantamentalMain = context.window.FinGPTQuantamentalUi.mainPanel({
           classification: "controlled_range_discipline",
           used_in_composite_score: false,
         },
+        volatility_compression_readiness: {
+          algorithm_id: "volatility_compression_readiness_v1",
+          volatility_compression_readiness_score: 75.8,
+          classification: "constructive_volatility_compression",
+          used_in_composite_score: false,
+        },
       },
     },
     chart_data: {
@@ -283,6 +289,8 @@ assert.match(quantamentalMain, /gap_risk_stability_v1/);
 assert.match(quantamentalMain, /controlled_gap_risk_profile/);
 assert.match(quantamentalMain, /range_discipline_v1/);
 assert.match(quantamentalMain, /controlled_range_discipline/);
+assert.match(quantamentalMain, /volatility_compression_readiness_v1/);
+assert.match(quantamentalMain, /constructive_volatility_compression/);
 
 const quantamentalTopSignals = context.window.FinGPTQuantamentalUi.topSignals({
   status: "ok",
@@ -400,6 +408,12 @@ const quantamentalKorean = context.window.FinGPTQuantamentalUi.mainPanel({
           algorithm_id: "range_discipline_v1",
           range_discipline_score: 74.9,
           classification: "controlled_range_discipline",
+          used_in_composite_score: false,
+        },
+        volatility_compression_readiness: {
+          algorithm_id: "volatility_compression_readiness_v1",
+          volatility_compression_readiness_score: 75.8,
+          classification: "constructive_volatility_compression",
           used_in_composite_score: false,
         },
       },

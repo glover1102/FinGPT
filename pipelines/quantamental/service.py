@@ -163,6 +163,12 @@ SCORE_SCREEN_REGISTRY: dict[str, dict[str, str]] = {
         "algorithm_key": "range_discipline",
         "algorithm_score_field": "range_discipline_score",
     },
+    "volatility_compression": {
+        "label": "Volatility Compression",
+        "row_field": "volatility_compression_score",
+        "algorithm_key": "volatility_compression_readiness",
+        "algorithm_score_field": "volatility_compression_readiness_score",
+    },
 }
 
 
@@ -208,6 +214,7 @@ def health() -> dict[str, Any]:
             "volume_accumulation_quality_v1",
             "gap_risk_stability_v1",
             "range_discipline_v1",
+            "volatility_compression_readiness_v1",
         ],
         "score_screen_keys": [
             {

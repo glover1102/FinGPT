@@ -1691,6 +1691,133 @@
 - [x] PR summary includes changed files
 - [x] PR summary includes validation result
 
+## 2026-05-19 Continuous Enhancement Run 23:03 Initial Analysis
+
+## Current Project Summary
+- Project purpose: FastAPI-served FinGPT research workbench for market dashboard, Macro, Quant Lab, Quantamental analysis, AI Portfolio, and grounded AI briefing. It is a research and decision-support surface, not an execution/order system.
+- Main frontend structure: static UI under `app/web/index.html`, `app/web/app.js`, `app/web/styles.css`, and feature modules such as `app/web/modules/quantamental-ui.js`; dashboard view filters retain Core/Diagnostics/Operations/All with All as the default visible surface.
+- Main backend structure: FastAPI app in `app/api/server.py` with routers under `app/api/routers`; Quantamental routes live in `app/api/routers/quantamental.py`.
+- Data flow: Quantamental service normalizes ticker/market, fetches provider company/fundamental/price data, computes deterministic factor/quant/risk/composite/signal payloads, applies freshness gates, and stores/reuses snapshots and caches where supported.
+- AI/LLM flow: `pipelines/quantamental/ai_service.py` builds a deterministic context and either calls a runtime-checked model or falls back to deterministic interpretation; AI is constrained to interpret supplied engine output and preserve used-data metadata.
+- Visualization flow: Quantamental overview renders price, cumulative return, rolling volatility, drawdown, volume, and statement charts through the static UI module with explicit axis/meaning notes.
+- Testing flow: Python-first validation using `py_compile`, `ruff`, `pytest`, `scripts/check_ui_contract.py`, static JS `node --check`, repo smoke scripts, and Browser/Playwright UI checks on a local FastAPI server. No package-based frontend build manifest is present.
+
+## Current Problems
+- Compatibility: additive diagnostics must not change composite scoring, signal classification, strategy entry/exit, or trading/order paths.
+- Data consistency: score-screen keys must stay synchronized across schema literal, service registry, engine row extraction, UI labels, smoke scripts, and API tests.
+- UI consistency: the Quantamental overview is becoming dense as diagnostics grow; new metrics must stay readable and labeled as secondary diagnostics.
+- Visualization: existing chart surfaces are useful and should remain period-linked; this run should not add a new chart unless it can be verified cleanly.
+- AI briefing: every new deterministic algorithm must be included in AI context/key_changes so AI does not infer unsupported values.
+- Data freshness: freshness and quality summary are already visible; new diagnostics must report required/available observations and warnings instead of pretending support.
+- Translation quality: new labels need both English and Korean copy without changing tickers, numbers, dates, or units.
+- Performance: new calculations should reuse already-loaded price/volume vectors and avoid additional provider or LLM calls.
+- Code structure: follow the existing Quantamental pattern across `quant_engine`, `service`, `ai_service`, UI module, scripts, and tests.
+- User experience: preserve All default, top-right quality summary, and score-threshold workflow while adding one focused useful diagnostic.
+
+## Enhancement Plan
+- Priority 1: Add deterministic `volatility_compression_readiness_v1` as a secondary Quantamental diagnostic with `used_in_composite_score=false`.
+- Priority 2: Thread the diagnostic through API health, score screening, AI context/fallback guardrails, UI overview/summary labels, and browser smoke expectations.
+- Priority 3: Run bounded syntax, contract, targeted tests, full regression when time permits, live API/UI smoke, and update PR documentation.
+
+## Validation Plan
+- Build: no npm/pnpm build expected because the repo has no frontend package manifest; validate static JS with `node --check`.
+- Lint: run targeted `ruff` on changed Python files.
+- Unit test: run Quantamental engine/API/UI module/routing tests, then expand to full `python -m pytest -q` if the targeted set is green.
+- Integration test: run live API smoke for health, analysis, score screen, and AI fallback metadata.
+- UI test: run `scripts/quantamental_ui_smoke.py`, `scripts/ai_portfolio_ui_smoke.py`, and Browser desktop/mobile checks against a fresh local server.
+- Data quality test: confirm required/available observations, warning behavior, score-screen row extraction, and quality summary visibility.
+- AI hallucination guard test: confirm `build_context` and deterministic report include the new algorithm and keep direct-order guardrails intact.
+
+## 2026-05-19 Continuous Enhancement Run 23:03 Closure
+
+- Branch: `automation/continuous-enhancement-20260519-2303`.
+- Current status: preserved the existing All-default dashboard, top-right quality summary, global range controls, runtime-checked AI model behavior, deterministic Quantamental score flow, and existing strategy/trading boundaries.
+- Compatibility: no trading/order execution path, strategy entry/exit condition, provider default, secret, `.env`, or composite score weight was changed. The new diagnostic is a secondary research metric with `used_in_composite_score=false`.
+- Quant algorithm: added `volatility_compression_readiness_v1`, a deterministic volatility/range compression readiness diagnostic using 20d vs 60d realized-volatility compression, 63d intraday range control, 63d price location, 20d/63d trend, participation stability, drawdown, and liquidity.
+- Data integration: the algorithm is returned under `quant.metrics.algorithms.volatility_compression_readiness`, exposed as `component_scores.volatility_compression_readiness`, listed in `/api/v1/quantamental/health`, and available in score-threshold screening as `score_key=volatility_compression`.
+- UI/UX: the Quantamental overview and score summary now render VCR score/classification with an explicit not-in-composite note; the score screen includes the Korean/English `Volatility Compression` option while preserving All as the default panel view.
+- AI briefing: `build_context` and deterministic fallback reports now include `volatility_compression_algorithm` so the AI layer interprets deterministic engine output instead of inventing values.
+- Translation: English and Korean labels were added for the new score key and summary copy. Tickers, numbers, dates, and units remain unmodified by translation code.
+- Performance: no new provider request, cache refresh, background polling, or LLM call was introduced; the diagnostic reuses existing in-memory OHLCV vectors.
+
+### 23:03 Validation Results
+
+| Check | Command / Tool | Result | Notes |
+|---|---|---|---|
+| Python syntax | `python -m py_compile pipelines\quantamental\quant_engine.py pipelines\quantamental\ai_service.py pipelines\quantamental\service.py core\schemas\quantamental.py scripts\check_ui_contract.py scripts\quantamental_ui_smoke.py scripts\ai_portfolio_ui_smoke.py` | Passed | Touched Python files compile. |
+| JS syntax | `node --check app\web\modules\quantamental-ui.js` and `node --check app\web\app.js` | Passed | Static UI JavaScript parses. |
+| UI contract | `python scripts\check_ui_contract.py` | Passed | Bundle `20260519-quantamental-v22`, score key, and VCR markers present. |
+| Lint | `python -m ruff check ...touched files...` | Passed | Targeted changed Python and test files pass ruff. |
+| Target tests | `python -m pytest tests\test_quantamental_engines.py tests\test_quantamental_api.py tests\test_ui_modules.py tests\test_ui_routing_contract.py -q` | Passed | `89 passed, 4 subtests passed`. |
+| AI panel tests | `python -m pytest tests\test_quantamental_ui_ai_panel.py -q` | Passed | `1 passed`; AI UI guard remains intact. |
+| Full regression | `python -m pytest -q` | Passed | `701 passed, 9 subtests passed`. |
+| Live health/API | `Invoke-RestMethod http://127.0.0.1:8432/api/v1/quantamental/health` | Passed | Health lists `volatility_compression_readiness_v1` and `score_key=volatility_compression`. |
+| Live analysis/AI guard | `GET /api/v1/quantamental/analysis/AAPL?include_ai=true&use_llm=false&lookback=252&output_language=ko` | Passed | AAPL returned VCR score `74.72`, `used_in_composite=false`, AI `volatility_compression_algorithm`, period `252d`. |
+| Live score screen | `GET /api/v1/quantamental/screen/by-score?score_key=volatility_compression&min_score=0&limit=5&include_ai=false` | Passed | Returned 5 rows with label `Volatility Compression`; first row AAPL score `74.72`. |
+| Quantamental UI smoke | `python scripts\quantamental_ui_smoke.py --base-url http://127.0.0.1:8432 --output reports\quantamental_ui_smoke_continuous_20260519_2303.json` | Passed | Required ticker set, invalid ticker, Top 5, VCR score screen, overview axes, Q&A, and audit smoke passed. |
+| Cross-tab UI smoke | `python scripts\ai_portfolio_ui_smoke.py --base-url http://127.0.0.1:8432 --timeout-s 240 --output reports\ai_portfolio_ui_smoke_continuous_20260519_2303_retry.json` | Passed | First 180s run timed out on Macro series search; 240s isolated retry passed with no console errors. |
+| Browser desktop | Codex Browser at `http://127.0.0.1:8432/ui/?range=1Y#quantamental` | Passed | `panelView=all`, quality summary visible, VCR summary visible, no console errors, no horizontal overflow. |
+| Browser mobile | Codex Browser viewport `390x900` | Passed | `panelView=all`, quality summary visible, VCR visible, no console errors, no horizontal overflow. |
+| npm/pnpm build/lint/test | Not run | Excluded | Repo root has no `package.json`, `pnpm-lock.yaml`, or frontend build manifest; static UI is verified through JS syntax, contracts, and browser smoke. |
+
+### 23:03 Completion Checklist
+
+#### Compatibility
+- [x] Existing features still work
+- [x] Existing API contracts are not broken
+- [x] Existing UI flow is preserved
+- [x] No unauthorized strategy logic change
+- [x] No secret or env file exposure
+
+#### Data
+- [x] Date range selection works in checked Quantamental flow
+- [x] KPI/chart/table use the same selected period in the checked flow
+- [x] Data source and basis date are displayed
+- [x] Missing data is handled
+- [x] Data quality summary is visible at top-right
+- [x] Cache/fresh data distinction is clear
+
+#### UI
+- [x] Default view is All
+- [x] Core/Diagnostics/Operations filters still exist
+- [x] Font sizes are readable in checked desktop/mobile surfaces
+- [x] Layout spacing is consistent in checked desktop/mobile surfaces
+- [x] Cards/tables/charts are aligned
+- [x] Mobile layout is acceptable
+- [x] Loading state exists
+- [x] Empty state exists
+- [x] Error state exists
+
+#### Visualization
+- [x] Chart titles are meaningful
+- [x] Axis labels are readable
+- [x] Tooltips/legends remain useful
+- [x] Period selection updates checked Quantamental results
+- [x] No chart overflow or label collision observed in browser checks
+
+#### AI Briefing
+- [x] Gemma/Qwen availability remains runtime-checked
+- [x] Model selection is not fake
+- [x] AI output includes used data period
+- [x] AI output includes basis/source/observation count
+- [x] AI does not invent unsupported numbers
+- [x] Unverified facts are marked unavailable by existing guardrails
+- [x] Translation preserves numbers/dates/units in tested module/API contracts
+
+#### Validation
+- [x] Lint executed or reason documented
+- [x] Build executed or reason documented
+- [x] Tests executed or reason documented
+- [x] UI validation executed or reason documented
+- [x] Data validation executed or reason documented
+- [x] AI briefing validation executed or reason documented
+
+#### Documentation
+- [x] docs/CONTINUOUS_ENHANCEMENT_LOG.md updated
+- [x] README updated if needed
+- [x] PR summary includes changed files
+- [x] PR summary includes validation result
+
 ## 2026-05-19 Continuous Enhancement Run 09:20 Closure
 
 - Branch: `automation/continuous-enhancement-20260519-0920`.

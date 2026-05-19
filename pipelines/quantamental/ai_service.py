@@ -137,6 +137,7 @@ def build_context(analysis: dict[str, Any]) -> dict[str, Any]:
             "volume_accumulation_quality": quant_algorithms.get("volume_accumulation_quality") or {},
             "gap_risk_stability": quant_algorithms.get("gap_risk_stability") or {},
             "range_discipline": quant_algorithms.get("range_discipline") or {},
+            "volatility_compression_readiness": quant_algorithms.get("volatility_compression_readiness") or {},
             "algorithms": quant_algorithms,
             "missing_metrics": (quant.get("missing_metrics") or [])[:20],
         },
@@ -353,6 +354,8 @@ def _algorithm_change_text(algorithm: dict[str, Any], *, unavailable: str, langu
         if "gap_risk_stability_score" in algorithm
         else "range_discipline_score"
         if "range_discipline_score" in algorithm
+        else "volatility_compression_readiness_score"
+        if "volatility_compression_readiness_score" in algorithm
         else "score"
     )
     score = algorithm.get(score_key)
@@ -585,6 +588,14 @@ def _fallback_report(context: dict[str, Any], *, language: str = "ko") -> dict[s
         key_changes.setdefault(
             "range_discipline_algorithm",
             _algorithm_change_text(range_discipline_algorithm, unavailable=_unavailable(language), language=language),
+        )
+        report["key_changes"] = key_changes
+    volatility_compression_algorithm = ((context.get("quant_snapshot") or {}).get("volatility_compression_readiness") or {})
+    if volatility_compression_algorithm:
+        key_changes = dict(report.get("key_changes") or {})
+        key_changes.setdefault(
+            "volatility_compression_algorithm",
+            _algorithm_change_text(volatility_compression_algorithm, unavailable=_unavailable(language), language=language),
         )
         report["key_changes"] = key_changes
     return {

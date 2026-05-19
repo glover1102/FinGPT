@@ -131,7 +131,7 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn('src="modules/forecast-ui.js?v=20260514-domain-modules"', html)
         self.assertIn('src="modules/quant-ui.js?v=20260514-domain-modules"', html)
         self.assertIn('src="modules/ai-portfolio-ui.js?v=20260514-domain-modules"', html)
-        self.assertIn('src="modules/quantamental-ui.js?v=20260519-quantamental-v21"', html)
+        self.assertIn('src="modules/quantamental-ui.js?v=20260519-quantamental-v22"', html)
         self.assertIn('href="styles.css?v=20260519-continuous-enhancement-v5"', html)
         self.assertIn('src="app.js?v=20260519-continuous-enhancement-v11"', html)
         self.assertIn('id="dashboardContextStrip"', html)
@@ -153,7 +153,7 @@ class UiRoutingContractTests(unittest.TestCase):
     def test_cross_dashboard_smoke_tracks_current_bundle_and_quantamental(self):
         smoke_source = AI_PORTFOLIO_UI_SMOKE.read_text(encoding="utf-8")
         self.assertIn('DOMAIN_BUNDLE_VERSION = "20260514-domain-modules"', smoke_source)
-        self.assertIn('QUANTAMENTAL_BUNDLE_VERSION = "20260519-quantamental-v21"', smoke_source)
+        self.assertIn('QUANTAMENTAL_BUNDLE_VERSION = "20260519-quantamental-v22"', smoke_source)
         self.assertIn('APP_BUNDLE_VERSION = "20260519-continuous-enhancement-v11"', smoke_source)
         self.assertIn("def _normalize_base_url", smoke_source)
         self.assertIn("modules/quantamental-ui.js", smoke_source)
@@ -667,6 +667,8 @@ class UiRoutingContractTests(unittest.TestCase):
         self.assertIn("gap_risk_stability_v1", module_source)
         self.assertIn("quantamental-range-discipline-algorithm", module_source)
         self.assertIn("range_discipline_v1", module_source)
+        self.assertIn("quantamental-volatility-compression-algorithm", module_source)
+        self.assertIn("volatility_compression_readiness_v1", module_source)
         self.assertIn("model: aiOptions.model", self.source)
         self.assertIn("risk_adjusted_momentum_63d", self.source)
         self.assertIn("risk_adjusted_momentum", self.source)
@@ -856,7 +858,7 @@ class UiRoutingContractTests(unittest.TestCase):
             'data-testid="quantamental-score-screen-run"',
             'id="quantamentalScoreScreenStatus"',
             'id="quantamentalScoreScreenSurface"',
-            'src="modules/quantamental-ui.js?v=20260519-quantamental-v21"',
+            'src="modules/quantamental-ui.js?v=20260519-quantamental-v22"',
         ]:
             self.assertIn(marker, html)
         for marker in [
@@ -875,6 +877,7 @@ class UiRoutingContractTests(unittest.TestCase):
             "accumulation_quality",
             "gap_risk_stability",
             "range_discipline",
+            "volatility_compression",
             "function loadQuantamental",
             "function runQuantamentalAnalysis",
             "function runQuantamentalCompare",

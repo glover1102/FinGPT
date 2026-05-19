@@ -17,7 +17,7 @@ from urllib.request import urlopen
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REPORTS_DIR = PROJECT_ROOT / "reports"
 DOMAIN_BUNDLE_VERSION = "20260514-domain-modules"
-QUANTAMENTAL_BUNDLE_VERSION = "20260519-quantamental-v21"
+QUANTAMENTAL_BUNDLE_VERSION = "20260519-quantamental-v22"
 APP_BUNDLE_VERSION = "20260519-continuous-enhancement-v11"
 VERSIONED_SCRIPT_SELECTORS = [
     f'script[src="modules/market-ui.js?v={DOMAIN_BUNDLE_VERSION}"]',
