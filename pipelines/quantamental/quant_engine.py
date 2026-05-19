@@ -169,6 +169,13 @@ def calculate_quant(payload: dict[str, Any]) -> dict[str, Any]:
         drawdown=drawdown,
         liquidity=liquidity,
     )
+    range_discipline_algorithm = _range_discipline_algorithm(
+        rows=rows,
+        returns=returns,
+        volatility=volatility,
+        drawdown=drawdown,
+        liquidity=liquidity,
+    )
     chart_data = {
         "price": _price_chart(rows),
         "cumulative_return": _cumulative_return_chart(rows),
@@ -196,6 +203,7 @@ def calculate_quant(payload: dict[str, Any]) -> dict[str, Any]:
             "tail_risk_adjusted_momentum": tail_risk_momentum_algorithm,
             "volume_accumulation_quality": accumulation_quality_algorithm,
             "gap_risk_stability": gap_risk_stability_algorithm,
+            "range_discipline": range_discipline_algorithm,
         },
     }
     return {
@@ -1377,6 +1385,100 @@ def _gap_risk_stability_algorithm(
     }
 
 
+def _range_discipline_algorithm(
+    *,
+    rows: list[dict[str, Any]],
+    returns: list[float],
+    volatility: dict[str, Any],
+    drawdown: dict[str, Any],
+    liquidity: dict[str, Any],
+) -> dict[str, Any]:
+    available_observations = len(rows)
+    required_observations = 90
+    warnings: list[str] = []
+    if available_observations < required_observations:
+        warnings.append("insufficient_price_history_for_range_discipline")
+
+    range_metrics = _range_discipline_metrics(rows, returns, 63)
+    avg_intraday_range_63d = range_metrics["avg_intraday_range"]
+    avg_close_position_63d = range_metrics["avg_close_position"]
+    upper_half_close_share_63d = range_metrics["upper_half_close_share"]
+    wide_range_down_share_63d = range_metrics["wide_range_down_share"]
+    down_day_close_position_63d = range_metrics["down_day_close_position"]
+    positive_share_63d = range_metrics["positive_return_share"]
+    current_drawdown_abs = abs(drawdown.get("current_drawdown")) if drawdown.get("current_drawdown") is not None else None
+
+    range_control_score = _score_low(avg_intraday_range_63d, 0.012, 0.075)
+    close_position_score = _score_high(avg_close_position_63d, 0.42, 0.72)
+    upper_close_score = _score_high(upper_half_close_share_63d, 0.42, 0.68)
+    wide_down_score = _score_low(wide_range_down_share_63d, 0.04, 0.34)
+    down_close_score = _score_high(down_day_close_position_63d, 0.28, 0.58)
+    consistency_score = _score_high(positive_share_63d, 0.42, 0.64)
+    volatility_score = _score_low(volatility.get("realized_volatility_60d"), 0.12, 0.75)
+    drawdown_score = _score_low(current_drawdown_abs, 0.0, 0.35)
+    liquidity_score = _score_high(
+        math.log10(liquidity.get("average_dollar_volume")) if liquidity.get("average_dollar_volume") else None,
+        6.0,
+        9.0,
+    )
+    score = _weighted_score(
+        [
+            (range_control_score, 0.17),
+            (close_position_score, 0.17),
+            (upper_close_score, 0.13),
+            (wide_down_score, 0.13),
+            (down_close_score, 0.12),
+            (volatility_score, 0.10),
+            (drawdown_score, 0.08),
+            (consistency_score, 0.06),
+            (liquidity_score, 0.04),
+        ],
+        min_components=5,
+    )
+    if available_observations < required_observations:
+        score = None
+
+    return {
+        "algorithm_id": "range_discipline_v1",
+        "range_discipline_score": score,
+        "classification": _range_discipline_classification(score, avg_close_position_63d, wide_range_down_share_63d),
+        "score_direction": "higher means intraday ranges are controlled, closes occur higher in the daily range, and wide-range down sessions are less frequent",
+        "required_observations": required_observations,
+        "available_observations": available_observations,
+        "avg_intraday_range_63d": avg_intraday_range_63d,
+        "avg_close_position_63d": avg_close_position_63d,
+        "upper_half_close_share_63d": upper_half_close_share_63d,
+        "wide_range_down_share_63d": wide_range_down_share_63d,
+        "down_day_close_position_63d": down_day_close_position_63d,
+        "positive_return_share_63d": positive_share_63d,
+        "realized_volatility_60d": volatility.get("realized_volatility_60d"),
+        "current_drawdown_abs": current_drawdown_abs,
+        "average_dollar_volume_60d": liquidity.get("average_dollar_volume"),
+        "component_scores": {
+            "range_control": range_control_score,
+            "close_position": close_position_score,
+            "upper_close_share": upper_close_score,
+            "wide_down_frequency": wide_down_score,
+            "down_day_close_position": down_close_score,
+            "volatility": volatility_score,
+            "drawdown": drawdown_score,
+            "consistency": consistency_score,
+            "liquidity": liquidity_score,
+        },
+        "inputs": {
+            "range_window": "63d",
+            "intraday_range_basis": "(high_minus_low)_divided_by_adjusted_close",
+            "close_position_basis": "(adjusted_close_minus_low)_divided_by_(high_minus_low)",
+            "wide_down_basis": "negative_return_session_with_range_above_1_35x_window_average",
+            "risk_window": "60d",
+            "liquidity_basis": "average_dollar_volume_60d",
+        },
+        "warnings": warnings,
+        "not_investment_advice": True,
+        "used_in_composite_score": False,
+    }
+
+
 def _rolling_prior_high(closes: list[float | None], window: int) -> float | None:
     if len(closes) <= window:
         return None
@@ -1457,6 +1559,66 @@ def _gap_metrics(rows: list[dict[str, Any]], window: int) -> dict[str, float | N
         "worst_down_gap": worst_down_gap if worst_down_gap < 0 else 0.0,
         "downside_gap_share": sum(1 for value in gaps if value < 0) / len(gaps),
         "down_gap_recovery_share": safe_divide(down_gap_recoveries, down_gap_count) if down_gap_count else None,
+    }
+
+
+def _range_discipline_metrics(
+    rows: list[dict[str, Any]],
+    returns: list[float],
+    window: int,
+) -> dict[str, float | None]:
+    observations: list[dict[str, float]] = []
+    recent_rows = rows[-(window + 1) :] if len(rows) > window else rows
+    for prev, current in zip(recent_rows, recent_rows[1:]):
+        prev_close = _price(prev)
+        close_price = _price(current)
+        high = _finite(current.get("high"))
+        low = _finite(current.get("low"))
+        if prev_close is None or prev_close <= 0 or close_price is None or close_price <= 0:
+            continue
+        if high is None or low is None or high <= low:
+            continue
+        intraday_range = safe_divide(high - low, close_price)
+        close_position = safe_divide(close_price - low, high - low)
+        daily_return = safe_divide(close_price - prev_close, prev_close)
+        if intraday_range is None or close_position is None or daily_return is None:
+            continue
+        if not all(math.isfinite(value) for value in (intraday_range, close_position, daily_return)):
+            continue
+        observations.append(
+            {
+                "intraday_range": intraday_range,
+                "close_position": clamp(close_position, 0.0, 1.0) or 0.0,
+                "daily_return": daily_return,
+            }
+        )
+    if len(observations) < 20:
+        return {
+            "avg_intraday_range": None,
+            "avg_close_position": None,
+            "upper_half_close_share": None,
+            "wide_range_down_share": None,
+            "down_day_close_position": None,
+            "positive_return_share": None,
+        }
+    avg_range = mean(item["intraday_range"] for item in observations)
+    wide_threshold = avg_range * 1.35
+    down_days = [item for item in observations if item["daily_return"] < 0]
+    return_positive_share = _positive_return_share(returns, window)
+    wide_down_days = [
+        item
+        for item in observations
+        if item["daily_return"] < 0 and item["intraday_range"] >= wide_threshold
+    ]
+    return {
+        "avg_intraday_range": avg_range,
+        "avg_close_position": mean(item["close_position"] for item in observations),
+        "upper_half_close_share": sum(1 for item in observations if item["close_position"] >= 0.5) / len(observations),
+        "wide_range_down_share": len(wide_down_days) / len(observations),
+        "down_day_close_position": mean(item["close_position"] for item in down_days) if down_days else None,
+        "positive_return_share": return_positive_share
+        if return_positive_share is not None
+        else sum(1 for item in observations if item["daily_return"] > 0) / len(observations),
     }
 
 
@@ -1593,6 +1755,26 @@ def _gap_risk_stability_classification(
     if score >= 45:
         return "mixed_gap_risk_profile"
     return "fragile_gap_risk_profile"
+
+
+def _range_discipline_classification(
+    score: float | None,
+    avg_close_position_63d: float | None,
+    wide_range_down_share_63d: float | None,
+) -> str:
+    if score is None:
+        return "insufficient_data"
+    if wide_range_down_share_63d is not None and wide_range_down_share_63d >= 0.34 and score < 60:
+        return "wide_range_downside_pressure"
+    if avg_close_position_63d is not None and avg_close_position_63d < 0.38 and score < 60:
+        return "poor_close_discipline"
+    if score >= 75:
+        return "disciplined_range_profile"
+    if score >= 60:
+        return "controlled_range_discipline"
+    if score >= 45:
+        return "mixed_range_discipline"
+    return "fragile_range_discipline"
 
 
 def _first_numeric(*values: Any) -> float | None:
@@ -1749,6 +1931,7 @@ def _component_scores(metrics: dict[str, Any]) -> dict[str, float | None]:
     tail_risk_momentum_algorithm = algorithms.get("tail_risk_adjusted_momentum") or {}
     accumulation_quality_algorithm = algorithms.get("volume_accumulation_quality") or {}
     gap_risk_stability_algorithm = algorithms.get("gap_risk_stability") or {}
+    range_discipline_algorithm = algorithms.get("range_discipline") or {}
     return {
         "momentum": _avg([
             _score_high(momentum.get("momentum_3m"), -0.10, 0.20),
@@ -1785,6 +1968,7 @@ def _component_scores(metrics: dict[str, Any]) -> dict[str, float | None]:
         "tail_risk_adjusted_momentum": _finite(tail_risk_momentum_algorithm.get("tail_risk_adjusted_momentum_score")),
         "volume_accumulation_quality": _finite(accumulation_quality_algorithm.get("volume_accumulation_quality_score")),
         "gap_risk_stability": _finite(gap_risk_stability_algorithm.get("gap_risk_stability_score")),
+        "range_discipline": _finite(range_discipline_algorithm.get("range_discipline_score")),
     }
 
 

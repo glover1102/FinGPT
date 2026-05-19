@@ -26,6 +26,7 @@ QuantamentalScoreKey = Literal[
     "tail_risk_momentum",
     "accumulation_quality",
     "gap_risk_stability",
+    "range_discipline",
 ]
 
 

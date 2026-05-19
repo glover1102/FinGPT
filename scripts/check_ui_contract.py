@@ -289,7 +289,7 @@ REQUIRED_UI_MARKERS: dict[str, str] = {
     "forecast ui module": 'modules/forecast-ui.js?v=20260514-domain-modules',
     "quant ui module": 'modules/quant-ui.js?v=20260514-domain-modules',
     "ai portfolio ui module": 'modules/ai-portfolio-ui.js?v=20260514-domain-modules',
-    "quantamental ui module": 'modules/quantamental-ui.js?v=20260519-quantamental-v20',
+    "quantamental ui module": 'modules/quantamental-ui.js?v=20260519-quantamental-v21',
     "ai portfolio operation hydrate": 'id="aiPortfolioHydrateData"',
     "ai portfolio operation retry": 'id="aiPortfolioRetryMissing"',
     "ai portfolio snapshot job": 'id="aiPortfolioSnapshotJob"',
@@ -358,6 +358,8 @@ REQUIRED_APP_JS_MARKERS: dict[str, str] = {
     "quantamental score screen market resilience": "market_resilience",
     "quantamental score screen tail risk momentum": "tail_risk_momentum",
     "quantamental score screen accumulation quality": "accumulation_quality",
+    "quantamental score screen gap risk stability": "gap_risk_stability",
+    "quantamental score screen range discipline": "range_discipline",
     "quantamental compare server watchlist api": "quantamentalCompareWatchlists",
     "quantamental snapshot export api": "quantamentalSnapshotExport",
     "quantamental snapshot diff api": "quantamentalSnapshotDiff",
@@ -397,6 +399,8 @@ REQUIRED_QUANTAMENTAL_MODULE_MARKERS: dict[str, str] = {
     "quantamental accumulation quality algorithm": "volume_accumulation_quality_v1",
     "quantamental gap risk stability summary": "quantamental-gap-risk-stability-algorithm",
     "quantamental gap risk stability algorithm": "gap_risk_stability_v1",
+    "quantamental range discipline summary": "quantamental-range-discipline-algorithm",
+    "quantamental range discipline algorithm": "range_discipline_v1",
 }
 
 

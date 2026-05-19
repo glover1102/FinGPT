@@ -235,6 +235,12 @@ const quantamentalMain = context.window.FinGPTQuantamentalUi.mainPanel({
           classification: "controlled_gap_risk_profile",
           used_in_composite_score: false,
         },
+        range_discipline: {
+          algorithm_id: "range_discipline_v1",
+          range_discipline_score: 74.9,
+          classification: "controlled_range_discipline",
+          used_in_composite_score: false,
+        },
       },
     },
     chart_data: {
@@ -275,6 +281,8 @@ assert.match(quantamentalMain, /volume_accumulation_quality_v1/);
 assert.match(quantamentalMain, /constructive_volume_accumulation_quality/);
 assert.match(quantamentalMain, /gap_risk_stability_v1/);
 assert.match(quantamentalMain, /controlled_gap_risk_profile/);
+assert.match(quantamentalMain, /range_discipline_v1/);
+assert.match(quantamentalMain, /controlled_range_discipline/);
 
 const quantamentalTopSignals = context.window.FinGPTQuantamentalUi.topSignals({
   status: "ok",
@@ -386,6 +394,12 @@ const quantamentalKorean = context.window.FinGPTQuantamentalUi.mainPanel({
           algorithm_id: "gap_risk_stability_v1",
           gap_risk_stability_score: 76.4,
           classification: "controlled_gap_risk_profile",
+          used_in_composite_score: false,
+        },
+        range_discipline: {
+          algorithm_id: "range_discipline_v1",
+          range_discipline_score: 74.9,
+          classification: "controlled_range_discipline",
           used_in_composite_score: false,
         },
       },

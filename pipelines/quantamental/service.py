@@ -157,6 +157,12 @@ SCORE_SCREEN_REGISTRY: dict[str, dict[str, str]] = {
         "algorithm_key": "gap_risk_stability",
         "algorithm_score_field": "gap_risk_stability_score",
     },
+    "range_discipline": {
+        "label": "Range Discipline",
+        "row_field": "range_discipline_score",
+        "algorithm_key": "range_discipline",
+        "algorithm_score_field": "range_discipline_score",
+    },
 }
 
 
@@ -201,6 +207,7 @@ def health() -> dict[str, Any]:
             "tail_risk_adjusted_momentum_v1",
             "volume_accumulation_quality_v1",
             "gap_risk_stability_v1",
+            "range_discipline_v1",
         ],
         "score_screen_keys": [
             {
