@@ -162,6 +162,13 @@ def calculate_quant(payload: dict[str, Any]) -> dict[str, Any]:
         drawdown=drawdown,
         liquidity=liquidity,
     )
+    gap_risk_stability_algorithm = _gap_risk_stability_algorithm(
+        rows=rows,
+        returns=returns,
+        volatility=volatility,
+        drawdown=drawdown,
+        liquidity=liquidity,
+    )
     chart_data = {
         "price": _price_chart(rows),
         "cumulative_return": _cumulative_return_chart(rows),
@@ -188,6 +195,7 @@ def calculate_quant(payload: dict[str, Any]) -> dict[str, Any]:
             "market_relative_resilience": market_resilience_algorithm,
             "tail_risk_adjusted_momentum": tail_risk_momentum_algorithm,
             "volume_accumulation_quality": accumulation_quality_algorithm,
+            "gap_risk_stability": gap_risk_stability_algorithm,
         },
     }
     return {
@@ -1281,6 +1289,94 @@ def _volume_accumulation_quality_algorithm(
     }
 
 
+def _gap_risk_stability_algorithm(
+    *,
+    rows: list[dict[str, Any]],
+    returns: list[float],
+    volatility: dict[str, Any],
+    drawdown: dict[str, Any],
+    liquidity: dict[str, Any],
+) -> dict[str, Any]:
+    available_observations = len(rows)
+    required_observations = 90
+    warnings: list[str] = []
+    if available_observations < required_observations:
+        warnings.append("insufficient_price_history_for_gap_risk_stability")
+
+    gap_metrics = _gap_metrics(rows, 63)
+    avg_abs_gap_63d = gap_metrics["avg_abs_gap"]
+    worst_down_gap_63d = gap_metrics["worst_down_gap"]
+    downside_gap_share_63d = gap_metrics["downside_gap_share"]
+    down_gap_recovery_share_63d = gap_metrics["down_gap_recovery_share"]
+    positive_share_63d = _positive_return_share(returns, 63)
+    current_drawdown_abs = abs(drawdown.get("current_drawdown")) if drawdown.get("current_drawdown") is not None else None
+
+    gap_stability_score = _score_low(avg_abs_gap_63d, 0.0025, 0.04)
+    downside_gap_score = _score_low(downside_gap_share_63d, 0.20, 0.65)
+    worst_gap_score = _score_low(abs(worst_down_gap_63d) if worst_down_gap_63d is not None else None, 0.01, 0.12)
+    recovery_score = _score_high(down_gap_recovery_share_63d, 0.30, 0.75)
+    consistency_score = _score_high(positive_share_63d, 0.42, 0.64)
+    volatility_score = _score_low(volatility.get("realized_volatility_60d"), 0.12, 0.75)
+    drawdown_score = _score_low(current_drawdown_abs, 0.0, 0.35)
+    liquidity_score = _score_high(
+        math.log10(liquidity.get("average_dollar_volume")) if liquidity.get("average_dollar_volume") else None,
+        6.0,
+        9.0,
+    )
+    score = _weighted_score(
+        [
+            (gap_stability_score, 0.20),
+            (downside_gap_score, 0.16),
+            (worst_gap_score, 0.16),
+            (recovery_score, 0.14),
+            (volatility_score, 0.12),
+            (drawdown_score, 0.10),
+            (consistency_score, 0.08),
+            (liquidity_score, 0.04),
+        ],
+        min_components=5,
+    )
+    if available_observations < required_observations:
+        score = None
+
+    return {
+        "algorithm_id": "gap_risk_stability_v1",
+        "gap_risk_stability_score": score,
+        "classification": _gap_risk_stability_classification(score, worst_down_gap_63d, downside_gap_share_63d),
+        "score_direction": "higher means overnight gap risk is lower and down-gap sessions recover more reliably with controlled volatility and liquidity support",
+        "required_observations": required_observations,
+        "available_observations": available_observations,
+        "avg_abs_gap_63d": avg_abs_gap_63d,
+        "worst_down_gap_63d": worst_down_gap_63d,
+        "downside_gap_share_63d": downside_gap_share_63d,
+        "down_gap_recovery_share_63d": down_gap_recovery_share_63d,
+        "positive_return_share_63d": positive_share_63d,
+        "realized_volatility_60d": volatility.get("realized_volatility_60d"),
+        "current_drawdown_abs": current_drawdown_abs,
+        "average_dollar_volume_60d": liquidity.get("average_dollar_volume"),
+        "component_scores": {
+            "gap_stability": gap_stability_score,
+            "downside_gap_frequency": downside_gap_score,
+            "worst_gap": worst_gap_score,
+            "down_gap_recovery": recovery_score,
+            "volatility": volatility_score,
+            "drawdown": drawdown_score,
+            "consistency": consistency_score,
+            "liquidity": liquidity_score,
+        },
+        "inputs": {
+            "gap_window": "63d",
+            "gap_basis": "current_open_vs_prior_adjusted_close",
+            "recovery_basis": "down_gap_close_at_or_above_open",
+            "risk_window": "60d",
+            "liquidity_basis": "average_dollar_volume_60d",
+        },
+        "warnings": warnings,
+        "not_investment_advice": True,
+        "used_in_composite_score": False,
+    }
+
+
 def _rolling_prior_high(closes: list[float | None], window: int) -> float | None:
     if len(closes) <= window:
         return None
@@ -1327,6 +1423,41 @@ def _up_volume_metrics(rows: list[dict[str, Any]], window: int) -> tuple[float |
     up_share = safe_divide(up_volume, total_volume)
     up_down_ratio = safe_divide(up_volume, down_volume) if down_volume > 0 else None
     return up_share, up_down_ratio
+
+
+def _gap_metrics(rows: list[dict[str, Any]], window: int) -> dict[str, float | None]:
+    gaps: list[float] = []
+    down_gap_recoveries = 0
+    down_gap_count = 0
+    recent_rows = rows[-(window + 1) :] if len(rows) > window else rows
+    for prev, current in zip(recent_rows, recent_rows[1:]):
+        prev_close = _price(prev)
+        open_price = _finite(current.get("open"))
+        close_price = _price(current)
+        if prev_close is None or prev_close <= 0 or open_price is None:
+            continue
+        gap = safe_divide(open_price - prev_close, prev_close)
+        if gap is None or not math.isfinite(gap):
+            continue
+        gaps.append(gap)
+        if gap < 0:
+            down_gap_count += 1
+            if close_price is not None and close_price >= open_price:
+                down_gap_recoveries += 1
+    if len(gaps) < 20:
+        return {
+            "avg_abs_gap": None,
+            "worst_down_gap": None,
+            "downside_gap_share": None,
+            "down_gap_recovery_share": None,
+        }
+    worst_down_gap = min(gaps)
+    return {
+        "avg_abs_gap": mean(abs(value) for value in gaps),
+        "worst_down_gap": worst_down_gap if worst_down_gap < 0 else 0.0,
+        "downside_gap_share": sum(1 for value in gaps if value < 0) / len(gaps),
+        "down_gap_recovery_share": safe_divide(down_gap_recoveries, down_gap_count) if down_gap_count else None,
+    }
 
 
 def _volatility_adjusted_breakout_classification(score: float | None, breakout_strength: float | None) -> str:
@@ -1442,6 +1573,26 @@ def _volume_accumulation_quality_classification(
     if score >= 45:
         return "mixed_volume_accumulation_quality"
     return "weak_volume_accumulation_quality"
+
+
+def _gap_risk_stability_classification(
+    score: float | None,
+    worst_down_gap_63d: float | None,
+    downside_gap_share_63d: float | None,
+) -> str:
+    if score is None:
+        return "insufficient_data"
+    if worst_down_gap_63d is not None and worst_down_gap_63d <= -0.10 and score < 60:
+        return "event_gap_fragile_profile"
+    if downside_gap_share_63d is not None and downside_gap_share_63d >= 0.60 and score < 60:
+        return "persistent_downside_gap_pressure"
+    if score >= 75:
+        return "stable_gap_risk_profile"
+    if score >= 60:
+        return "controlled_gap_risk_profile"
+    if score >= 45:
+        return "mixed_gap_risk_profile"
+    return "fragile_gap_risk_profile"
 
 
 def _first_numeric(*values: Any) -> float | None:
@@ -1597,6 +1748,7 @@ def _component_scores(metrics: dict[str, Any]) -> dict[str, float | None]:
     market_resilience_algorithm = algorithms.get("market_relative_resilience") or {}
     tail_risk_momentum_algorithm = algorithms.get("tail_risk_adjusted_momentum") or {}
     accumulation_quality_algorithm = algorithms.get("volume_accumulation_quality") or {}
+    gap_risk_stability_algorithm = algorithms.get("gap_risk_stability") or {}
     return {
         "momentum": _avg([
             _score_high(momentum.get("momentum_3m"), -0.10, 0.20),
@@ -1632,6 +1784,7 @@ def _component_scores(metrics: dict[str, Any]) -> dict[str, float | None]:
         "market_relative_resilience": _finite(market_resilience_algorithm.get("market_relative_resilience_score")),
         "tail_risk_adjusted_momentum": _finite(tail_risk_momentum_algorithm.get("tail_risk_adjusted_momentum_score")),
         "volume_accumulation_quality": _finite(accumulation_quality_algorithm.get("volume_accumulation_quality_score")),
+        "gap_risk_stability": _finite(gap_risk_stability_algorithm.get("gap_risk_stability_score")),
     }
 
 

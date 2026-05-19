@@ -229,6 +229,12 @@ const quantamentalMain = context.window.FinGPTQuantamentalUi.mainPanel({
           classification: "constructive_volume_accumulation_quality",
           used_in_composite_score: false,
         },
+        gap_risk_stability: {
+          algorithm_id: "gap_risk_stability_v1",
+          gap_risk_stability_score: 76.4,
+          classification: "controlled_gap_risk_profile",
+          used_in_composite_score: false,
+        },
       },
     },
     chart_data: {
@@ -267,6 +273,8 @@ assert.match(quantamentalMain, /tail_risk_adjusted_momentum_v1/);
 assert.match(quantamentalMain, /constructive_tail_risk_adjusted_momentum/);
 assert.match(quantamentalMain, /volume_accumulation_quality_v1/);
 assert.match(quantamentalMain, /constructive_volume_accumulation_quality/);
+assert.match(quantamentalMain, /gap_risk_stability_v1/);
+assert.match(quantamentalMain, /controlled_gap_risk_profile/);
 
 const quantamentalTopSignals = context.window.FinGPTQuantamentalUi.topSignals({
   status: "ok",
@@ -372,6 +380,12 @@ const quantamentalKorean = context.window.FinGPTQuantamentalUi.mainPanel({
           algorithm_id: "volume_accumulation_quality_v1",
           volume_accumulation_quality_score: 73.6,
           classification: "constructive_volume_accumulation_quality",
+          used_in_composite_score: false,
+        },
+        gap_risk_stability: {
+          algorithm_id: "gap_risk_stability_v1",
+          gap_risk_stability_score: 76.4,
+          classification: "controlled_gap_risk_profile",
           used_in_composite_score: false,
         },
       },

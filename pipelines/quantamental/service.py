@@ -151,6 +151,12 @@ SCORE_SCREEN_REGISTRY: dict[str, dict[str, str]] = {
         "algorithm_key": "volume_accumulation_quality",
         "algorithm_score_field": "volume_accumulation_quality_score",
     },
+    "gap_risk_stability": {
+        "label": "Gap Risk Stability",
+        "row_field": "gap_risk_stability_score",
+        "algorithm_key": "gap_risk_stability",
+        "algorithm_score_field": "gap_risk_stability_score",
+    },
 }
 
 
@@ -194,6 +200,7 @@ def health() -> dict[str, Any]:
             "market_relative_resilience_v1",
             "tail_risk_adjusted_momentum_v1",
             "volume_accumulation_quality_v1",
+            "gap_risk_stability_v1",
         ],
         "score_screen_keys": [
             {
