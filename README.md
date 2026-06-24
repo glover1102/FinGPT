@@ -47,6 +47,42 @@ Key contributors include:
  - [Paper Acceptance] Jul, 2023: ["FinGPT: Open-Source Financial Large Language Models"](https://arxiv.org/abs/2306.06031) is accepted🎉 by [FinLLM 2023](https://finllm.github.io/workshop/#/fcb)@IJCAI 2023
  - [Medium Blog] Jun 2023: [FinGPT: Powering the Future of Finance with 20 Cutting-Edge Applications](https://medium.datadriveninvestor.com/fingpt-powering-the-future-of-finance-with-20-cutting-edge-applications-7c4d082ad3d8)
 
+## Quick Start
+
+**🚀 Get started with FinGPT in minutes!**
+
+For detailed setup instructions for running FinGPT locally or on Replit, including hardware requirements and troubleshooting, check out our comprehensive [SETUP Guide](./SETUP.md).
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/AI4Finance-Foundation/FinGPT.git
+cd FinGPT
+
+# Install dependencies
+pip install -r requirements.txt
+pip install -e .
+```
+
+### Try the Demo
+
+Visit our [HuggingFace Space](https://huggingface.co/spaces/FinGPT/FinGPT-Forecaster) to try FinGPT-Forecaster without any installation!
+
+### Basic Usage
+
+```python
+# Using cloud API (no GPU required)
+import os
+os.environ['FINGPT_LLM_PROVIDER'] = 'openai'
+
+# Using local models (requires GPU)
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftModel
+
+# See SETUP.md for detailed examples
+```
+
 ## Why FinGPT?
 
 1). Finance is highly dynamic. [BloombergGPT](https://arxiv.org/abs/2303.17564) trained an LLM using a mixture of finance data and general-purpose data, which took about 53 days, at a cost of around **$3M**). It is costly to retrain an LLM model like BloombergGPT every month or every week, thus lightweight adaptation is highly favorable. FinGPT can be fine-tuned swiftly to incorporate new data (the cost falls significantly, less than **$300 per fine-tuning**).
