@@ -1,0 +1,12 @@
+finogrid/
+tests/
+docs/
+figs/
+*.pyc
+__pycache__/
+.git/
+.github/
+.env
+*.md
+!README_RAILWAY.md
+
