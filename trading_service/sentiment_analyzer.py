@@ -9,6 +9,7 @@ from .fingpt_loader import FinGPTModel
 from .news_fetcher import NewsFetcher
 
 log = structlog.get_logger()
+SENTIMENT_THRESHOLD = 0.3
 
 
 class SentimentAnalyzer:
@@ -130,9 +131,9 @@ class SentimentAnalyzer:
         }.get(label, 0.0)
 
     def _score_to_label(self, score: float) -> str:
-        if score > 0.3:
+        if score > SENTIMENT_THRESHOLD:
             return "positive"
-        if score < -0.3:
+        if score < -SENTIMENT_THRESHOLD:
             return "negative"
         return "neutral"
 
@@ -143,4 +144,3 @@ class SentimentAnalyzer:
         if sentiment_label in normalized:
             return 0.8
         return 0.65
-

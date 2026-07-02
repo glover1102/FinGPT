@@ -106,7 +106,7 @@ def batch_sentiment(
     max_articles: int = Query(20, ge=1, le=100),
     analyzer: SentimentAnalyzer = Depends(get_sentiment_analyzer),
 ) -> list[dict]:
-    parsed_tickers = [ticker.strip().upper() for ticker in tickers.split(",") if ticker.strip()]
+    parsed_tickers = [ticker_name.upper() for ticker in tickers.split(",") if (ticker_name := ticker.strip())]
     if not parsed_tickers:
         raise HTTPException(status_code=400, detail="At least one ticker is required")
 
@@ -114,4 +114,3 @@ def batch_sentiment(
     for ticker in parsed_tickers:
         results.append(analyzer.analyze_ticker(ticker, days=days_lookback, max_articles=max_articles))
     return results
-
