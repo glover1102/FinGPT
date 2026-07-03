@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import Settings, get_settings
-from .fingpt_loader import FinGPTModel
+from .fingpt_loader import SentimentModel
 from .models import SentimentRequest, SentimentResponse, TickerSentimentResponse
 from .news_fetcher import NewsFetcher
 from .sentiment_analyzer import SentimentAnalyzer
@@ -42,10 +42,8 @@ app.add_middleware(
 @lru_cache(maxsize=1)
 def get_sentiment_analyzer() -> SentimentAnalyzer:
     runtime_settings = get_settings()
-    model = FinGPTModel(
-        base_model_name=runtime_settings.base_model_name,
-        lora_model_name=runtime_settings.fingpt_model_name,
-        use_8bit=runtime_settings.use_8bit,
+    model = SentimentModel(
+        model_name=runtime_settings.fingpt_model_name,
         hf_token=runtime_settings.hf_token,
     )
     news_fetcher = NewsFetcher(runtime_settings.finnhub_api_key)
