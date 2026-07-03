@@ -3,7 +3,6 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "uvicorn trading_service.main:app --host 0.0.0.0 --port $PORT"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 
@@ -11,4 +10,3 @@ restartPolicyMaxRetries = 3
 path = "/health"
 timeout = 300
 interval = 30
-
