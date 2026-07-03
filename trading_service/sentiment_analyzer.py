@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import structlog
 
-from .fingpt_loader import FinGPTModel
+from .fingpt_loader import SentimentModel
 from .news_fetcher import NewsFetcher
 
 log = structlog.get_logger()
@@ -15,7 +15,7 @@ SENTIMENT_THRESHOLD = 0.3
 class SentimentAnalyzer:
     def __init__(
         self,
-        fingpt_model: FinGPTModel,
+        fingpt_model: SentimentModel,
         news_fetcher: NewsFetcher,
         cache_ttl_seconds: int = 3600,
         max_cache_size: int = 1000,

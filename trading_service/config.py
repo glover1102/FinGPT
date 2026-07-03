@@ -5,9 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    fingpt_model_name: str = "FinGPT/fingpt-sentiment_llama2-13b_lora"
-    base_model_name: str = "meta-llama/Llama-2-7b-chat-hf"
-    use_8bit: bool = True
+    fingpt_model_name: str = "ProsusAI/finbert"
     hf_token: str | None = None
 
     port: int = 8000
