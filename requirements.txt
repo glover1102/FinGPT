@@ -1,25 +1,32 @@
-# data handling
-numpy
-pandas
-
-# packaging
-setuptools>=41.4.0
-wheel>=0.33.6
-
-# historical data
-tushare
-
-# trading service
+# Core API
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
 pydantic==2.7.1
 pydantic-settings==2.2.1
-torch==2.6.0
-transformers==5.3.0
+
+# FinGPT / ML - Use stable versions tested with FinGPT
+torch==2.0.1
+transformers==4.32.0
 peft==0.5.0
 bitsandbytes==0.41.1
 accelerate==0.23.0
-sentencepiece==0.2.1
+sentencepiece==0.1.99
+
+# Data sources
 finnhub-python==2.4.20
+yfinance==0.2.38
+
+# Data handling
+numpy==1.26.4
+pandas==2.2.2
+
+# Logging
 structlog==24.1.0
 python-dotenv==1.0.1
+
+# Optional - for historical data
+tushare
+
+# Packaging
+setuptools>=41.4.0
+wheel>=0.33.6
