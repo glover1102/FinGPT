@@ -30,38 +30,46 @@ class FinGPTModel:
         log.info("loading_fingpt_model", base=self.base_model_name, lora=self.lora_model_name, use_8bit=self.use_8bit)
 
         has_cuda = torch.cuda.is_available()
+        
+        # Disable 8-bit on CPU - bitsandbytes doesn't work without GPU
+        use_8bit_loading = self.use_8bit and has_cuda
+        
         load_kwargs = {
             "device_map": "auto" if has_cuda else {"": "cpu"},
             "low_cpu_mem_usage": True,
             "trust_remote_code": False,
             "token": self.hf_token,
         }
+        
         if has_cuda:
             load_kwargs["torch_dtype"] = torch.float16
+            if use_8bit_loading:
+                load_kwargs["load_in_8bit"] = True
         else:
+            # CPU-only: use float32, no 8-bit
             load_kwargs["torch_dtype"] = torch.float32
-        if self.use_8bit:
-            load_kwargs["load_in_8bit"] = True
+            log.info("cpu_mode_detected", msg="Loading model in full precision (no 8-bit quantization)")
 
         try:
             base_model = AutoModelForCausalLM.from_pretrained(self.base_model_name, **load_kwargs)
         except Exception as exc:
-            if not self.use_8bit:
-                raise RuntimeError("Unable to load FinGPT base model") from exc
-            log.warning("fingpt_8bit_load_failed", error=str(exc))
-            load_kwargs.pop("load_in_8bit", None)
-            base_model = AutoModelForCausalLM.from_pretrained(self.base_model_name, **load_kwargs)
+            log.error("base_model_load_failed", error=str(exc))
+            raise RuntimeError(f"Unable to load FinGPT base model: {exc}") from exc
 
         tokenizer = AutoTokenizer.from_pretrained(self.base_model_name, token=self.hf_token, trust_remote_code=False)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
-        model = PeftModel.from_pretrained(base_model, self.lora_model_name, token=self.hf_token)
-        model.eval()
+        try:
+            model = PeftModel.from_pretrained(base_model, self.lora_model_name, token=self.hf_token)
+            model.eval()
+        except Exception as exc:
+            log.error("lora_adapter_load_failed", error=str(exc))
+            raise RuntimeError(f"Unable to load FinGPT LoRA adapter: {exc}") from exc
 
         self._model = model
         self._tokenizer = tokenizer
-        log.info("fingpt_model_loaded")
+        log.info("fingpt_model_loaded", has_cuda=has_cuda, used_8bit=use_8bit_loading)
 
     def generate_sentiment(self, text: str, instruction: str | None = None) -> str:
         try:
@@ -111,4 +119,3 @@ class FinGPTModel:
             return next(self._model.parameters()).device
         except (StopIteration, AttributeError, TypeError):
             return None
-
