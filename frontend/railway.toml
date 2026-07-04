@@ -5,6 +5,3 @@ builder = "nixpacks"
 startCommand = "npx serve dist -s -l 8080"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10
-
-[[services]]
-name = "fingpt-frontend"
